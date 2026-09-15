@@ -1,0 +1,302 @@
+{
+  "schema_version": 1,
+  "audit_date": "2026-09-15",
+  "scope": "Public official or author sources only. Static source/package inventory, official ladder metadata requests, two replay downloads and text header inspection. No user historical project, game assets, bot execution, engine init, replay simulation or training.",
+  "search_limitations": [
+    "GitHub repository search and web index are not exhaustive; GitHub commit REST requests hit rate limits, refs resolved using git ls-remote.",
+    "One public player history was used only to prove source and version availability; it is not a representative dataset.",
+    "No claim of bot strength or 0.79.0 runtime compatibility is made."
+  ],
+  "target_game_api": "0.79.0",
+  "target_engine": "0.84",
+  "repositories": [
+    {
+      "id": "playground",
+      "repository": "chronodivide/game-api-playground",
+      "commit": "f1474df82d81cc61512c8fc8fca6788b801d8105",
+      "commit_resolution": "git ls-remote HEAD on audit date",
+      "files": [
+        {
+          "path": "README.md",
+          "bytes": 1165,
+          "sha256": "4a57ee681465d6715da016a99972cffa6be01248c5945ff0ab9d0b146d3ea2c6",
+          "url": "https://github.com/chronodivide/game-api-playground/blob/f1474df82d81cc61512c8fc8fca6788b801d8105/README.md"
+        },
+        {
+          "path": "package.json",
+          "bytes": 497,
+          "sha256": "34a986a42cf217d4f84302acb0ae328a081b34baa0abc3fadbdfc653d3f0bb5f",
+          "url": "https://github.com/chronodivide/game-api-playground/blob/f1474df82d81cc61512c8fc8fca6788b801d8105/package.json"
+        },
+        {
+          "path": "package-lock.json",
+          "bytes": 11929,
+          "sha256": "09f3413cba0c08ff905341b0a5dc3f978539cd3727e189b44b87a05882a0b6ed",
+          "url": "https://github.com/chronodivide/game-api-playground/blob/f1474df82d81cc61512c8fc8fca6788b801d8105/package-lock.json"
+        },
+        {
+          "path": "src/exampleBot.ts",
+          "bytes": 5236,
+          "sha256": "2c8b3be4b447f78ba4af0b8e4abf9256e4c72891ba4c564cccd2956898ad5f69",
+          "url": "https://github.com/chronodivide/game-api-playground/blob/f1474df82d81cc61512c8fc8fca6788b801d8105/src/exampleBot.ts"
+        }
+      ],
+      "runtime_status": "not_run",
+      "map_or_replay_paths_in_repository_not_copied": []
+    },
+    {
+      "id": "supalosa",
+      "repository": "Supalosa/supalosa-chronodivide-bot",
+      "commit": "165b77a71d0cf5ebd27c65b19d0486bcbae78d0f",
+      "commit_resolution": "git ls-remote HEAD on audit date",
+      "files": [
+        {
+          "path": "README.md",
+          "bytes": 6916,
+          "sha256": "7f4339c84ff77c683163b3925cbbf0d3276e6c649a8a6b69a3344341ee0876f6",
+          "url": "https://github.com/Supalosa/supalosa-chronodivide-bot/blob/165b77a71d0cf5ebd27c65b19d0486bcbae78d0f/README.md"
+        },
+        {
+          "path": "packages/chronodivide-bot/package.json",
+          "bytes": 861,
+          "sha256": "9f3c5b018f72f5ed595ca921d777bf49c204cc3eaa77c65e07ba93c458a7ba3a",
+          "url": "https://github.com/Supalosa/supalosa-chronodivide-bot/blob/165b77a71d0cf5ebd27c65b19d0486bcbae78d0f/packages/chronodivide-bot/package.json"
+        },
+        {
+          "path": "packages/chronodivide-bot-driver/package.json",
+          "bytes": 745,
+          "sha256": "c175de2d5bcdd3045bd17c80a17bc20cf74113610d3ce635b16dea4dbfc89057",
+          "url": "https://github.com/Supalosa/supalosa-chronodivide-bot/blob/165b77a71d0cf5ebd27c65b19d0486bcbae78d0f/packages/chronodivide-bot-driver/package.json"
+        },
+        {
+          "path": "packages/chronodivide-bot/src/bot/bot.ts",
+          "bytes": 7834,
+          "sha256": "c29f141cdfe0ee51e4864a2c1938125378c5e4016c96a70730155040be96dd7b",
+          "url": "https://github.com/Supalosa/supalosa-chronodivide-bot/blob/165b77a71d0cf5ebd27c65b19d0486bcbae78d0f/packages/chronodivide-bot/src/bot/bot.ts"
+        },
+        {
+          "path": "packages/chronodivide-bot/src/bot/logic/awareness.ts",
+          "bytes": 13296,
+          "sha256": "241b14c73e1a5bb501f97ad3f7274f2d6a22a6fc9b30112f55c8ffd602bb215f",
+          "url": "https://github.com/Supalosa/supalosa-chronodivide-bot/blob/165b77a71d0cf5ebd27c65b19d0486bcbae78d0f/packages/chronodivide-bot/src/bot/logic/awareness.ts"
+        },
+        {
+          "path": "packages/chronodivide-bot/src/bot/logic/mission/missions/attackMission.ts",
+          "bytes": 12466,
+          "sha256": "1df7722842cdc49ba7619d65a5d6045bb8cba28f9aff0b5b94f96396f1ad0272",
+          "url": "https://github.com/Supalosa/supalosa-chronodivide-bot/blob/165b77a71d0cf5ebd27c65b19d0486bcbae78d0f/packages/chronodivide-bot/src/bot/logic/mission/missions/attackMission.ts"
+        },
+        {
+          "path": "packages/chronodivide-bot-driver/src/index.ts",
+          "bytes": 7700,
+          "sha256": "e9e36704a5893022624fe897788d5022bf175bfea74e0c7848d82d36d62c3f0c",
+          "url": "https://github.com/Supalosa/supalosa-chronodivide-bot/blob/165b77a71d0cf5ebd27c65b19d0486bcbae78d0f/packages/chronodivide-bot-driver/src/index.ts"
+        }
+      ],
+      "runtime_status": "not_run",
+      "map_or_replay_paths_in_repository_not_copied": [
+        {
+          "path": "packages/chronodivide-bot-driver/data/simple-1v1-no-preview.map",
+          "bytes": 2968
+        },
+        {
+          "path": "packages/chronodivide-bot-driver/data/water-1v1-no-preview.map",
+          "bytes": 19666
+        }
+      ]
+    },
+    {
+      "id": "ra2web",
+      "repository": "ra2web/ra2web-chronodivide-bot",
+      "commit": "f6c3ea58de8fcd09b8ddd160a51f5ef980987bb7",
+      "commit_resolution": "git ls-remote HEAD on audit date",
+      "files": [
+        {
+          "path": "README.md",
+          "bytes": 4416,
+          "sha256": "4b21825cc3c164218074a2723db73c0fcd578ce02dadc0b2fabf6f2b64480615",
+          "url": "https://github.com/ra2web/ra2web-chronodivide-bot/blob/f6c3ea58de8fcd09b8ddd160a51f5ef980987bb7/README.md"
+        },
+        {
+          "path": "package.json",
+          "bytes": 895,
+          "sha256": "0956ff1df3f25474cf5340835035700edb5daba76bdbb57c2e0c064b166f36f8",
+          "url": "https://github.com/ra2web/ra2web-chronodivide-bot/blob/f6c3ea58de8fcd09b8ddd160a51f5ef980987bb7/package.json"
+        },
+        {
+          "path": "src/bot/bot.ts",
+          "bytes": 7442,
+          "sha256": "96ce71ef56b5ce058b5e06ce6ae40ee7fe77bd31fc45b9d3127d40a7ccd5b44b",
+          "url": "https://github.com/ra2web/ra2web-chronodivide-bot/blob/f6c3ea58de8fcd09b8ddd160a51f5ef980987bb7/src/bot/bot.ts"
+        }
+      ],
+      "runtime_status": "not_run",
+      "map_or_replay_paths_in_repository_not_copied": []
+    },
+    {
+      "id": "mod-sdk",
+      "repository": "chronodivide/mod-sdk",
+      "commit": "5943c4ae6c19897929d348a417d6d2f1481b75fd",
+      "commit_resolution": "git ls-remote HEAD on audit date",
+      "files": [
+        {
+          "path": "README.md",
+          "bytes": 15068,
+          "sha256": "8ce5416e6ee74ebb6b70041902c8892740caca340b1a30d25759bc2767f58b22",
+          "url": "https://github.com/chronodivide/mod-sdk/blob/5943c4ae6c19897929d348a417d6d2f1481b75fd/README.md"
+        },
+        {
+          "path": "MAPS.md",
+          "bytes": 10977,
+          "sha256": "e5859e0f34dbbc820085de31b7498a9ddf904e1b4735ea70fc708ef26f88c87a",
+          "url": "https://github.com/chronodivide/mod-sdk/blob/5943c4ae6c19897929d348a417d6d2f1481b75fd/MAPS.md"
+        }
+      ],
+      "runtime_status": "not_run",
+      "map_or_replay_paths_in_repository_not_copied": []
+    },
+    {
+      "repo": "ammaarreshi/RedAlert2-Mac-iOS-iPad",
+      "commit": "991945d60a7139d3c4c438326abb6d3c093b2497",
+      "files": [
+        {
+          "path": "README.md",
+          "url": "https://raw.githubusercontent.com/ammaarreshi/RedAlert2-Mac-iOS-iPad/991945d60a7139d3c4c438326abb6d3c093b2497/README.md",
+          "bytes": 24706,
+          "sha256": "23b1213c15dbde0d3a5d2ca7886ec66eb1828b34eadb8ef10efb7d35ed44f577"
+        },
+        {
+          "path": "redalert2/package.json",
+          "url": "https://raw.githubusercontent.com/ammaarreshi/RedAlert2-Mac-iOS-iPad/991945d60a7139d3c4c438326abb6d3c093b2497/redalert2/package.json",
+          "bytes": 3388,
+          "sha256": "d3fbf6d526c91ac45f8da1641079bd916ce50efd056a808b2009756c7a7fc7b3"
+        }
+      ],
+      "id": "ios-derivative",
+      "scope": "README and package.json only; not a game-api@0.79.0 compatibility audit",
+      "runtime_status": "not_run"
+    }
+  ],
+  "supalosa_packages": [
+    {
+      "observed_tag": "latest",
+      "version": "0.6.8-beta.1",
+      "published_at": "2025-12-25T15:29:11.610Z",
+      "git_head": "ce039830a134c16752a6a7872cbecb2e64cdb662",
+      "peer_dependencies": {
+        "@chronodivide/game-api": "^0.73.0"
+      },
+      "tarball_url": "https://registry.npmjs.org/@supalosa/chronodivide-bot/-/chronodivide-bot-0.6.8-beta.1.tgz",
+      "tarball_sha256": "ddf590407247bfb8c27f9dae60f7a761e5fc9ffa6073f26cc8a7d0f07aee71a2",
+      "integrity": "sha512-2CbQBn5TD9pn9QwjnoIradE8xoxuRh9ydXcY1K37fdJM+4yTmEIagoNhYKhLnIiF3aPVFXDnvNc8V/TYAoREZw==",
+      "declared_main": "dist/main.js",
+      "main_present_in_archive": false,
+      "direct_bot_module_present": true
+    },
+    {
+      "observed_tag": "next",
+      "version": "0.6.8-beta.3-165b77a",
+      "published_at": "2026-03-16T08:59:15.645Z",
+      "git_head": "165b77a71d0cf5ebd27c65b19d0486bcbae78d0f",
+      "peer_dependencies": {
+        "@chronodivide/game-api": "^0.75.0"
+      },
+      "tarball_url": "https://registry.npmjs.org/@supalosa/chronodivide-bot/-/chronodivide-bot-0.6.8-beta.3-165b77a.tgz",
+      "tarball_sha256": "e550cc41a05274ced6ffa1afd2af0594eec3ef3139032466f4f923b9b6b5bd11",
+      "integrity": "sha512-xV5I9D5skLk1TZEg+FQZTn1VkZ/YHldLZxyytA6aarmWdN8xWOnQ4I3ohpS2+xP6SQEod0czw2QZxIKDjTLaDw==",
+      "declared_main": "dist/main.js",
+      "main_present_in_archive": false,
+      "direct_bot_module_present": true
+    }
+  ],
+  "official_ladder": {
+    "frontend_url": "https://ladder.chronodivide.com/",
+    "public_api_source_url": "https://ladder.chronodivide.com/_next/static/chunks/194-daa980102e5e9406.js",
+    "public_api_source_sha256": "8faccd73192f7905d00638012ee3e7be17a2424d9721a054b3c3c456311f85a1",
+    "realm_config_url": "https://gateway.chronodivide.com/legacy/realms/servers.ini",
+    "realm_config_sha256": "e04ae89273c73dcf1c27a8901be33b609cefd8b4ebde667882b5851ca7e467d5",
+    "realm_game_version_observed": "0.84.0",
+    "observed_read_endpoints": [
+      "GET /ladder/16640/1v1",
+      "GET /ladder/16640/current",
+      "POST /ladder/16640/1v1/current/rungsearch (read-only search)",
+      "POST /ladder/16640/1v1/match-history/v2 (read-only history)",
+      "GET /api/v1/games?gameSku=16640&player=<public-handle>&ranked=true&limit=50",
+      "GET /api/v1/games/<game-id>"
+    ],
+    "note": "Ranked game listing includes 1v1 and 2v2; filter participants and ladderType explicitly. Endpoint names and reachability are observed on the audit date, not a stable API guarantee."
+  },
+  "replay_samples": [
+    {
+      "game_id": "0c82f0d5-cd5b-4f90-b3db-3d2c4aa93aa0",
+      "details_url": "https://wol-eu.chronodivide.com/api/v1/games/0c82f0d5-cd5b-4f90-b3db-3d2c4aa93aa0",
+      "details_sha256": "4d09ea35b12a44ffafe22c15028b41d278fc56efc2e3ecc0b018a749c56db20e",
+      "replay_url": "https://replays-eu.chronodivide.com/0c82f0d5-cd5b-4f90-b3db-3d2c4aa93aa0.rpl",
+      "replay_size_bytes": 51437,
+      "replay_sha256": "c2a8372abbc5a6a740ddbbe83a4c668565dade0c620049d871675f67114d7ac9",
+      "local_ignored_path": "work/ecosystem/ladder/0c82f0d5-cd5b-4f90-b3db-3d2c4aa93aa0.rpl",
+      "header_format": "RA2TSREPL_v6",
+      "header_engine_line": "ENGINE 0.84 4146105410",
+      "server_map_metadata": {
+        "name": "4_jungle_of_vietnam_le.map",
+        "digest": "cde0988d",
+        "title": "Jungle of Vietnam LE (2-4)"
+      },
+      "participant_count": 2,
+      "completed_metadata": true,
+      "started_at_utc": "2026-09-14T00:47:45.384000+00:00",
+      "ended_at_utc": "2026-09-14T00:56:25+00:00",
+      "validation": {
+        "download_http_status": 200,
+        "text_header_checked": true,
+        "official_replay_parse": {
+          "status": "passed_in_separate_probe",
+          "report": "docs/references/replay-parse-probe.json",
+          "api_version": "0.79.0",
+          "resources_initialized": false,
+          "engine_simulated": false
+        },
+        "engine_init": "not_run",
+        "load_replay": "not_run",
+        "simulation": "not_run",
+        "map_and_mod_match": "not_verified"
+      }
+    },
+    {
+      "game_id": "639963f0-7654-4a85-a02d-b5f8d6aa20d3",
+      "details_url": "https://wol-eu.chronodivide.com/api/v1/games/639963f0-7654-4a85-a02d-b5f8d6aa20d3",
+      "details_sha256": "98dbb0f1576c468011a312f664f07fbcb4e73dcdc26be4c60975311cce3914e9",
+      "replay_url": "https://replays-eu.chronodivide.com/639963f0-7654-4a85-a02d-b5f8d6aa20d3.rpl",
+      "replay_size_bytes": 34679,
+      "replay_sha256": "b46e02331d5e2e1bf88ad95774296d78c39c2d8ea13559e8bf749b67aace892d",
+      "local_ignored_path": "work/ecosystem/ladder/639963f0-7654-4a85-a02d-b5f8d6aa20d3.rpl",
+      "header_format": "RA2TSREPL_v6",
+      "header_engine_line": "ENGINE 0.84 4146105410",
+      "server_map_metadata": {
+        "name": "mp01t4.map",
+        "digest": "bc957ed8",
+        "title": "South Pacific (2-4)"
+      },
+      "participant_count": 2,
+      "completed_metadata": true,
+      "started_at_utc": "2026-09-11T04:41:23.442000+00:00",
+      "ended_at_utc": "2026-09-11T04:46:20+00:00",
+      "validation": {
+        "download_http_status": 200,
+        "text_header_checked": true,
+        "official_replay_parse": {
+          "status": "passed_in_separate_probe",
+          "report": "docs/references/replay-parse-probe.json",
+          "api_version": "0.79.0",
+          "resources_initialized": false,
+          "engine_simulated": false
+        },
+        "engine_init": "not_run",
+        "load_replay": "not_run",
+        "simulation": "not_run",
+        "map_and_mod_match": "not_verified"
+      }
+    }
+  ],
+  "raw_sources_storage": "work/ecosystem/ is ignored; only this small provenance manifest and the analysis document are intended for version control."
+}

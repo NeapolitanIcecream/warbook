@@ -1,0 +1,200 @@
+{
+  "schema_version": 1,
+  "probe": "pinned-order-units-parameter-branches",
+  "executed_at_utc": "2026-09-15T03:21:36.494Z",
+  "node_version": "v26.5.0",
+  "evidence_level": "source-method-tested",
+  "scope": "mock-only",
+  "real_engine_initialized": false,
+  "game_resources_loaded": false,
+  "source": {
+    "provenance": "docs/references/api-provenance.json#bundle",
+    "package": "@chronodivide/game-api@0.79.0",
+    "public_url": "https://unpkg.com/@chronodivide/game-api@0.79.0/dist/index.js",
+    "sha256": "2c6937c165ffc822eb6db7d8a72847fe650394b0ba46d5bd92693e578e0400cb",
+    "size_bytes": 961659,
+    "search_marker": "orderUnits(t,i,r,s,a){",
+    "character_offset_zero_based": 863049,
+    "extracted_method_characters": 871
+  },
+  "isolation": {
+    "host_capabilities_exposed": [],
+    "dynamic_string_codegen": false,
+    "wasm_codegen": false,
+    "timeout_ms": 1000
+  },
+  "mock_assumptions": [
+    "Only object ID 3 exists, at tile (8,9).",
+    "Tile lookup returns no tile when ry=999; other coordinates are accepted by the mock.",
+    "Action submission only stores in a fake queue; no action is executed."
+  ],
+  "result_summary": {
+    "cases": 5,
+    "matched_expected": 5
+  },
+  "results": [
+    {
+      "name": "ordinary_tile",
+      "args": [
+        [
+          1
+        ],
+        0,
+        3,
+        4
+      ],
+      "expected": {
+        "queuedActionTypes": [
+          8,
+          9
+        ],
+        "target": {
+          "tile": {
+            "rx": 3,
+            "ry": 4
+          }
+        },
+        "error": null
+      },
+      "actual": {
+        "queuedActionTypes": [
+          8,
+          9
+        ],
+        "target": {
+          "tile": {
+            "rx": 3,
+            "ry": 4
+          }
+        },
+        "error": null
+      },
+      "matched": true
+    },
+    {
+      "name": "zero_rx_truthiness_branch",
+      "args": [
+        [
+          1
+        ],
+        0,
+        0,
+        4
+      ],
+      "expected": {
+        "queuedActionTypes": [
+          8,
+          9
+        ],
+        "target": null,
+        "error": null
+      },
+      "actual": {
+        "queuedActionTypes": [
+          8,
+          9
+        ],
+        "target": null,
+        "error": null
+      },
+      "matched": true
+    },
+    {
+      "name": "zero_ry_truthiness_branch",
+      "args": [
+        [
+          1
+        ],
+        0,
+        3,
+        0
+      ],
+      "expected": {
+        "queuedActionTypes": [
+          8,
+          9
+        ],
+        "target": {
+          "objectId": 3,
+          "tile": {
+            "rx": 8,
+            "ry": 9
+          }
+        },
+        "error": null
+      },
+      "actual": {
+        "queuedActionTypes": [
+          8,
+          9
+        ],
+        "target": {
+          "objectId": 3,
+          "tile": {
+            "rx": 8,
+            "ry": 9
+          }
+        },
+        "error": null
+      },
+      "matched": true
+    },
+    {
+      "name": "missing_object_leaves_selection",
+      "args": [
+        [
+          1
+        ],
+        2,
+        999
+      ],
+      "expected": {
+        "queuedActionTypes": [
+          8
+        ],
+        "target": null,
+        "error": null
+      },
+      "actual": {
+        "queuedActionTypes": [
+          8
+        ],
+        "target": null,
+        "error": null
+      },
+      "matched": true
+    },
+    {
+      "name": "invalid_tile_throws_after_selection",
+      "args": [
+        [
+          1
+        ],
+        0,
+        3,
+        999
+      ],
+      "expected": {
+        "queuedActionTypes": [
+          8
+        ],
+        "target": null,
+        "error": "No tile found at rx,ry=3,999"
+      },
+      "actual": {
+        "queuedActionTypes": [
+          8
+        ],
+        "target": null,
+        "error": "No tile found at rx,ry=3,999"
+      },
+      "matched": true
+    }
+  ],
+  "limitations": [
+    "Matching confirms these branches of the extracted method under the declared mocks, not game-engine behavior.",
+    "This does not prove any real map has a valid tile whose rx or ry is zero.",
+    "This does not test order validation, fallback orders, pathfinding, combat, replay compatibility, or match outcomes.",
+    "VM isolation and the pinned hash bound this trusted-source probe; the script is not a sandbox for arbitrary untrusted bundles."
+  ]
+}

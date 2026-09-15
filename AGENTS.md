@@ -13,4 +13,4 @@ Build a Chrono Divide AI whose progress is supported by complete-game evidence. 
 - Use complete-game/source groups for data splits. Do not tune on held-out results and continue calling them unseen.
 - Add infrastructure only when it enables a named near-term experiment. Avoid process work that delays the next useful complete-game run.
 - Do not commit game assets, credentials, large replays, datasets, checkpoints, or generated run artifacts. Store paths and reproducibility metadata instead.
-- Current repository status is documentation only. Future implementation work should update status with measured evidence, without treating this agreement as a request to start training.
+- Current repository status is design plus resource-free analysis probes. Replay parsing and extracted-method mocks are not engine simulation, gameplay, or training. Future implementation work should update status with evidence at the correct level.

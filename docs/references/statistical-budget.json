@@ -1,0 +1,100 @@
+{
+  "artifact_kind": "analytical_planning_not_game_results",
+  "assumptions": [
+    "Independent identically distributed binary win/loss outcomes; no draws or censored games",
+    "Fixed sample size and fixed candidate; no optional stopping",
+    "One-sample comparison is direct candidate-versus-baseline win probability, not improvement against an opponent pool",
+    "Two-arm approximation compares two separately estimated win probabilities against the same fixed opponent distribution",
+    "No inference about Chrono Divide throughput, actual win rates, training variability, or required production budget"
+  ],
+  "fixed_100_direct_duel": {
+    "null_win_probability": 0.5,
+    "one_sided_alpha": 0.05,
+    "reject_at_least_wins": 59,
+    "actual_type_one_error": 0.04431304005703313,
+    "power_by_true_probability": {
+      "0.55": 0.24149057549223796,
+      "0.6": 0.6225326761221598,
+      "0.65": 0.9123219015166875
+    },
+    "wilson_95_percent_interval_for_55_wins": [
+      0.4524460299744214,
+      0.6438546202048802
+    ]
+  },
+  "normal_approximation_80_percent_power": [
+    {
+      "baseline_probability": 0.5,
+      "alternative_probability": 0.55,
+      "direct_duel_one_sided_total_games": 617,
+      "two_arm_two_sided_games_per_arm": 1565,
+      "two_arm_two_sided_total_games": 3130
+    },
+    {
+      "baseline_probability": 0.5,
+      "alternative_probability": 0.6,
+      "direct_duel_one_sided_total_games": 153,
+      "two_arm_two_sided_games_per_arm": 388,
+      "two_arm_two_sided_total_games": 776
+    },
+    {
+      "baseline_probability": 0.5,
+      "alternative_probability": 0.65,
+      "direct_duel_one_sided_total_games": 67,
+      "two_arm_two_sided_games_per_arm": 170,
+      "two_arm_two_sided_total_games": 340
+    }
+  ],
+  "selection_bias_examples": [
+    {
+      "candidates": 1,
+      "games_per_candidate": 100,
+      "true_win_probability_for_every_candidate": 0.5,
+      "expected_reported_best_win_rate": 0.5000000000000083,
+      "probability_reported_best_at_least_60_percent": 0.028443966820489622,
+      "assumption": "Independent binomial evaluations across candidates; analytical illustration only"
+    },
+    {
+      "candidates": 5,
+      "games_per_candidate": 100,
+      "true_win_probability_for_every_candidate": 0.5,
+      "expected_reported_best_win_rate": 0.5580622505013746,
+      "probability_reported_best_at_least_60_percent": 0.13435611589621907,
+      "assumption": "Independent binomial evaluations across candidates; analytical illustration only"
+    },
+    {
+      "candidates": 20,
+      "games_per_candidate": 100,
+      "true_win_probability_for_every_candidate": 0.5,
+      "expected_reported_best_win_rate": 0.5931115759618505,
+      "probability_reported_best_at_least_60_percent": 0.4384905623911303,
+      "assumption": "Independent binomial evaluations across candidates; analytical illustration only"
+    },
+    {
+      "candidates": 100,
+      "games_per_candidate": 100,
+      "true_win_probability_for_every_candidate": 0.5,
+      "expected_reported_best_win_rate": 0.6247619672919762,
+      "probability_reported_best_at_least_60_percent": 0.9441805824558162,
+      "assumption": "Independent binomial evaluations across candidates; analytical illustration only"
+    }
+  ],
+  "opponent_mix_counterexample": {
+    "kind": "constructed_probability_example_not_observed_games",
+    "both_policies_win_probabilities": {
+      "strong": 0.3,
+      "weak": 0.7
+    },
+    "baseline_evaluation_weights": {
+      "strong": 0.5,
+      "weak": 0.5
+    },
+    "candidate_evaluation_weights": {
+      "strong": 0.2,
+      "weak": 0.8
+    },
+    "baseline_reported_score": 0.5,
+    "candidate_reported_score": 0.6199999999999999,
+    "score_for_both_under_frozen_equal_weights": 0.5
+  }
+}

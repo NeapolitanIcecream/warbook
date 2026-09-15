@@ -1,0 +1,87 @@
+{
+  "evidence_kind": "published_opponent_import_and_constructor_only",
+  "node_version": "v26.5.0",
+  "installation_lock_sha256": "fd0e1165a79b7a18acb59309826ecd6b6101ac6324c8d374f0f336aef14fb7a7",
+  "probe_script_sha256": "457a0361ad7825ef04052de69a627d332346d83b4d3f2695b53dcb1c48f8ca98",
+  "package_versions": {
+    "api": "0.79.0",
+    "opponent": "0.6.8-beta.3-165b77a"
+  },
+  "opponent_declared_peer_api": "^0.75.0",
+  "peer_range_includes_target": false,
+  "peer_range_status": "Known pinned ^0.75.0 excludes pinned 0.79.0; no upstream support claim.",
+  "installation": {
+    "strict_attempt": {
+      "status": "failed_peer_resolution",
+      "error_code": "ERESOLVE",
+      "relevant_error": "npm error code ERESOLVE\nnpm error ERESOLVE unable to resolve dependency tree\nnpm error\nnpm error While resolving: ra2-ai-opponent-load-probe@0.0.0\nnpm error Found: @chronodivide/game-api@0.79.0\nnpm error node_modules/@chronodivide/game-api\nnpm error   @chronodivide/game-api@\"0.79.0\" from the root project\nnpm error\nnpm error Could not resolve dependency:\nnpm error peer @chronodivide/game-api@\"^0.75.0\" from @supalosa/chronodivide-bot@0.6.8-beta.3-165b77a\nnpm error node_modules/@supalosa/chronodivide-bot\nnpm error   @supalosa/chronodivide-bot@\"0.6.8-beta.3-165b77a\" from the root project\nnpm error",
+      "note": "Historical install command output; this script itself does not install dependencies."
+    },
+    "probe_only_peer_bypass": "--legacy-peer-deps",
+    "lifecycle_scripts_disabled": "--ignore-scripts",
+    "reproduce_install": "npm ci --ignore-scripts --legacy-peer-deps --no-audit --no-fund",
+    "bypass_scope": "Allows loading inspection of the pinned pair only; not compatibility certification."
+  },
+  "audited_api_artifact_hashes_match": true,
+  "opponent_lock_integrity_matches_recorded_package": true,
+  "installed_api_copies": [
+    {
+      "path": "node_modules/@chronodivide/game-api",
+      "version": "0.79.0"
+    }
+  ],
+  "declared_main": "dist/main.js",
+  "declared_main_exists": false,
+  "direct_bot_entry_sha256": "456e094287f19c10b14c9637bbbd19e97d19eaf154cad13a45283eb65081e78a",
+  "native_bare_esm_import": {
+    "process_exit_code": 0,
+    "signal": null,
+    "timed_out": false,
+    "result": {
+      "imported": false,
+      "error_name": "Error",
+      "error_code": "ERR_MODULE_NOT_FOUND",
+      "error_message": "Cannot find package '<installation>/node_modules/@supalosa/chronodivide-bot/dist/main.js' imported from <installation>/[eval1]"
+    }
+  },
+  "author_deep_esm_import_and_guarded_constructor": {
+    "process_exit_code": 0,
+    "signal": null,
+    "timed_out": false,
+    "result": {
+      "imported": true,
+      "exports": [
+        "SupalosaBot"
+      ],
+      "bot_entry": "node_modules/@supalosa/chronodivide-bot/dist/bot/bot.js",
+      "api_resolved_from_driver": "node_modules/@chronodivide/game-api/dist/index.js",
+      "api_resolved_from_bot": "node_modules/@chronodivide/game-api/dist/index.js",
+      "same_api_realpath": true,
+      "prototype_extends_target_bot": true,
+      "lifecycle_types_before_guards": {
+        "onGameInit": "function",
+        "onGameStart": "function",
+        "onGameTick": "function",
+        "onGameEvent": "function",
+        "setContext": "function"
+      },
+      "constructor_succeeded": true,
+      "instance_of_target_bot": true,
+      "context_is_unset": true,
+      "country_argument": "Americans",
+      "country_value_preserved": true,
+      "requested_alliances": [],
+      "logging_argument": false,
+      "forbidden_calls": [],
+      "constructor_scope": "Default strategy and queue objects only; lifecycle methods are guarded, never invoked."
+    }
+  },
+  "load_only_checks_passed": true,
+  "resources_initialized": false,
+  "game_created": false,
+  "lifecycle_methods_executed": false,
+  "engine_simulated": false,
+  "source_typechecked_or_recompiled": false,
+  "gameplay_compatibility_verified": false,
+  "scope": "Expected bare-entry failure is recorded separately. Passing deep import and constructor checks does not validate onGameInit/Start/Tick/Event, game context, observations, actions, playback, strategy or performance."
+}

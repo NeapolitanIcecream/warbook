@@ -1,0 +1,10 @@
+{
+  "name": "ra2-ai-opponent-load-probe",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Resource-free loading probe only; the selected opponent's declared API peer range excludes the audited target.",
+  "dependencies": {
+    "@chronodivide/game-api": "0.79.0",
+    "@supalosa/chronodivide-bot": "0.6.8-beta.3-165b77a"
+  }
+}
