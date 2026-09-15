@@ -55,6 +55,7 @@ export class Commander {
   private postponedScouts = new Map<string, number>();
   private readonly raiding = new RaidTask();
   private counterAttackStarted = false;
+  private openingSizeReached = false;
   private readonly regrouping = new RegroupTask();
   constructor(readonly mode: PolicyMode = "baseline") {}
 
@@ -214,6 +215,7 @@ export class Commander {
     if (!army.length) return intents;
     const formUp = this.mode === "formed";
     const clearFactory = this.mode === "factory-exit";
+    if (clearFactory && count(names.tank) >= 4) this.openingSizeReached = true;
     const assemble =
       this.mode === "counter" ||
       this.mode === "assembly-only" ||
@@ -240,7 +242,9 @@ export class Commander {
           )
         : [];
     const openingReady = clearFactory
-      ? fieldArmor.length >= 4
+      ? this.openingSizeReached &&
+        fieldArmor.length > 0 &&
+        fieldArmor.length === count(names.tank)
       : formUp
         ? fieldArmor.some(
             (center) =>

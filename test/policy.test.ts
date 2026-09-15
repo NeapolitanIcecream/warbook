@@ -69,12 +69,9 @@ test("opening formation waits for the fourth tank to exit and join the force", (
     tick: 5886,
   };
   const policy = new Commander("formed");
+  const factoryExit = new Commander("factory-exit");
   assert.ok(policy.decide(o).some((i) => i.task === "counter-rally"));
-  assert.ok(
-    new Commander("factory-exit")
-      .decide(o)
-      .some((i) => i.task === "counter-rally"),
-  );
+  assert.ok(factoryExit.decide(o).some((i) => i.task === "counter-rally"));
   assert.ok(
     !new Commander("assembly-only")
       .decide(o)
@@ -95,6 +92,12 @@ test("opening formation waits for the fourth tank to exit and join the force", (
     tick: 6550,
     own: joined.own.filter((u) => u.ref !== "a"),
   };
+  assert.ok(
+    factoryExit
+      .decide(afterLoss)
+      .some((i) => i.kind === "attackMove" && i.x === 38 && i.y === 73),
+    "a casualty while the fourth tank exits does not erase the already completed production stage",
+  );
   assert.ok(
     !policy.decide(afterLoss).some((i) => i.task === "counter-rally"),
     "opening commitment does not reset after casualties",
