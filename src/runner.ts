@@ -15,7 +15,7 @@ import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { WarbookBot, OBSERVATION_PROTOCOL } from "./bridge.js";
-import { POLICY_VERSION, type PolicyMode } from "./policy.js";
+import { POLICY_VERSION, POLICY_MODES, type PolicyMode } from "./policy.js";
 import { SupalosaOpponent } from "./opponent.js";
 import { recordDestruction } from "./referee.js";
 
@@ -44,14 +44,7 @@ const trace = (event: unknown) =>
   appendFileSync(`${dir}/decisions.ndjson`, JSON.stringify(event) + "\n");
 let game: GameInstanceApi | undefined;
 async function main(): Promise<void> {
-  const allowedModes = [
-    "baseline",
-    "cohesive",
-    "guarded",
-    "pillbox",
-    "sentry",
-    "crush",
-  ];
+  const allowedModes: readonly string[] = POLICY_MODES;
   if (
     !allowedModes.includes(values.mode!) ||
     ![...allowedModes, "supalosa"].includes(values.opponent!)

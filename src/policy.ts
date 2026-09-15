@@ -8,7 +8,24 @@ import {
 
 export const POLICY_VERSION = "warbook-0.1.2";
 export type PolicyMode =
-  "baseline" | "cohesive" | "guarded" | "pillbox" | "sentry" | "crush";
+  | "baseline"
+  | "cohesive"
+  | "guarded"
+  | "pillbox"
+  | "sentry"
+  | "crush"
+  | "tempo"
+  | "combined";
+export const POLICY_MODES: readonly PolicyMode[] = [
+  "baseline",
+  "cohesive",
+  "guarded",
+  "pillbox",
+  "sentry",
+  "crush",
+  "tempo",
+  "combined",
+];
 
 /** Synchronous policy. It has no engine handle, world events, native IDs or wall clock. */
 export class Commander {
@@ -22,6 +39,7 @@ export class Commander {
     const intents: Intent[] = [];
     const count = (name: string) => o.own.filter((u) => u.name === name).length;
     const allied = o.side === 0;
+    const earlyArmor = this.mode === "tempo" || this.mode === "combined";
     const names = allied
       ? {
           power: "GAPOWR",
@@ -77,12 +95,19 @@ export class Commander {
     else if (!count(names.refinery)) building = names.refinery;
     else if (!count(names.barracks)) building = names.barracks;
     else if (!count(names.factory)) building = names.factory;
-    else if (count(names.refinery) < 2) building = names.refinery;
+    else if (
+      count(names.refinery) < 2 &&
+      (!earlyArmor || count(names.tank) >= 4 || o.tick >= 9000)
+    )
+      building = names.refinery;
     else if (count(names.factory) < 2 && o.credits > 3500)
       building = names.factory;
     queue(building);
     queue(
-      o.own.filter((u) => u.harvester).length < 4 ? names.miner : names.tank,
+      o.own.filter((u) => u.harvester).length <
+        (earlyArmor && count(names.tank) < 4 && o.tick < 9000 ? 2 : 4)
+        ? names.miner
+        : names.tank,
     );
     if (
       o.own.filter((u) => u.type === 3 && u.combat).length < 6 &&
@@ -180,7 +205,7 @@ export class Commander {
           .sort((a, b) => distance2(unit, a) - distance2(unit, b));
         const target = nearby[0];
         if (
-          this.mode === "crush" &&
+          (this.mode === "crush" || this.mode === "combined") &&
           unit.crusher &&
           target?.type === 3 &&
           distance2(unit, target) < 100

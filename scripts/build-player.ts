@@ -2,9 +2,11 @@ import { build } from "esbuild";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { POLICY_VERSION } from "../src/policy.js";
+import { POLICY_VERSION, POLICY_MODES } from "../src/policy.js";
 mkdirSync("dist/player", { recursive: true });
 const mode = process.env.PLAYER_POLICY ?? "baseline";
+if (!POLICY_MODES.some((value) => value === mode))
+  throw new Error("Unknown player policy");
 const output = await build({
   entryPoints: ["src/player/integration.ts"],
   outfile: "dist/player/bot.js",
