@@ -5,8 +5,9 @@ import {
   type Unit,
   type Point,
 } from "./model.js";
+import { RaidTask } from "./raiding.js";
 
-export const POLICY_VERSION = "warbook-0.1.4";
+export const POLICY_VERSION = "warbook-0.1.5-dev";
 export type PolicyMode =
   | "baseline"
   | "cohesive"
@@ -15,7 +16,8 @@ export type PolicyMode =
   | "sentry"
   | "crush"
   | "tempo"
-  | "combined";
+  | "combined"
+  | "raid";
 export const POLICY_MODES: readonly PolicyMode[] = [
   "baseline",
   "cohesive",
@@ -25,6 +27,7 @@ export const POLICY_MODES: readonly PolicyMode[] = [
   "crush",
   "tempo",
   "combined",
+  "raid",
 ];
 
 /** Synchronous policy. It has no engine handle, world events, native IDs or wall clock. */
@@ -37,6 +40,7 @@ export class Commander {
   private scoutBestDistance = Infinity;
   private scoutProgressTick = 0;
   private postponedScouts = new Map<string, number>();
+  private readonly raiding = new RaidTask();
   constructor(readonly mode: PolicyMode = "baseline") {}
 
   private scout(o: Observation, army: Unit[]): Point | undefined {
@@ -83,7 +87,7 @@ export class Commander {
     const intents: Intent[] = [];
     const count = (name: string) => o.own.filter((u) => u.name === name).length;
     const allied = o.side === 0;
-    const earlyArmor = this.mode === "tempo" || this.mode === "combined";
+    const earlyArmor = ["tempo", "combined", "raid"].includes(this.mode);
     const names = allied
       ? {
           power: "GAPOWR",
@@ -235,6 +239,9 @@ export class Commander {
       for (const ref of refs) this.lastOrders.set(ref, { tick: o.tick, key });
       intents.push({ ...intent, refs });
     };
+    const raid = this.mode === "raid" ? this.raiding.plan(o, army) : undefined;
+    const raiders = new Set(raid?.units.map((u) => u.ref));
+    if (raid) order(raid.units, raid.key, raid.intent, 180);
     if (
       this.mode === "cohesive" &&
       !threat &&
@@ -257,7 +264,7 @@ export class Commander {
       );
     } else {
       // Each squad engages nearby legal contacts. Distant squads keep travelling instead of chasing a shared ID.
-      for (const unit of army) {
+      for (const unit of army.filter((u) => !raiders.has(u.ref))) {
         const nearby = [...o.enemies]
           .filter(
             (e) => (!e.airborne || unit.antiAir) && distance2(unit, e) < 196,
@@ -270,7 +277,7 @@ export class Commander {
           );
         const target = nearby[0];
         if (
-          (this.mode === "crush" || this.mode === "combined") &&
+          ["crush", "combined", "raid"].includes(this.mode) &&
           unit.crusher &&
           target?.type === 3 &&
           !target.airborne &&

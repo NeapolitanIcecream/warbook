@@ -60,13 +60,14 @@ export interface Observation {
   /** Placement checks are restricted to completely explored footprints around our own base. */
   buildSites: { name: string; x: number; y: number }[];
 }
-export type Intent =
+export type Intent = (
   | { kind: "deploy"; refs: string[] }
   | { kind: "queue"; product: Product }
   | { kind: "place"; name: string; x: number; y: number }
   | { kind: "attack" | "crush"; refs: string[]; target: string }
   | { kind: "attackMove" | "move"; refs: string[]; x: number; y: number }
-  | { kind: "repair"; ref: string };
+  | { kind: "repair"; ref: string }
+) & { task?: string };
 
 export const distance2 = (a: Point, b: Point): number =>
   (a.x - b.x) ** 2 + (a.y - b.y) ** 2;

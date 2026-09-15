@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Commander } from "../src/policy.js";
 import type { Observation, Unit } from "../src/model.js";
+import { RaidTask } from "../src/raiding.js";
 
 const tank = (ref = "tank"): Unit => ({
   ref,
@@ -218,4 +219,62 @@ test("anti-air vehicles attack visible flying infantry", () => {
       .decide(o)
       .some((i) => i.kind === "attack" && i.target === "air"),
   );
+});
+
+test("raiders pursue a visible miner without stealing all tanks or duplicating army orders", () => {
+  const o = observation(
+    Array.from({ length: 4 }, (_, i) => ({ ...tank(`tank-${i}`), x: 30 + i })),
+  );
+  o.enemies = [
+    {
+      ref: "defender",
+      name: "HTNK",
+      type: 7,
+      x: 35,
+      y: 30,
+      hp: 400,
+      maxHp: 400,
+      observedTick: 0,
+    },
+    {
+      ref: "miner",
+      name: "CMIN",
+      type: 7,
+      x: 40,
+      y: 35,
+      hp: 1000,
+      maxHp: 1000,
+      observedTick: 0,
+    },
+  ];
+  const intents = new Commander("raid").decide(o);
+  const raid = intents.find((i) => i.task === "raid-economy");
+  assert(raid && raid.kind === "attack");
+  assert.equal(raid.target, "miner");
+  assert.equal(raid.refs.length, 2);
+  const refs = intents.flatMap((i) => ("refs" in i ? i.refs : []));
+  assert.equal(new Set(refs).size, refs.length);
+  assert(intents.some((i) => i.kind === "attack" && i.target === "defender"));
+});
+
+test("raiders retain a known area after losing contact without attacking an invisible entity", () => {
+  const o = observation(Array.from({ length: 4 }, (_, i) => tank(`tank-${i}`)));
+  o.enemies = [
+    {
+      ref: "miner",
+      name: "CMIN",
+      type: 7,
+      x: 60,
+      y: 60,
+      hp: 1000,
+      maxHp: 1000,
+      observedTick: 0,
+    },
+  ];
+  const raid = new RaidTask();
+  raid.plan(o, o.own);
+  const search = raid.plan({ ...o, tick: 30, enemies: [] }, o.own);
+  assert(search && search.intent.kind === "attackMove");
+  assert.equal(search.intent.x, 60);
+  assert.equal(raid.plan({ ...o, tick: 480, enemies: [] }, o.own), undefined);
 });
