@@ -59,4 +59,6 @@ npm run replay -- runs/<run-directory>
 
 ## 项目约定与交接
 
+下一轮研发依据：[小型对手池与共同演化方案](docs/opponent-pool.md)。已记录对手来源边界、双方版本冻结、挑战路线、完整一轮推演和主线晋升规则；方案尚未进入执行。
+
 先读 [AGENTS.md](AGENTS.md)、[HANDOFF.md](HANDOFF.md) 和 [当前进展](docs/progress.md)。实现依据包括 [接口契约](docs/interface-contract.md)、[环境审计](docs/environment-audit.md)、[策略与责任](docs/strategy.md)、[评估协议](docs/evaluation.md)；历史规划、来源记录和无资源探针保留用于追溯。
