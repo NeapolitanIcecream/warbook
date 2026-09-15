@@ -239,7 +239,16 @@ export class Commander {
       for (const ref of refs) this.lastOrders.set(ref, { tick: o.tick, key });
       intents.push({ ...intent, refs });
     };
-    const raid = this.mode === "raid" ? this.raiding.plan(o, army) : undefined;
+    const raid =
+      this.mode === "raid"
+        ? this.raiding.plan(
+            o,
+            army,
+            [...unexplored].sort(
+              (a, b) => distance2(a, o.home) - distance2(b, o.home),
+            )[0] ?? this.scout(o, army),
+          )
+        : undefined;
     const raiders = new Set(raid?.units.map((u) => u.ref));
     if (raid) order(raid.units, raid.key, raid.intent, 180);
     if (

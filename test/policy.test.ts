@@ -274,7 +274,34 @@ test("raiders retain a known area after losing contact without attacking an invi
   const raid = new RaidTask();
   raid.plan(o, o.own);
   const search = raid.plan({ ...o, tick: 30, enemies: [] }, o.own);
-  assert(search && search.intent.kind === "attackMove");
+  assert(search && search.intent.kind === "move");
   assert.equal(search.intent.x, 60);
   assert.equal(raid.plan({ ...o, tick: 480, enemies: [] }, o.own), undefined);
+});
+
+test("the first raider scouts a candidate spawn despite a nearer frontline enemy", () => {
+  const o = observation();
+  o.enemies = [
+    {
+      ref: "frontline",
+      name: "HTNK",
+      type: 7,
+      x: 35,
+      y: 35,
+      hp: 400,
+      maxHp: 400,
+      observedTick: 0,
+    },
+  ];
+  const orders = new Commander("raid").decide(o);
+  assert(
+    orders.some(
+      (i) =>
+        i.kind === "move" &&
+        i.task === "raid-scout" &&
+        i.x === 70 &&
+        i.y === 70,
+    ),
+  );
+  assert(!orders.some((i) => i.kind === "attack"));
 });
