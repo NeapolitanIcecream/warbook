@@ -1,0 +1,583 @@
+{
+  "schema_version": 1,
+  "audit": {
+    "period_start": "2026-09-14",
+    "period_end": "2026-09-15",
+    "timezone": "Asia/Shanghai",
+    "date_precision_note_zh": "前轮公开资料审计跨日，未将各次读取强行归到单一日期；文档编制与本地字节重算在 2026-09-15。",
+    "scope_zh": "仅公开发布包文档、类型定义、入口实现、官方项目页面的静态审计；未读取历史实现，未运行游戏或训练。",
+    "runtime_verified": false,
+    "runtime_status": "not_run",
+    "record_zh": "source_verified 仅表示对应资料或实现已检查；不代表本机行为、跨平台确定性、吞吐、回放一致性或实验结果已验证。"
+  },
+  "package": {
+    "name": "@chronodivide/game-api",
+    "version": "0.79.0",
+    "engine_version_from_changelog": "0.84",
+    "node_engine_requirement": ">=20",
+    "registry_version_url": "https://registry.npmjs.org/@chronodivide/game-api/0.79.0",
+    "tarball_url": "https://registry.npmjs.org/@chronodivide/game-api/-/game-api-0.79.0.tgz",
+    "reported_publication_time_utc": "2026-09-03T13:36:42.184Z",
+    "publication_time_source": "https://registry.npmjs.org/@chronodivide/game-api",
+    "version_status_zh": "此处固定审计版本；不承诺未来仍为 latest，也不表示仓库已经安装该版本。"
+  },
+  "hashing": {
+    "algorithm": "SHA-256",
+    "input": "exact local bytes of files extracted from the published npm tarball",
+    "line_numbers": "one-based",
+    "bundle_offsets": "zero-based Unicode character offsets in UTF-8-decoded text; columns are one-based",
+    "checked_on": "2026-09-15"
+  },
+  "artifacts": [
+    {
+      "id": "readme",
+      "package_path": "README.md",
+      "public_url": "https://unpkg.com/@chronodivide/game-api@0.79.0/README.md",
+      "acquired_from": "published npm tarball",
+      "size_bytes": 9686,
+      "sha256": "f02e64da9ea575a25243eee3ba7d125d39bbc6e98e6f207afe5a9070d7d05aa6",
+      "copied_into_repository": false
+    },
+    {
+      "id": "types",
+      "package_path": "dist/index.d.ts",
+      "public_url": "https://unpkg.com/@chronodivide/game-api@0.79.0/dist/index.d.ts",
+      "acquired_from": "published npm tarball",
+      "size_bytes": 76354,
+      "sha256": "812445fc561307d326b993a2d68386a66c1ac4896139183a91f24933de69c504",
+      "copied_into_repository": false
+    },
+    {
+      "id": "bundle",
+      "package_path": "dist/index.js",
+      "public_url": "https://unpkg.com/@chronodivide/game-api@0.79.0/dist/index.js",
+      "acquired_from": "published npm tarball",
+      "size_bytes": 961659,
+      "sha256": "2c6937c165ffc822eb6db7d8a72847fe650394b0ba46d5bd92693e578e0400cb",
+      "copied_into_repository": false
+    },
+    {
+      "id": "changelog",
+      "package_path": "CHANGELOG.md",
+      "public_url": "https://unpkg.com/@chronodivide/game-api@0.79.0/CHANGELOG.md",
+      "acquired_from": "published npm tarball",
+      "size_bytes": 9378,
+      "sha256": "00c169104eb3014e6fae62e1b6280610303c0530ef0dc671c88c18b9da6466e4",
+      "copied_into_repository": false
+    },
+    {
+      "id": "package_manifest",
+      "package_path": "package.json",
+      "public_url": "https://unpkg.com/@chronodivide/game-api@0.79.0/package.json",
+      "acquired_from": "published npm tarball",
+      "size_bytes": 1681,
+      "sha256": "bf706010c0ccf4b3366f33524b90f286ca01651314f21f2cb80c6bdae329a37e",
+      "copied_into_repository": false
+    }
+  ],
+  "claims": [
+    {
+      "id": "package_engine_version",
+      "evidence_level": "source_verified",
+      "statement_zh": "包版本 0.79.0；CHANGELOG 对应引擎 0.84；package.json 要求 Node >=20，README 的 Node14 声明与当前包不一致。",
+      "locations": [
+        {
+          "artifact": "changelog",
+          "line_start_one_based": 3,
+          "line_end_one_based": 12
+        },
+        {
+          "artifact": "package_manifest",
+          "json_pointers": [
+            "/name",
+            "/version",
+            "/engines/node"
+          ]
+        },
+        {
+          "artifact": "readme",
+          "line_start_one_based": 7,
+          "line_end_one_based": 11
+        }
+      ],
+      "runtime_verified": false,
+      "runtime_status": "not_run"
+    },
+    {
+      "id": "headless_turn_control",
+      "evidence_level": "source_verified",
+      "statement_zh": "公开 API 支持外部 Bot 的 offline 对局、update 推进、状态查询和保存回放；具体 tick 时序和端到端吞吐未实测。",
+      "locations": [
+        {
+          "artifact": "types",
+          "line_start_one_based": 497,
+          "line_end_one_based": 517
+        },
+        {
+          "artifact": "types",
+          "line_start_one_based": 1273,
+          "line_end_one_based": 1295
+        },
+        {
+          "artifact": "readme",
+          "line_start_one_based": 19,
+          "line_end_one_based": 63
+        }
+      ],
+      "runtime_verified": false,
+      "runtime_status": "not_run"
+    },
+    {
+      "id": "action_execution",
+      "evidence_level": "source_verified",
+      "statement_zh": "ActionsApi 提交命令通常返回 void。回放事件是输入尝试，不保证动作在模拟中成功。",
+      "locations": [
+        {
+          "artifact": "types",
+          "line_start_one_based": 18,
+          "line_end_one_based": 69
+        },
+        {
+          "artifact": "types",
+          "line_start_one_based": 1049,
+          "line_end_one_based": 1069
+        },
+        {
+          "artifact": "readme",
+          "line_start_one_based": 109,
+          "line_end_one_based": 114
+        }
+      ],
+      "runtime_verified": false,
+      "runtime_status": "not_run"
+    },
+    {
+      "id": "async_callback_not_awaited",
+      "evidence_level": "source_verified",
+      "statement_zh": "Bot.onGameTick 声明返回 void；当前 GameInstanceApi.update 对各 Bot 使用同步 forEach 调用，不等待回调返回的 Promise。",
+      "locations": [
+        {
+          "artifact": "types",
+          "line_start_one_based": 170,
+          "line_end_one_based": 197
+        },
+        {
+          "artifact": "bundle",
+          "search_marker": "class GameInstanceApi",
+          "character_offset_zero_based": 933462,
+          "line_one_based": 2,
+          "column_one_based": 28049
+        }
+      ],
+      "runtime_verified": false,
+      "runtime_status": "not_run"
+    },
+    {
+      "id": "external_vs_integrated",
+      "evidence_level": "source_verified",
+      "statement_zh": "README 区分外部 sandbox 与集成游戏循环的确定性要求；不能把外部推理实现直接视为符合内部 lockstep 要求。",
+      "locations": [
+        {
+          "artifact": "readme",
+          "line_start_one_based": 183,
+          "line_end_one_based": 205
+        },
+        {
+          "artifact": "types",
+          "line_start_one_based": 1175,
+          "line_end_one_based": 1178
+        }
+      ],
+      "runtime_verified": false,
+      "runtime_status": "not_run"
+    },
+    {
+      "id": "public_initialization_controls_absent",
+      "evidence_level": "source_verified",
+      "statement_zh": "公开 CreateOpts 没有 seed、startPos 或按玩家资金参数。当前 offline 初始化使用 gameId 0 与秒级 Date.now 时间戳，生成配置将玩家起点设为 RANDOM_START_POS。",
+      "locations": [
+        {
+          "artifact": "types",
+          "line_start_one_based": 313,
+          "line_end_one_based": 335
+        },
+        {
+          "artifact": "bundle",
+          "search_marker": "_PublicApi_createOfflineGame=",
+          "character_offset_zero_based": 952176,
+          "line_one_based": 3,
+          "column_one_based": 14931
+        },
+        {
+          "artifact": "bundle",
+          "search_marker": "_PublicApi_generateGameOpts=",
+          "character_offset_zero_based": 957696,
+          "line_one_based": 12,
+          "column_one_based": 1288
+        }
+      ],
+      "runtime_verified": false,
+      "runtime_status": "not_run"
+    },
+    {
+      "id": "sandbox_rng_branch",
+      "evidence_level": "source_verified",
+      "statement_zh": "GameInstanceApi 创建 GameApi 时 useInternalRng=false；generateRandom 在此分支使用 Math.random。内部引擎另有由 gameId/时间戳初始化的 PRNG。声明 PRNG 的文档不证明 sandbox 策略随机源受种子控制。",
+      "locations": [
+        {
+          "artifact": "types",
+          "line_start_one_based": 475,
+          "line_end_one_based": 484
+        },
+        {
+          "artifact": "bundle",
+          "search_marker": "class GameInstanceApi",
+          "character_offset_zero_based": 933462,
+          "line_one_based": 2,
+          "column_one_based": 28049
+        },
+        {
+          "artifact": "bundle",
+          "search_marker": "generateRandom(){return GameApi",
+          "character_offset_zero_based": 882807,
+          "line_one_based": 1,
+          "column_one_based": 882808
+        },
+        {
+          "artifact": "bundle",
+          "search_marker": "class Prng{",
+          "character_offset_zero_based": 709665,
+          "line_one_based": 1,
+          "column_one_based": 709666
+        }
+      ],
+      "runtime_verified": false,
+      "runtime_status": "not_run"
+    },
+    {
+      "id": "replay_readonly_and_compatibility",
+      "evidence_level": "source_verified",
+      "statement_zh": "Replay 可解析并逐 turn 重模拟；README 列出版本、mod hash、map digest 匹配和无 internal AI 等限制。ReplayInstanceApi.getPlayer 返回 ReadonlyPlayerApi，无 actions；未提供公开 seek/takeover/fork 接口。",
+      "locations": [
+        {
+          "artifact": "readme",
+          "line_start_one_based": 65,
+          "line_end_one_based": 114
+        },
+        {
+          "artifact": "types",
+          "line_start_one_based": 1416,
+          "line_end_one_based": 1426
+        },
+        {
+          "artifact": "types",
+          "line_start_one_based": 1496,
+          "line_end_one_based": 1506
+        },
+        {
+          "artifact": "bundle",
+          "search_marker": "class ReplayInstanceApi",
+          "character_offset_zero_based": 940736,
+          "line_one_based": 3,
+          "column_one_based": 3491
+        },
+        {
+          "artifact": "bundle",
+          "search_marker": "async loadReplay(e)",
+          "character_offset_zero_based": 949883,
+          "line_one_based": 3,
+          "column_one_based": 12638
+        }
+      ],
+      "runtime_verified": false,
+      "runtime_status": "not_run"
+    },
+    {
+      "id": "external_bot_replay_eligibility",
+      "evidence_level": "source_inference",
+      "statement_zh": "offline external Bot 被记录为 humanPlayers，aiPlayers 为空；因此至少两个 external Bot 的录像预计不会仅因 internal-AI 限制被拒绝。这不证明实际回放兼容或重模拟一致。",
+      "locations": [
+        {
+          "artifact": "bundle",
+          "search_marker": "_PublicApi_generateGameOpts=",
+          "character_offset_zero_based": 957696,
+          "line_one_based": 12,
+          "column_one_based": 1288
+        },
+        {
+          "artifact": "bundle",
+          "search_marker": "async loadReplay(e)",
+          "character_offset_zero_based": 949883,
+          "line_one_based": 3,
+          "column_one_based": 12638
+        }
+      ],
+      "runtime_verified": false,
+      "runtime_status": "not_run"
+    },
+    {
+      "id": "snapshot_and_mutation_api_absent",
+      "evidence_level": "source_verified",
+      "statement_zh": "已检查的公开 API 无 save/load state、restore、spawnUnit、setMoney、setPosition。getDebugStateDump 仅在 online 诊断模式使用，没有公开恢复配对接口。",
+      "locations": [
+        {
+          "artifact": "types",
+          "line_start_one_based": 18,
+          "line_end_one_based": 69
+        },
+        {
+          "artifact": "types",
+          "line_start_one_based": 497,
+          "line_end_one_based": 517
+        },
+        {
+          "artifact": "types",
+          "line_start_one_based": 1273,
+          "line_end_one_based": 1295
+        },
+        {
+          "artifact": "types",
+          "line_start_one_based": 1496,
+          "line_end_one_based": 1506
+        }
+      ],
+      "runtime_verified": false,
+      "runtime_status": "not_run"
+    },
+    {
+      "id": "global_state_queries",
+      "evidence_level": "source_verified",
+      "statement_zh": "GameApi 可全图查询单位、任意玩家资料和任意 ID 的单位数据；玩家资料包含实际起点、credits、power，单位数据包含真实类型、HP、武器冷却和矿车载量等。它们不是自动经过玩家观测授权的数据。",
+      "locations": [
+        {
+          "artifact": "types",
+          "line_start_one_based": 445,
+          "line_end_one_based": 469
+        },
+        {
+          "artifact": "types",
+          "line_start_one_based": 1169,
+          "line_end_one_based": 1184
+        },
+        {
+          "artifact": "types",
+          "line_start_one_based": 2130,
+          "line_end_one_based": 2182
+        },
+        {
+          "artifact": "types",
+          "line_start_one_based": 2316,
+          "line_end_one_based": 2329
+        },
+        {
+          "artifact": "bundle",
+          "search_marker": "getPlayerData(e)",
+          "character_offset_zero_based": 877268,
+          "line_one_based": 1,
+          "column_one_based": 877269
+        },
+        {
+          "artifact": "bundle",
+          "search_marker": "getUnitData(t)",
+          "character_offset_zero_based": 879804,
+          "line_one_based": 1,
+          "column_one_based": 879805
+        }
+      ],
+      "runtime_verified": false,
+      "runtime_status": "not_run"
+    },
+    {
+      "id": "global_resources_and_events",
+      "evidence_level": "source_verified",
+      "statement_zh": "全图资源查询未按玩家过滤；EventsApi 将全局对象事件转译，GameInstanceApi 广播给 Bot，Destroy 包含攻击者标识与武器名。",
+      "locations": [
+        {
+          "artifact": "types",
+          "line_start_one_based": 879,
+          "line_end_one_based": 881
+        },
+        {
+          "artifact": "types",
+          "line_start_one_based": 984,
+          "line_end_one_based": 998
+        },
+        {
+          "artifact": "bundle",
+          "search_marker": "getAllTilesResourceData(",
+          "character_offset_zero_based": 871134,
+          "line_one_based": 1,
+          "column_one_based": 871135
+        },
+        {
+          "artifact": "bundle",
+          "search_marker": "class EventsApi",
+          "character_offset_zero_based": 866282,
+          "line_one_based": 1,
+          "column_one_based": 866283
+        },
+        {
+          "artifact": "bundle",
+          "search_marker": "class GameInstanceApi",
+          "character_offset_zero_based": 933462,
+          "line_one_based": 2,
+          "column_one_based": 28049
+        }
+      ],
+      "runtime_verified": false,
+      "runtime_status": "not_run"
+    },
+    {
+      "id": "visible_query_limit",
+      "evidence_level": "source_verified",
+      "statement_zh": "当前 getVisibleUnits 对敌方的实现检查 shroud 与敌我归属，没有在该方法中检查 cloak/disguise。此方法名不保证人类信息等价。",
+      "locations": [
+        {
+          "artifact": "types",
+          "line_start_one_based": 454,
+          "line_end_one_based": 466
+        },
+        {
+          "artifact": "bundle",
+          "search_marker": "getVisibleUnits(e,r",
+          "character_offset_zero_based": 878347,
+          "line_one_based": 1,
+          "column_one_based": 878348
+        }
+      ],
+      "runtime_verified": false,
+      "runtime_status": "not_run"
+    },
+    {
+      "id": "persistent_shroud",
+      "evidence_level": "source_verified",
+      "statement_zh": "MapShroud 的普通探索置为 Explored，不因侦察单位离开而普遍重盖；GapGeneratorTrait 等存在主动 unreveal，临时显形另有计时。具体边界待实测。",
+      "locations": [
+        {
+          "artifact": "bundle",
+          "search_marker": "class MapShroud{",
+          "character_offset_zero_based": 397479,
+          "line_one_based": 1,
+          "column_one_based": 397480
+        },
+        {
+          "artifact": "bundle",
+          "search_marker": "class MapShroudTrait",
+          "character_offset_zero_based": 698878,
+          "line_one_based": 1,
+          "column_one_based": 698879
+        },
+        {
+          "artifact": "bundle",
+          "search_marker": "class GapGeneratorTrait",
+          "character_offset_zero_based": 533678,
+          "line_one_based": 1,
+          "column_one_based": 533679
+        }
+      ],
+      "runtime_verified": false,
+      "runtime_status": "not_run"
+    },
+    {
+      "id": "observation_protocol",
+      "evidence_level": "proposed_policy",
+      "statement_zh": "引擎真值、actor 合法观测、belief 分离；实际起点、精确 HP、冷却等字段依据明确协议决定，不能仅凭精确性判非法，也不能因 API 可读自动允许。间接泄漏应涵盖事件、ID、动作掩码和运行时规划。",
+      "locations": [],
+      "runtime_verified": false,
+      "runtime_status": "not_run"
+    },
+    {
+      "id": "online_compatibility",
+      "evidence_level": "source_verified",
+      "statement_zh": "当前 online 使用 XWOL API key，只有首位 agent 可为 Bot；0.78.0 起移除自动自定义地图传输。",
+      "locations": [
+        {
+          "artifact": "readme",
+          "line_start_one_based": 116,
+          "line_end_one_based": 130
+        },
+        {
+          "artifact": "types",
+          "line_start_one_based": 337,
+          "line_end_one_based": 350
+        },
+        {
+          "artifact": "types",
+          "line_start_one_based": 1286,
+          "line_end_one_based": 1292
+        },
+        {
+          "artifact": "changelog",
+          "line_start_one_based": 8,
+          "line_end_one_based": 12
+        }
+      ],
+      "runtime_verified": false,
+      "runtime_status": "not_run"
+    },
+    {
+      "id": "performance_limits",
+      "evidence_level": "source_verified",
+      "statement_zh": "文档称 offline 尽快推进，未提供本项目吞吐量；findPath 开销较高，getReachabilityMap 连通性查询说明为 O(1)。",
+      "locations": [
+        {
+          "artifact": "types",
+          "line_start_one_based": 864,
+          "line_end_one_based": 876
+        },
+        {
+          "artifact": "types",
+          "line_start_one_based": 1282,
+          "line_end_one_based": 1284
+        }
+      ],
+      "runtime_verified": false,
+      "runtime_status": "not_run"
+    }
+  ],
+  "additional_public_sources": [
+    {
+      "url": "https://github.com/chronodivide/game-api-playground",
+      "kind": "official_example",
+      "pinned": false,
+      "supports_zh": "headless 对局示例、Node20+ 与原版 MIX 前提；滚动页面不替代固定发布包。"
+    },
+    {
+      "url": "https://github.com/chronodivide/mod-sdk/blob/master/README.md",
+      "kind": "official_documentation",
+      "pinned": false,
+      "supports_zh": "自定义地图/INI/mod 路径与不兼容项；不能据此断言精确状态恢复。"
+    },
+    {
+      "url": "https://github.com/chronodivide/mod-sdk/blob/master/MAPS.md",
+      "kind": "official_documentation",
+      "pinned": false,
+      "supports_zh": "受支持地图事件/动作的参考表；已阅表标引擎0.70，应对0.84逐项实测。"
+    },
+    {
+      "url": "https://chronodivide.com/patch-notes.html",
+      "kind": "official_changelog",
+      "pinned": false,
+      "supports_zh": "引擎行为、地图和规则随版本变化；不是本地运行通过证据。"
+    },
+    {
+      "url": "https://github.com/Supalosa/supalosa-chronodivide-bot",
+      "kind": "upstream_bot_implementation",
+      "pinned": false,
+      "supports_zh": "可选的待验证外部对照；不将上游战力或性能描述视为本项目测量。"
+    }
+  ],
+  "first_runtime_action_zh": "按 docs/environment-audit.md 最小清单，用固定包和普通地图运行外部 Bot 1v1，记录观察协议、命令与后置效果、实际起点、自然终局或截断、回放与耗时；不先要求完整 fork 工程。",
+  "not_performed": [
+    "dependency installation in this repository",
+    "engine initialization",
+    "complete-game execution",
+    "replay playback",
+    "seeded reset or fixed-start validation",
+    "observation equivalence tests",
+    "throughput benchmarks",
+    "state restore or takeover",
+    "training"
+  ],
+  "repository_storage_zh": "版本库只保存文档、链接、哈希和定位；不复制 bundle 或 MIX；录像和训练等运行产物可保存于仓库忽略目录或仓库外，不提交版本库。"
+}
