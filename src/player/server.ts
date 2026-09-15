@@ -142,8 +142,11 @@ app.post("/warbook/telemetry", async (c) => {
     return c.text("Local origin required", 403);
   const body = await c.req.text();
   if (body.length > 2_000_000) return c.text("Telemetry too large", 413);
-  JSON.parse(body);
-  appendFileSync(`${telemetryDir}/browser.ndjson`, body + "\n");
+  const payload = JSON.parse(body);
+  appendFileSync(
+    `${telemetryDir}/browser.ndjson`,
+    JSON.stringify({ release, port, ...payload }) + "\n",
+  );
   return c.body(null, 204);
 });
 app.get("/game/config.ini", (c) =>

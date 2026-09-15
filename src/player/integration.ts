@@ -76,8 +76,6 @@ export async function install(): Promise<void> {
     let events: unknown[] = [];
     let lastFlush = 0;
     bot.trace = (event) => {
-      if (event.kind !== "observation" && event.kind !== "own_objects_appeared")
-        return;
       events.push(event);
       if (event.tick - lastFlush >= 150 || events.length > 30) {
         void fetch("/warbook/telemetry", {
@@ -92,6 +90,29 @@ export async function install(): Promise<void> {
         events = [];
         lastFlush = event.tick;
       }
+    };
+    bot.onGameStart = (api) => {
+      const gameNumber = session.games;
+      const rules = new TextEncoder().encode(api.getRulesIni().toString());
+      void crypto.subtle.digest("SHA-256", rules).then((hash) =>
+        fetch("/warbook/telemetry", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId: session.sessionId,
+            game: gameNumber,
+            events: [
+              {
+                kind: "rules",
+                actor: bot.name,
+                sha256: [...new Uint8Array(hash)]
+                  .map((b) => b.toString(16).padStart(2, "0"))
+                  .join(""),
+              },
+            ],
+          }),
+        }),
+      );
     };
     return bot;
   };
@@ -135,6 +156,25 @@ export async function install(): Promise<void> {
     const game = originalCreate.apply(this, args);
     currentGame = game;
     roster = game.getCombatants();
+    void fetch("/warbook/telemetry", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId: session.sessionId,
+        game: session.games,
+        events: [
+          {
+            kind: "game_created",
+            options: game.gameOpts,
+            roster: roster.map((p) => ({
+              name: p.name,
+              country: p.country.name,
+              startLocation: p.startLocation,
+            })),
+          },
+        ],
+      }),
+    });
     game.onEnd.subscribe(() => recordStop("game_end"));
     return game;
   };
