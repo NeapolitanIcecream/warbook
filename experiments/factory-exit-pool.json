@@ -1,0 +1,41 @@
+{
+  "purpose": "Fresh fixed M0 comparison for the simplified factory-exit opening, including the previously regressing urban Supalosa cell",
+  "subjects": {
+    "m0": {
+      "ref": "68852328061240c50e622aae64cef7e9289af444",
+      "mode": "combined"
+    },
+    "factory-exit": {
+      "ref": "0a326ea4717704b5e20f294ff48304707cc53b88",
+      "mode": "factory-exit"
+    }
+  },
+  "opponents": {
+    "supalosa": {
+      "native": "supalosa"
+    },
+    "m0": {
+      "ref": "68852328061240c50e622aae64cef7e9289af444",
+      "mode": "combined"
+    },
+    "counter": {
+      "ref": "a64a79e32b7333c26b1d4bfdb43405464c51173a",
+      "mode": "counter"
+    }
+  },
+  "maps": [
+    "mp03t4.map",
+    "mp06t2.map",
+    "mp29u2.map"
+  ],
+  "rounds": 12,
+  "decision": {
+    "budget": "216 new starts, 108 per subject; one final comparison after all cells complete, never stop when a preferred score appears",
+    "weights": "each of the nine opponent x map cells has weight 1/9",
+    "outcomes": "same clean normal wins per all starts; retain each error, limit and defeat without rerunning to replace a loss",
+    "information": "unchanged api-shroud-v0-visible-placement-frontier for self bots; native Supalosa remains an external diagnostic anchor with its original information conditions",
+    "promotion": "Retain M0 if the gain is ambiguous or there is a material unresolved regression. A useful candidate still needs player lifecycle validation before a player update. No claim about the original formal D_target or unseen maps follows from this development pool.",
+    "remainingQuestion": "Does waiting for actual factory exit retain the useful opening force while avoiding the old return-to-base delay? No map or opponent label is provided to the policy.",
+    "regression": "The urban Supalosa screen sampled only start 1 for factory-exit. Inspect actual start 0 results here, retain every failure, and do not call the earlier 4/4 a regression fix."
+  }
+}
