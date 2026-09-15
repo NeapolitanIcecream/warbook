@@ -6,7 +6,7 @@ import {
   type Point,
 } from "./model.js";
 
-export const POLICY_VERSION = "warbook-0.1.3";
+export const POLICY_VERSION = "warbook-0.1.4";
 export type PolicyMode =
   | "baseline"
   | "cohesive"
@@ -151,11 +151,20 @@ export class Commander {
     )
       building = names.factory;
     queue(building);
+    const airContacts = o.enemies.filter((e) => e.airborne).length;
+    const needAntiAir =
+      airContacts > 0 &&
+      o.own.filter((u) => u.antiAir && u.mobile).length <
+        Math.min(4, Math.max(2, airContacts));
     queue(
-      o.own.filter((u) => u.harvester).length <
-        (earlyArmor && count(names.tank) < 4 && o.tick < 9000 ? 2 : 4)
-        ? names.miner
-        : names.tank,
+      needAntiAir
+        ? allied
+          ? "FV"
+          : "HTK"
+        : o.own.filter((u) => u.harvester).length <
+            (earlyArmor && count(names.tank) < 4 && o.tick < 9000 ? 2 : 4)
+          ? names.miner
+          : names.tank,
     );
     if (
       o.own.filter((u) => u.type === 3 && u.combat).length < 6 &&
@@ -250,13 +259,21 @@ export class Commander {
       // Each squad engages nearby legal contacts. Distant squads keep travelling instead of chasing a shared ID.
       for (const unit of army) {
         const nearby = [...o.enemies]
-          .filter((e) => distance2(unit, e) < 196)
-          .sort((a, b) => distance2(unit, a) - distance2(unit, b));
+          .filter(
+            (e) => (!e.airborne || unit.antiAir) && distance2(unit, e) < 196,
+          )
+          .sort(
+            (a, b) =>
+              (unit.antiAir
+                ? Number(!!b.airborne) - Number(!!a.airborne)
+                : 0) || distance2(unit, a) - distance2(unit, b),
+          );
         const target = nearby[0];
         if (
           (this.mode === "crush" || this.mode === "combined") &&
           unit.crusher &&
           target?.type === 3 &&
+          !target.airborne &&
           distance2(unit, target) < 100
         ) {
           order(
@@ -293,18 +310,23 @@ export class Commander {
             { kind: "attack", refs: [], target: target.ref },
             180,
           );
-        else
+        else {
+          const goal =
+            !unit.antiAir && "airborne" in destination && destination.airborne
+              ? (enemies.find((e) => !e.airborne) ?? o.home)
+              : destination;
           order(
             [unit],
-            "advance:" + destination.x + ":" + destination.y,
+            "advance:" + goal.x + ":" + goal.y,
             {
               kind: "attackMove",
               refs: [],
-              x: destination.x,
-              y: destination.y,
+              x: goal.x,
+              y: goal.y,
             },
             450,
           );
+        }
       }
     }
     return intents;

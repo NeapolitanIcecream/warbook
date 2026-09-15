@@ -1,69 +1,58 @@
-# RA2 AI / Chrono Divide
+# Warbook / Chrono Divide AI
 
-从零开发一个能在正常完整对局中持续进步的 Chrono Divide AI。研究以真实行为和独立对局为证据，按瓶颈选择启发式、搜索、监督学习或 RL。
+本地可玩的红色警戒 2 AI。新实现已经完成真实经济、生产、交战与胜负流程，并以完整对局和回放验证改进。
 
-**实施已启动（2026-09-15 14:09，Asia/Shanghai），本期截止 17:30。** 新实现已经用固定 API 0.79.0 / 引擎 0.84 跑通展开、经济、生产、交战与正常结束，回放重放结果一致。玩家入口在本机 [http://127.0.0.1:8642](http://127.0.0.1:8642)，已通过图形界面的建造、正常结算、主动退出和再次开局验证。没有复用本机被放弃项目的代码、扩展或策略；原版 MIX 仅作为本地资源输入。
+## 试玩
 
-## 运行
+打开 **[本地玩家入口](http://127.0.0.1:8642/)**，选择「本地对战」→「开始游戏」。默认美国、美国小镇、10000 资金、零起始军队。
+
+- 鼠标选择基地车，按 **D** 展开；在右侧建造栏生产和放置建筑。
+- **Esc → 放弃任务 → 退出** 可以结束当前局；结算后点「继续」再次开局。
+- 服务未启动时，双击 [Play Warbook.command](scripts/Play%20Warbook.command)。Agent 负责环境、版本、日志与运行维护。
+
+这是基础地面作战研发版。当前重点是建设、采矿、出兵、坦克对步兵作战和寻找迁移的基地；不宣称已经覆盖所有兵种、地图或真人竞技水平。
+
+## 本地开发与复现
+
+需要 Node.js ≥22.15（本机验证版本 26.5.0）和合法取得的 `ra2.mix`、`language.mix`、`multi.mix`。
 
 ```sh
 npm ci
-# 将合法取得的 ra2.mix、language.mix、multi.mix 放到 assets/ra2，或配置 .env 中的 MIX_DIR。
-npm run match -- --units 0
+# 将 MIX 放在 assets/ra2，或在 .env 中设置 MIX_DIR。
 npm run play
 ```
 
-玩家只需打开本地入口。首次启动会缓存官方客户端并自动导入本地游戏资源；对局不需要账号、Bot API key 或联机服务器。`OFFLINE=1 npm run play` 禁止缓存缺失时联网；完全离线的首次启动需要提前完成客户端资源缓存。所有客户端、MIX、日志、浏览器数据和回放均在忽略目录中。
+首次启动缓存官方客户端，浏览器自动从本机导入资源；对局不需要账户或 Bot API key。准备完成后，`OFFLINE=1 npm run play` 禁止缓存缺失时联网。入口仅监听 `127.0.0.1`。
 
-检查：`npm run typecheck`、`npm test`。回放重放：`npm run replay -- runs/<run-directory>`。固定公开对手：`npm run match -- --opponent supalosa --units 0`；它使用原生观察与事件条件，成绩只作外部工程锚点。
+```sh
+npm test
+npm run typecheck
+npm run match -- --units 0
+npm run match -- --mode baseline --opponent supalosa --units 0
+npm run batch -- --rounds 12 --modes baseline,combined --map mp03t4.map
+npm run replay -- runs/<run-directory>
+```
 
-实际结果、已知问题与续接位置见 [本期进展](docs/progress.md)。
+`combined` 是当前候选/发布策略：先形成早期坦克，再扩张经济；对可见步兵使用原生碾压指令；清查出生点后继续侦察未探索区域。`baseline` 保留作为初始工程对照。全部实验与当前固定试玩版本见 [执行进展](docs/progress.md)。
 
-**接手开工先读 [HANDOFF.md](HANDOFF.md)。** 用户要求开始实施后，直接推进首个真实运行；下述历史“尚未启动”不构成继续停留规划的理由。
+## 固定版本与证据范围
 
-## 从这里开始
+- **SDK：`@chronodivide/game-api@0.79.0`。实际嵌入的引擎源码版本是 `0.83.3`，回放兼容标识是 `0.83`。** 这由发布包中的版本常量和真实回放确认；早期文档根据 changelog 写作「引擎 0.84」的映射已被实际结果修正。
+- 玩家客户端来自官方 [0.83.3 归档](https://game.chronodivide.com/old/v0.83.3/)，配合同一 SDK 的规则资源包；客户端代码、SDK 资源和 AI 包均校验哈希。最初的 0.84 客户端试玩记录保留为单独证据。
+- 最新三图开发批次：`mp03t4.map`、`mp06t2.map`、`mp29u2.map`，每图每策略 12 场；候选 36 胜，初始对照 6 胜、28 负、2 场未决。对手为固定 Supalosa npm 构建。**这些是开发集成绩，不能代替正式目标分布或真人水平认证。**
+- 策略使用 `api-shroud-v0-visible-placement-frontier`：仅当前己方状态、按本方 shroud 过滤的敌方接触、己方探索信息；建筑预检局限于已探索的基地周边。该工程条件尚不宣称与人类界面的隐形、伪装等观察完全等价。
+- 正常结束需要引擎 `Ended`、turn-manager 无错误及单方败北证据。超时、错误、主动中止分别保留；不把 `isFinished()` 单独当胜利。
 
-| 文档 | 用途 |
-| --- | --- |
-| [执行交接](HANDOFF.md) | 最短阅读路径、真实起点、缺失资源、开工动作和可直接使用的启动文字 |
-| [Agent 全权研发战略](docs/strategy.md) | Agent责任、玩家交付、6–12小时校准与24/72小时滚动预测；时间和指标以此为准 |
-| [前期分析收束](docs/preimplementation-decisions.md) | 新发现、首局默认选择、待实证问题与停止扩写分析的条件 |
-| [接口契约](docs/interface-contract.md) | 最小观察/动作/调度/结束记录，映射到真实 API |
-| [对手与数据](docs/opponents-and-data.md) | 固定公开版本、对手接入风险、地图与 replay 来源 |
-| [首批判别实验](docs/first-experiments.md) | 失败预演、10 张按需实验卡和 12 个伪改进反例 |
-| [真人 replay 解析探针](docs/replay-data-probe.md) | 两份真实公开文件的无资源解析结果及复现方法 |
-| [统计预算](docs/statistical-budget.md) | 样本量、选优偏差和对手比例偏差的已执行计算 |
-| [方法论](docs/methodology.md) | 目标、架构、算法选择、数据与学习、研究循环 |
-| [环境审计](docs/environment-audit.md) | API 0.79.0 的已查事实、限制、源码推断和待实测问题 |
-| [评估协议](docs/evaluation.md) | 场景有效性、对照、信息边界、整局评测与统计 |
-| [实施路线](docs/roadmap.md) | 当前进度、首阶段工作、依赖与证据要求 |
-| [Pro 回复审阅](docs/reference-review.md) | 值得吸收的补充，以及需要限定的建议 |
-| [实验模板](templates/experiment.md) | 一次可证伪、可复验的研究任务 |
-| [Pro 原稿](docs/references/gpt-6-pro-original.md) | 用户提供的 `/Users/chenmohan/Downloads/ra2ai.md` 的原样副本 |
-| [API 来源清单](docs/references/api-provenance.json) | 固定版本来源、哈希与检查范围 |
+## 实现结构
 
-## 已接受的方向
+- [policy.ts](src/policy.ts)：纯数据、同步决策，没有引擎句柄。
+- [bridge.ts](src/bridge.ts)：观察白名单、局部引用、动作仲裁与提交。
+- [effects.ts](src/effects.ts)：区分「已经请求」和实际观察到的效果。
+- [runner.ts](src/runner.ts)、[referee.ts](src/referee.ts)：对局驱动与独立裁判记录。
+- [player](src/player/)：本地入口、官方客户端接入与固定版本服务。
 
-- 真实对局提供问题，局部实验解释机制，独立整局评价决定是否保留改动。
-- 分开软件正确性、局部能力和整局竞争力；合成场景的用途取决于它实际能证明什么。
-- 引擎真值、合法玩家观测和玩家估计分别处理。API 可访问性不等于评测允许使用。
-- 尽早形成能打完整局的简单基线，每轮只围绕一个具体瓶颈做有判别力的修改。
-- 比较认真调优的简单方案；小模型和 RL 都是候选实现，不是成功条件。
-- 用反例、故障注入、不同对手和保留数据检验评估器。多个模型赞同不构成独立证据。
-- 基础设施随实验需要增长，避免为尚不存在的需求搭建平台。
-- 开发速度与代码健康共同服务于 RA2 AI：设计、实现、实验都避免过度防御；定期检查结构和性能，确有必要就暂停相关新功能，先完成有范围的重构或优化，再恢复主线。
-- Agent 全权负责研发与运行维护，用户仅作为用户/玩家检验；Agent处理普通体验反馈，用户无需管理技术工作。可玩入口与算法基线同步推进。
+所有原版资源、客户端缓存、回放、浏览器数据、密钥及运行产物均被 Git 忽略。没有复用被放弃的本机项目代码。第三方软件说明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
-## 工作默认值与未决事项
+## 项目约定与交接
 
-从固定引擎版本、一个国家、少量地图的正常开局 1v1 起步，保留经济、生产、侦察和完整胜负条件。首场工程试跑选用官方示例中已有的 Americans 与 `mp03t4.map` 作为候选，具体默认选项和限制见 [前期分析收束](docs/preimplementation-decisions.md)。它不是已验证的公平地图或最终赛制；最终地图池、目标对手水平和计算预算仍需真实运行后确定。
-
-源码审计参考 `@chronodivide/game-api@0.79.0`（对应引擎 0.84）。replay 解析与对手加载探针分别在忽略目录安装依赖，分析锁文件保存在 `analysis/replay-parser/` 和 `analysis/opponent-loader/`；后者显式绕过不匹配的 peer 约束，仅用于兼容检查。**自己的 bot 项目尚无依赖配置、游戏资源初始化或对局记录**。公开接口没有现成 seeded reset、固定出生位、快照恢复或 replay 接管接口；这些能力不应成为首场正常整局的前置条件。
-
-下一项实施目标：进入真实 headless 对局并核查玩家可对战入口，建立必要观察、动作与结束记录。首轮6–12小时用于实际运行和时间校准，后续按实测给24/72小时预测，不再使用人类工作周排期。截至本交接归档时尚未启动连续研发；执行 Agent 收到开工指令即按此推进。详见 [实施路线](docs/roadmap.md)。
-
-## 记录边界
-
-原稿保留用于追溯，不是所有陈述均已独立核实；采用的方案以方法论、评估协议和环境审计为准。文献结果仅提供方法依据，不构成 Chrono Divide 上已经有效的证据。
-
-游戏 MIX 文件、密钥、大型 replay、训练数据与模型权重不进入 Git。后续运行产物放在被忽略的目录或独立存储中，以版本、配置、哈希和路径关联实验。开发约定见 [AGENTS.md](AGENTS.md)。
+先读 [AGENTS.md](AGENTS.md)、[HANDOFF.md](HANDOFF.md) 和 [当前进展](docs/progress.md)。实现依据包括 [接口契约](docs/interface-contract.md)、[环境审计](docs/environment-audit.md)、[策略与责任](docs/strategy.md)、[评估协议](docs/evaluation.md)；历史规划、来源记录和无资源探针保留用于追溯。

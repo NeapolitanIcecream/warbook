@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import {
@@ -11,14 +11,15 @@ import {
 import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 import { execFileSync } from "node:child_process";
+import {
+  CLIENT_BUILDS,
+  LEGACY_CLIENT,
+  PINNED_CLIENT,
+  SDK_RESOURCE_SHA,
+  type ClientBuild,
+} from "./client.js";
 
-const CLIENT_VERSION = "0.84.0";
-const CLIENT_HASH =
-  "b937a130b6a1a6c9619b159769580331e08e7059bb2181758aef243753ba1bd1";
-const upstream = "https://game.chronodivide.com";
-const cacheDir = resolve("work/client-cache");
 const telemetryDir = resolve("runs/player");
-mkdirSync(cacheDir, { recursive: true });
 mkdirSync(telemetryDir, { recursive: true });
 const port = Number(process.env.PORT ?? 8642);
 const localOrigin = `http://127.0.0.1:${port}`;
@@ -26,6 +27,11 @@ const releasePath = process.env.PLAYER_RELEASE
   ? `dist/player/${process.env.PLAYER_RELEASE}/release.json`
   : "dist/player/current.json";
 const release = JSON.parse(readFileSync(releasePath, "utf8"));
+const client = CLIENT_BUILDS.get(
+  release.clientVersion ?? LEGACY_CLIENT.version,
+);
+if (!client) throw new Error("Unsupported client version");
+const CLIENT_VERSION = client.version;
 if (!/^[a-f0-9]{64}$/.test(release.sha256))
   throw new Error("Invalid player release");
 const botPath = `dist/player/${release.sha256}/bot.js`;
@@ -38,8 +44,27 @@ const pending = new Map<string, Promise<{ body: Buffer; type: string }>>();
 
 async function getClientAsset(
   path: string,
-  sourceUrl = upstream + path,
+  sourceUrl?: string,
+  build: ClientBuild = client!,
 ): Promise<{ body: Buffer; type: string }> {
+  if (
+    build.version === PINNED_CLIENT.version &&
+    /^\/res\/ra2cd\.mix(?:\?|$)/.test(path)
+  ) {
+    const body = readFileSync(
+      "node_modules/@chronodivide/game-api/dist/res/ra2cd.mix",
+    );
+    if (createHash("sha256").update(body).digest("hex") !== SDK_RESOURCE_SHA)
+      throw new Error("Pinned SDK resource hash mismatch");
+    return { body, type: "application/octet-stream" };
+  }
+  const cacheDir = resolve(
+    build.version === LEGACY_CLIENT.version
+      ? "work/client-cache"
+      : `work/client-cache/${build.version}`,
+  );
+  mkdirSync(cacheDir, { recursive: true });
+  const pendingKey = build.version + ":" + path;
   const key = createHash("sha256").update(path).digest("hex");
   const file = `${cacheDir}/${key}`;
   if (existsSync(file) && existsSync(file + ".json"))
@@ -49,16 +74,16 @@ async function getClientAsset(
     };
   if (process.env.OFFLINE === "1")
     throw new Error(`Client asset is not cached: ${path}`);
-  if (pending.has(path)) return pending.get(path)!;
+  if (pending.has(pendingKey)) return pending.get(pendingKey)!;
   const task = (async () => {
-    const response = await fetch(sourceUrl, {
+    const response = await fetch(sourceUrl ?? build.baseUrl + path, {
       signal: AbortSignal.timeout(45000),
     });
     if (!response.ok)
       throw new Error(`Official asset returned ${response.status}: ${path}`);
     const body = Buffer.from(await response.arrayBuffer());
     const hash = createHash("sha256").update(body).digest("hex");
-    if (path.startsWith("/dist/ra2web.min.js") && hash !== CLIENT_HASH)
+    if (path.startsWith("/dist/ra2web.min.js") && hash !== build.bundleSha256)
       throw new Error(
         "Official engine changed; update integration after verification.",
       );
@@ -67,16 +92,22 @@ async function getClientAsset(
     writeFileSync(file, body);
     writeFileSync(
       file + ".json",
-      JSON.stringify({ path, type, sha256: hash, bytes: body.length }),
+      JSON.stringify({
+        path,
+        sourceUrl: sourceUrl ?? build.baseUrl + path,
+        type,
+        sha256: hash,
+        bytes: body.length,
+      }),
     );
     console.log("Cached", path, body.length);
     return { body, type };
   })();
-  pending.set(path, task);
+  pending.set(pendingKey, task);
   try {
     return await task;
   } finally {
-    pending.delete(path);
+    pending.delete(pendingKey);
   }
 }
 
@@ -121,13 +152,13 @@ app.get("/warbook/gpu/:file", async (c) => {
 });
 app.get("/", (c) =>
   c.html(
-    `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Warbook · 本地对战</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b1119;color:#e5ebf0;font:17px/1.65 system-ui}main{max-width:680px;padding:48px}small{color:#8cabb8;letter-spacing:3px}h1{font-size:52px;margin:12px 0}p{color:#adbac7}.start{display:inline-block;padding:14px 28px;background:#c9aa65;color:#111820;text-decoration:none;font-weight:700;border-radius:5px;margin:20px 0}li{margin:6px 0}footer{margin-top:40px;font-size:13px;color:#758793}</style><main><small>WARBOOK / LOCAL PLAY</small><h1>指挥你的下一场战役。</h1><p>在红色警戒 2 的完整战场上，与 Warbook AI 对战。</p><a class="start" href="/game/">开始本地对战 →</a><ol><li>选择「本地对战」，点击「开始游戏」。</li><li>选择美国，展开基地车，建设基地并作战。</li><li>按 Esc 退出；回到菜单即可再次开局。</li></ol><p>首次打开会自动导入本机游戏资源，稍候即可。</p><footer>研发试玩版 · 引擎 ${CLIENT_VERSION} · AI 使用已探索区域的 API 观察。<br>支持基本建设、采矿、补兵和地面战斗；仍在持续改进。</footer></main></html>`,
+    `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Warbook · 本地对战</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b1119;color:#e5ebf0;font:17px/1.65 system-ui}main{max-width:680px;padding:48px}small{color:#8cabb8;letter-spacing:3px}h1{font-size:52px;margin:12px 0}p{color:#adbac7}.start{display:inline-block;padding:14px 28px;background:#c9aa65;color:#111820;text-decoration:none;font-weight:700;border-radius:5px;margin:20px 0}li{margin:6px 0}footer{margin-top:40px;font-size:13px;color:#758793}</style><main><small>WARBOOK / LOCAL PLAY</small><h1>指挥你的下一场战役。</h1><p>在红色警戒 2 的完整战场上，与 Warbook AI 对战。</p><a class="start" href="/game/">开始本地对战 →</a><ol><li>选择「本地对战」，点击「开始游戏」。</li><li>选择美国，展开基地车，建设基地并作战。</li><li>按 Esc 退出；回到菜单即可再次开局。</li></ol><p>首次打开会自动导入本机游戏资源，稍候即可。</p><footer>研发试玩版 · 客户端 ${CLIENT_VERSION} · AI 使用已探索区域的 API 观察。<br>支持基本建设、采矿、补兵和地面战斗；仍在持续改进。</footer></main></html>`,
   ),
 );
 app.get("/warbook/health", (c) =>
   c.json({
     ok: true,
-    engine: CLIENT_VERSION,
+    clientVersion: CLIENT_VERSION,
     offline: process.env.OFFLINE === "1",
     release,
   }),
@@ -149,28 +180,35 @@ app.post("/warbook/telemetry", async (c) => {
   );
   return c.body(null, 204);
 });
-app.get("/game/config.ini", (c) =>
+const localConfig = (c: Context) =>
   c.text(
-    `[General]\nbotsEnabled=yes\nquickMatchEnabled=no\nunrankedQueueEnabled=no\nlegacyRegistrationEnabled=no\nviewport.width=1280\nviewport.height=800\ndefaultLanguage=zh-TW\ngameResArchiveUrl=${localOrigin}/warbook/ra2-local.zip\nserversUrl=${localOrigin}/warbook/servers.ini\nmapsBaseUrl=${localOrigin}/game/maps/\nmodsBaseUrl=${localOrigin}/game/mods/\n`,
-  ),
-);
+    `[General]\nreplaysUrlWhitelist=127.0.0.1\nbotsEnabled=yes\nquickMatchEnabled=no\nunrankedQueueEnabled=no\nlegacyRegistrationEnabled=no\nviewport.width=1280\nviewport.height=800\ndefaultLanguage=zh-TW\ngameResArchiveUrl=${localOrigin}/warbook/ra2-local.zip\nserversUrl=${localOrigin}/warbook/servers.ini\nmapsBaseUrl=${localOrigin}/game/maps/\nmodsBaseUrl=${localOrigin}/game/mods/\n`,
+  );
+app.get("/game/config.ini", localConfig);
+app.get("/client/:version/config.ini", localConfig);
 app.get("/warbook/servers.ini", (c) => c.text("[Servers]\n"));
 app.get("/game/", async (c) => {
   const { body } = await getClientAsset("/");
   let html = body.toString();
+  html = html.replace(
+    "<head>",
+    `<head><base href="/client/${CLIENT_VERSION}/">`,
+  );
   html = html.replace(/<!-- Global site tag[\s\S]*?(?=  <link)/, "");
   html = html.replace(
     /<script>\(function\(\)\{function c\(\)[\s\S]*?<\/script>/,
     "",
   );
+  if (!html.includes('SystemJS.import("main")'))
+    throw new Error("Unsupported pinned client bootstrap");
   html = html.replace(
-    'SystemJS.import("main");',
+    'SystemJS.import("main")',
     `SystemJS.import('game/api/index').then(async api => {
     globalThis.WarbookEngineApi=api;
     await new Promise((resolve,reject)=>{const s=document.createElement('script');s.src='/warbook/bot.js';s.onload=resolve;s.onerror=reject;document.head.append(s);});
     await Warbook.install();
     await SystemJS.import('main');
-  }).catch(error=>{document.body.textContent='本地 AI 启动失败：'+error.message;console.error(error);});`,
+  }).catch(error=>{document.body.textContent='本地 AI 启动失败：'+error.message;console.error(error);})`,
   );
   html = html.replace(
     "</head>",
@@ -198,12 +236,21 @@ app.get("/game/", async (c) => {
   c.header("Cross-Origin-Embedder-Policy", "require-corp");
   return c.html(html);
 });
-app.get("/game/*", async (c) => {
+const clientAsset = async (c: Context) => {
   const url = new URL(c.req.url);
-  const path = url.pathname.slice("/game".length) + url.search;
+  const requestedVersion = c.req.param("version");
+  const build = requestedVersion
+    ? CLIENT_BUILDS.get(requestedVersion)
+    : LEGACY_CLIENT;
+  if (!build) return c.text("Unknown client version", 404);
+  const path =
+    url.pathname.slice(
+      requestedVersion ? `/client/${requestedVersion}`.length : "/game".length,
+    ) + url.search;
   if (!/^\/(lib|dist|res)\//.test(path) && !/^\/style\.css(?:\?|$)/.test(path))
     return c.text("Unknown local client asset", 404);
-  const asset = await getClientAsset(path);
+  const asset = await getClientAsset(path, undefined, build);
+  if (path.startsWith("/res/ra2cd.mix")) c.header("Cache-Control", "no-store");
   if (path.includes("/locale/")) {
     const strings = JSON.parse(asset.body.toString());
     strings["gui:demo"] = "本地对战";
@@ -213,7 +260,14 @@ app.get("/game/*", async (c) => {
   c.header("Content-Type", asset.type);
   c.header("Cross-Origin-Resource-Policy", "same-origin");
   return c.body(new Uint8Array(asset.body));
-});
+};
+app.get("/game/*", clientAsset);
+app.get("/client/:version/*", clientAsset);
+if (process.env.REPLAY_CHECK)
+  app.get(
+    "/warbook/replay-check.rpl",
+    serveStatic({ path: process.env.REPLAY_CHECK }),
+  );
 serve({ fetch: app.fetch, hostname: "127.0.0.1", port }, () =>
   console.log(`Warbook player entry: ${localOrigin}`),
 );

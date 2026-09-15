@@ -1,5 +1,6 @@
 import {
   cdapi,
+  Replay,
   type CreateOfflineOpts,
   type GameInstanceApi,
 } from "@chronodivide/game-api";
@@ -18,6 +19,7 @@ import { WarbookBot, OBSERVATION_PROTOCOL } from "./bridge.js";
 import { POLICY_VERSION, POLICY_MODES, type PolicyMode } from "./policy.js";
 import { SupalosaOpponent } from "./opponent.js";
 import { recordDestruction } from "./referee.js";
+import { createOfficialOpponent } from "./official-opponent.js";
 
 const { values } = parseArgs({
   options: {
@@ -25,8 +27,8 @@ const { values } = parseArgs({
     ticks: { type: "string", default: "54000" },
     seconds: { type: "string", default: "180" },
     units: { type: "string", default: "10" },
-    mode: { type: "string", default: "baseline" },
-    opponent: { type: "string", default: "baseline" },
+    mode: { type: "string", default: "combined" },
+    opponent: { type: "string", default: "supalosa" },
     out: { type: "string" },
   },
 });
@@ -47,7 +49,7 @@ async function main(): Promise<void> {
   const allowedModes: readonly string[] = POLICY_MODES;
   if (
     !allowedModes.includes(values.mode!) ||
-    ![...allowedModes, "supalosa"].includes(values.opponent!)
+    ![...allowedModes, "supalosa", "official"].includes(values.opponent!)
   ) {
     throw new Error("Unknown policy mode");
   }
@@ -57,13 +59,15 @@ async function main(): Promise<void> {
   }
   const agents = [
     new WarbookBot("WarbookRed", "Americans", values.mode as PolicyMode),
-    values.opponent === "supalosa"
-      ? new SupalosaOpponent("SupalosaBlue")
-      : new WarbookBot(
-          "WarbookBlue",
-          "Americans",
-          values.opponent as PolicyMode,
-        ),
+    values.opponent === "official"
+      ? createOfficialOpponent("OfficialBlue")
+      : values.opponent === "supalosa"
+        ? new SupalosaOpponent("SupalosaBlue")
+        : new WarbookBot(
+            "WarbookBlue",
+            "Americans",
+            values.opponent as PolicyMode,
+          ),
   ];
   const warbookAgents = agents.filter(
     (bot): bot is WarbookBot => bot instanceof WarbookBot,
@@ -80,7 +84,8 @@ async function main(): Promise<void> {
     }).trim(),
     node: process.version,
     api: "0.79.0",
-    engine: "0.84",
+    referenceClientVersion: "0.83.3",
+    bundledEngineSourceVersion: "0.83.3",
     policy: POLICY_VERSION,
     modes: agents.map((a) => a.mode),
     observationProtocol: OBSERVATION_PROTOCOL,
@@ -93,6 +98,7 @@ async function main(): Promise<void> {
         "src/bridge.ts",
         "src/runner.ts",
         "src/opponent.ts",
+        "src/official-opponent.ts",
         "src/model.ts",
         "src/effects.ts",
         "src/referee.ts",
@@ -172,7 +178,7 @@ async function main(): Promise<void> {
       }
       for (const bot of agents)
         if (
-          bot instanceof SupalosaOpponent &&
+          !(bot instanceof WarbookBot) &&
           !game.gameApi.isPlayerDefeated(bot.name)
         )
           bot.step(game.gameApi);
@@ -215,6 +221,7 @@ async function main(): Promise<void> {
         }
       : { type: "outcome_unresolved" };
   const replay = game.saveReplay(dir);
+  const replayMetadata = Replay.parse(readFileSync(replay, "utf8"));
   const stopState = (
     engine as unknown as {
       warbookReadStopState: (instance: unknown) => {
@@ -240,7 +247,13 @@ async function main(): Promise<void> {
     isFinished: game.isFinished(),
     stats,
     error,
-    replay: { file: replay, sha256: sha256(replay) },
+    replay: {
+      file: replay,
+      sha256: sha256(replay),
+      engineVersion: replayMetadata.engineVersion,
+      modHash: replayMetadata.modHash,
+      mapDigest: replayMetadata.gameOpts.mapDigest,
+    },
     decisions,
     decisionMillis,
   };

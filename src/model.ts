@@ -21,6 +21,7 @@ export interface Unit extends Point {
   buildStatus?: number;
   deployed?: boolean;
   crusher?: boolean;
+  antiAir?: boolean;
 }
 export interface Contact extends Point {
   ref: string;
@@ -29,6 +30,7 @@ export interface Contact extends Point {
   hp: number;
   maxHp: number;
   observedTick: number;
+  airborne?: boolean;
 }
 export interface Product {
   name: string;

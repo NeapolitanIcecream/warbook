@@ -177,3 +177,45 @@ test("a scout destination without progress is postponed instead of retried forev
       .some((i) => i.kind === "attackMove" && i.x === 120 && i.y === 30),
   );
 });
+test("flying infantry are not crush targets and trigger anti-air production", () => {
+  const o = observation([{ ...tank(), crusher: true }]);
+  o.enemies = [
+    {
+      ref: "air",
+      name: "JUMPJET",
+      type: 3,
+      x: 34,
+      y: 34,
+      hp: 125,
+      maxHp: 125,
+      observedTick: 0,
+      airborne: true,
+    },
+  ];
+  o.products = [{ name: "FV", cost: 600, type: 7, queue: 3 }];
+  o.queues = [{ type: 3, status: 0, size: 0, items: [] }];
+  const intents = new Commander("combined").decide(o);
+  assert.ok(intents.some((i) => i.kind === "queue" && i.product.name === "FV"));
+  assert.ok(!intents.some((i) => i.kind === "crush" || i.kind === "attack"));
+});
+test("anti-air vehicles attack visible flying infantry", () => {
+  const o = observation([{ ...tank("ifv"), name: "FV", antiAir: true }]);
+  o.enemies = [
+    {
+      ref: "air",
+      name: "JUMPJET",
+      type: 3,
+      x: 34,
+      y: 34,
+      hp: 125,
+      maxHp: 125,
+      observedTick: 0,
+      airborne: true,
+    },
+  ];
+  assert.ok(
+    new Commander("combined")
+      .decide(o)
+      .some((i) => i.kind === "attack" && i.target === "air"),
+  );
+});

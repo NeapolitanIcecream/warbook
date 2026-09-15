@@ -119,6 +119,10 @@ export class WarbookBot extends Bot {
         buildStatus: u.buildStatus,
         deployed: u.stance === 3,
         crusher: u.rules.crusher,
+        antiAir: !!(
+          u.primaryWeapon?.projectileRules.isAntiAir ||
+          u.secondaryWeapon?.projectileRules.isAntiAir
+        ),
       }),
     );
     const enemies = this.sorted(this.player.getVisibleUnits("enemy")).map(
@@ -131,6 +135,7 @@ export class WarbookBot extends Bot {
         hp: u.hitPoints,
         maxHp: u.maxHitPoints,
         observedTick: tick,
+        airborne: u.zone === 1,
       }),
     );
     const products = this.player.production.getAvailableObjects().map((p) => ({

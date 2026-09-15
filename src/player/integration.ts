@@ -22,12 +22,14 @@ export async function install(): Promise<void> {
     { SkirmishScreen },
     { StorageKey },
     { GameScreen },
+    { Engine },
   ] = await Promise.all([
     SystemJS.import("game/bot/BotFactory"),
     SystemJS.import("game/GameFactory"),
     SystemJS.import("gui/screen/mainMenu/lobby/SkirmishScreen"),
     SystemJS.import("LocalPrefs"),
     SystemJS.import("gui/screen/game/GameScreen"),
+    SystemJS.import("engine/Engine"),
   ]);
   const session = (globalThis.WarbookSession = {
     version: POLICY_VERSION,
@@ -129,6 +131,7 @@ export async function install(): Promise<void> {
         name: p.name,
         defeated: p.defeated,
         resigned: p.resigned,
+        credits: p.credits,
       })),
     };
     session.lastResult = result;
@@ -165,6 +168,8 @@ export async function install(): Promise<void> {
         events: [
           {
             kind: "game_created",
+            engineVersion: Engine.getVersion(),
+            modHash: Engine.getModHash(),
             options: game.gameOpts,
             roster: roster.map((p) => ({
               name: p.name,

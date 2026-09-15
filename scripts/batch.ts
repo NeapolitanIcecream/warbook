@@ -6,7 +6,7 @@ import { parseArgs } from "node:util";
 const { values } = parseArgs({
   options: {
     rounds: { type: "string", default: "8" },
-    modes: { type: "string", default: "baseline,cohesive" },
+    modes: { type: "string", default: "baseline,combined" },
     opponent: { type: "string", default: "supalosa" },
     map: { type: "string", default: "mp03t4.map" },
     out: { type: "string" },

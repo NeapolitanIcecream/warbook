@@ -24,6 +24,14 @@ registerHooks({
     const turnManager = _GameInstanceApi_turnMgr.get(instance);
     if (!game || !turnManager) throw new Error('Unknown game instance');
     return { source: 'pinned-engine-readonly-v1', status: GameStatus[game.status], turnManagerError: turnManager.getErrorState() };
+  }
+  export function warbookCaptureEnd(instance, names, callback) {
+    const game = _GameInstanceApi_game.get(instance) ?? _ReplayInstanceApi_game.get(instance);
+    if (!game) throw new Error('Unknown game instance');
+    game.onEnd.subscribe(() => callback({ tick: game.currentTick, players: names.map(name => {
+      const player = game.getPlayerByName(name);
+      return { name, defeated: player.defeated, credits: player.credits };
+    }) }));
   }\n`,
     };
   },
