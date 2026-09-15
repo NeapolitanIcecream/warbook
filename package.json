@@ -13,6 +13,7 @@
     "build": "tsc",
     "player:build": "node --import tsx scripts/build-player.ts",
     "replay": "node --env-file-if-exists=.env --import tsx scripts/replay.ts",
+    "batch": "node --import tsx scripts/batch.ts",
     "play": "npm run player:build && node --env-file-if-exists=.env --import tsx src/player/server.ts"
   },
   "dependencies": {
