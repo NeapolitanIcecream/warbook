@@ -100,7 +100,11 @@ export class Commander {
       (!earlyArmor || count(names.tank) >= 4 || o.tick >= 9000)
     )
       building = names.refinery;
-    else if (count(names.factory) < 2 && o.credits > 3500)
+    else if (
+      count(names.factory) < 2 &&
+      o.credits > 3500 &&
+      (!earlyArmor || count(names.tank) >= 4 || o.tick >= 9000)
+    )
       building = names.factory;
     queue(building);
     queue(
