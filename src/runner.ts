@@ -17,6 +17,7 @@ import { parseArgs } from "node:util";
 import { WarbookBot, OBSERVATION_PROTOCOL } from "./bridge.js";
 import { POLICY_VERSION, type PolicyMode } from "./policy.js";
 import { SupalosaOpponent } from "./opponent.js";
+import { recordDestruction } from "./referee.js";
 
 const { values } = parseArgs({
   options: {
@@ -40,7 +41,14 @@ const trace = (event: unknown) =>
   appendFileSync(`${dir}/decisions.ndjson`, JSON.stringify(event) + "\n");
 let game: GameInstanceApi | undefined;
 async function main(): Promise<void> {
-  const allowedModes = ["baseline", "cohesive", "guarded", "pillbox", "sentry"];
+  const allowedModes = [
+    "baseline",
+    "cohesive",
+    "guarded",
+    "pillbox",
+    "sentry",
+    "crush",
+  ];
   if (
     !allowedModes.includes(values.mode!) ||
     ![...allowedModes, "supalosa"].includes(values.opponent!)
@@ -89,6 +97,9 @@ async function main(): Promise<void> {
         "src/bridge.ts",
         "src/runner.ts",
         "src/opponent.ts",
+        "src/model.ts",
+        "src/effects.ts",
+        "src/referee.ts",
         "src/engine-diagnostics.mjs",
       ].map((path) => [path, sha256(path)]),
     ),
@@ -116,6 +127,12 @@ async function main(): Promise<void> {
   };
   game = await cdapi.createGame(options);
   const runningGame = game;
+  const rulesHash = createHash("sha256")
+    .update(game.gameApi.getRulesIni().toString())
+    .digest("hex");
+  recordDestruction(agents[0], game.gameApi, (record) =>
+    appendFileSync(`${dir}/referee.ndjson`, JSON.stringify(record) + "\n"),
+  );
   const initial = game.getPlayerStats().map((p) => ({
     name: p.name,
     country: p.country.name,
@@ -127,6 +144,7 @@ async function main(): Promise<void> {
     JSON.stringify(
       {
         players: initial,
+        rulesHash,
         allied: game.gameApi.areAlliedPlayers(agents[0].name, agents[1].name),
         options: { ...options, agents: initial.map((p) => p.name) },
       },

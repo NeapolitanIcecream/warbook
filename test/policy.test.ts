@@ -104,12 +104,12 @@ test("revisiting an empty last contact location resumes scouting", () => {
 test("preserves an active production queue and does not send harvesters into the army", () => {
   const o = observation([{ ...tank("miner"), name: "CMIN", harvester: true }]);
   o.products = [
-    { name: "NAPOWR", cost: 800, type: 2, queue: 0 },
-    { name: "HARV", cost: 1400, type: 7, queue: 3 },
+    { name: "GAPOWR", cost: 800, type: 2, queue: 0 },
+    { name: "CMIN", cost: 1400, type: 7, queue: 3 },
   ];
   o.queues = [
-    { type: 0, size: 1, status: 1, items: [{ name: "NAPOWR", quantity: 1 }] },
-    { type: 3, size: 1, status: 1, items: [{ name: "HARV", quantity: 1 }] },
+    { type: 0, size: 1, status: 1, items: [{ name: "GAPOWR", quantity: 1 }] },
+    { type: 3, size: 1, status: 1, items: [{ name: "CMIN", quantity: 1 }] },
   ];
   assert.deepEqual(new Commander().decide(o), []);
 });

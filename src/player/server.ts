@@ -22,6 +22,18 @@ mkdirSync(cacheDir, { recursive: true });
 mkdirSync(telemetryDir, { recursive: true });
 const port = Number(process.env.PORT ?? 8642);
 const localOrigin = `http://127.0.0.1:${port}`;
+const releasePath = process.env.PLAYER_RELEASE
+  ? `dist/player/${process.env.PLAYER_RELEASE}/release.json`
+  : "dist/player/current.json";
+const release = JSON.parse(readFileSync(releasePath, "utf8"));
+if (!/^[a-f0-9]{64}$/.test(release.sha256))
+  throw new Error("Invalid player release");
+const botPath = `dist/player/${release.sha256}/bot.js`;
+if (
+  createHash("sha256").update(readFileSync(botPath)).digest("hex") !==
+  release.sha256
+)
+  throw new Error("Player bundle hash mismatch");
 const pending = new Map<string, Promise<{ body: Buffer; type: string }>>();
 
 async function getClientAsset(
@@ -117,10 +129,10 @@ app.get("/warbook/health", (c) =>
     ok: true,
     engine: CLIENT_VERSION,
     offline: process.env.OFFLINE === "1",
+    release,
   }),
 );
-app.get("/warbook/bot.js", serveStatic({ path: "dist/player/bot.js" }));
-app.get("/warbook/bot.js.map", serveStatic({ path: "dist/player/bot.js.map" }));
+app.get("/warbook/bot.js", serveStatic({ path: botPath }));
 app.get(
   "/warbook/ra2-local.zip",
   serveStatic({ path: "assets/ra2-local.zip" }),

@@ -20,6 +20,7 @@ export interface Unit extends Point {
   combat: boolean;
   buildStatus?: number;
   deployed?: boolean;
+  crusher?: boolean;
 }
 export interface Contact extends Point {
   ref: string;
@@ -59,7 +60,7 @@ export type Intent =
   | { kind: "deploy"; refs: string[] }
   | { kind: "queue"; product: Product }
   | { kind: "place"; name: string; x: number; y: number }
-  | { kind: "attack"; refs: string[]; target: string }
+  | { kind: "attack" | "crush"; refs: string[]; target: string }
   | { kind: "attackMove" | "move"; refs: string[]; x: number; y: number }
   | { kind: "repair"; ref: string };
 

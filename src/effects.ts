@@ -25,7 +25,7 @@ export function rememberIntent(
     units:
       "refs" in intent ? o.own.filter((u) => intent.refs.includes(u.ref)) : [],
     targetHp:
-      intent.kind === "attack"
+      intent.kind === "attack" || intent.kind === "crush"
         ? o.enemies.find((e) => e.ref === intent.target)?.hp
         : undefined,
   };
@@ -76,7 +76,7 @@ export function observedEffect(
     )
       return "position_changed_not_arrival";
   }
-  if (i.kind === "attack" && p.targetHp !== undefined) {
+  if ((i.kind === "attack" || i.kind === "crush") && p.targetHp !== undefined) {
     const target = o.enemies.find((e) => e.ref === i.target);
     if (target && target.hp < p.targetHp)
       return "visible_target_hp_decreased_cause_unassigned";

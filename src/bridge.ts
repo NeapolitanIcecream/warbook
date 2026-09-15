@@ -102,6 +102,7 @@ export class WarbookBot extends Bot {
         combat: u.rules.isSelectableCombatant,
         buildStatus: u.buildStatus,
         deployed: u.stance === 3,
+        crusher: u.rules.crusher,
       }),
     );
     const enemies = this.sorted(this.player.getVisibleUnits("enemy")).map(
@@ -257,7 +258,10 @@ export class WarbookBot extends Bot {
         "refs" in intent
           ? intent.refs.map((ref) => this.currentRefs.get(ref)!)
           : [];
-      if (intent.kind === "attack" && !visible.has(intent.target))
+      if (
+        (intent.kind === "attack" || intent.kind === "crush") &&
+        !visible.has(intent.target)
+      )
         throw new Error("Target is no longer visible");
       if ("x" in intent && !this.game.map.getTile(intent.x, intent.y)) continue;
       if (intent.kind === "queue") {
@@ -290,10 +294,13 @@ export class WarbookBot extends Bot {
               );
             break;
           case "attack":
+          case "crush":
             for (let n = 0; n < ids.length; n += 128)
               this.player.actions.orderUnits(
                 ids.slice(n, n + 128),
-                OrderType.Attack,
+                intent.kind === "crush"
+                  ? OrderType.ForceMove
+                  : OrderType.Attack,
                 this.currentRefs.get(intent.target)!,
               );
             break;

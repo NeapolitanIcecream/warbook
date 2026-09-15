@@ -8,7 +8,7 @@ import {
 
 export const POLICY_VERSION = "warbook-0.1.2";
 export type PolicyMode =
-  "baseline" | "cohesive" | "guarded" | "pillbox" | "sentry";
+  "baseline" | "cohesive" | "guarded" | "pillbox" | "sentry" | "crush";
 
 /** Synchronous policy. It has no engine handle, world events, native IDs or wall clock. */
 export class Commander {
@@ -179,6 +179,20 @@ export class Commander {
           .filter((e) => distance2(unit, e) < 196)
           .sort((a, b) => distance2(unit, a) - distance2(unit, b));
         const target = nearby[0];
+        if (
+          this.mode === "crush" &&
+          unit.crusher &&
+          target?.type === 3 &&
+          distance2(unit, target) < 100
+        ) {
+          order(
+            [unit],
+            "crush:" + target.ref,
+            { kind: "crush", refs: [], target: target.ref },
+            60,
+          );
+          continue;
+        }
         if (
           (this.mode === "guarded" || this.mode === "sentry") &&
           unit.name === "E1"

@@ -1,5 +1,6 @@
 import { WarbookBot, OBSERVATION_PROTOCOL } from "../bridge.js";
-import { POLICY_VERSION } from "../policy.js";
+import { POLICY_VERSION, type PolicyMode } from "../policy.js";
+declare const __WARBOOK_POLICY__: PolicyMode;
 
 declare global {
   var SystemJS: { import(name: string): Promise<any> };
@@ -64,7 +65,11 @@ export async function install(): Promise<void> {
     }
   };
   BotFactory.prototype.create = function (player: any) {
-    const bot = new WarbookBot(player.name, player.country.name, "baseline");
+    const bot = new WarbookBot(
+      player.name,
+      player.country.name,
+      __WARBOOK_POLICY__,
+    );
     bot.autoTick = true;
     session.bots.push(bot);
     // Evidence is written locally. These records never feed the policy.
