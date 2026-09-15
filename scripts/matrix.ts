@@ -14,10 +14,13 @@ interface Source {
   ref: string;
   mode: string;
 }
+interface NativeOpponent {
+  native: "supalosa";
+}
 interface Plan {
   purpose: string;
   subjects: Record<string, Source>;
-  opponents: Record<string, Source>;
+  opponents: Record<string, Source | NativeOpponent>;
   maps: string[];
   rounds: number;
   factors?: unknown;
@@ -49,12 +52,17 @@ const root = resolve(values.out);
 if (existsSync(root) && readdirSync(root).length)
   throw new Error("Refusing to overwrite an existing experiment");
 mkdirSync(root, { recursive: true });
-const subjects: Record<string, string> = {},
-  opponents: Record<string, string> = {};
+const subjects: Record<string, string> = {};
+const opponents: Record<string, string | NativeOpponent> = {};
 for (const [label, source] of Object.entries(plan.subjects))
   subjects[label] = (await buildBot(source.ref, source.mode)).path;
-for (const [label, source] of Object.entries(plan.opponents))
-  opponents[label] = (await buildBot(source.ref, source.mode)).path;
+for (const [label, source] of Object.entries(plan.opponents)) {
+  if ("native" in source) {
+    if (source.native !== "supalosa")
+      throw new Error("Unknown native opponent");
+    opponents[label] = source;
+  } else opponents[label] = (await buildBot(source.ref, source.mode)).path;
+}
 writeFileSync(
   `${root}/plan.json`,
   JSON.stringify(
@@ -94,8 +102,9 @@ for (const map of plan.maps)
           "0",
           "--actor-release",
           release,
-          "--opponent-release",
-          opponentRelease,
+          ...(typeof opponentRelease === "string"
+            ? ["--opponent-release", opponentRelease]
+            : ["--opponent", opponentRelease.native]),
           "--map",
           map,
           "--out",

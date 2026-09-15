@@ -1,0 +1,34 @@
+{
+  "purpose": "Fresh fixed comparison of M0 and the selected formed opening on the existing development pool; freeze before results and do not tune during this batch",
+  "subjects": {
+    "m0": {
+      "ref": "68852328061240c50e622aae64cef7e9289af444",
+      "mode": "combined"
+    },
+    "formed": {
+      "ref": "6ab5c9f7c1a4ce3e82cb1ea4d76b3d45bcbfda91",
+      "mode": "formed"
+    }
+  },
+  "opponents": {
+    "supalosa": { "native": "supalosa" },
+    "m0": {
+      "ref": "68852328061240c50e622aae64cef7e9289af444",
+      "mode": "combined"
+    },
+    "counter": {
+      "ref": "a64a79e32b7333c26b1d4bfdb43405464c51173a",
+      "mode": "counter"
+    }
+  },
+  "maps": ["mp03t4.map", "mp06t2.map", "mp29u2.map"],
+  "rounds": 12,
+  "decision": {
+    "budget": "216 new starts, 108 per subject; one final comparison after all cells complete, never stop when a preferred score appears",
+    "weights": "each of the nine opponent x map cells has weight 1/9",
+    "outcomes": "same clean normal wins per all starts; retain each error, limit and defeat without rerunning to replace a loss",
+    "information": "unchanged api-shroud-v0-visible-placement-frontier for self bots; native Supalosa remains an external diagnostic anchor with its original information conditions",
+    "promotion": "Retain M0 if the gain is ambiguous or there is a material unresolved regression. A useful candidate still needs player lifecycle validation before a player update. No claim about the original formal D_target or unseen maps follows from this development pool.",
+    "remainingQuestion": "The geometry gate cannot guarantee cohesion along a route. Explain remaining losses rather than inferring effective firing strength from proximity."
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "purpose": "Test whether actual factory exit and local assembly improve opening participation, holding the economy and contact policy fixed",
+  "subjects": {
+    "assembly": {
+      "ref": "2759b635ba4e95f3034b0c02c280ed86e3bb92a0",
+      "mode": "assembly-only"
+    },
+    "formed": {
+      "ref": "6ab5c9f7c1a4ce3e82cb1ea4d76b3d45bcbfda91",
+      "mode": "formed"
+    }
+  },
+  "opponents": {
+    "counter": {
+      "ref": "a64a79e32b7333c26b1d4bfdb43405464c51173a",
+      "mode": "counter"
+    },
+    "m0": {
+      "ref": "68852328061240c50e622aae64cef7e9289af444",
+      "mode": "combined"
+    }
+  },
+  "maps": ["mp06t2.map", "mp03t4.map"],
+  "rounds": 4,
+  "decision": {
+    "budget": "32 starts, inspect all results before selecting another candidate",
+    "mechanism": "Verify departure and four-tank participation on the first short-map candidate replay and compare the first baseline replay; this is factual reconstruction, not matched counterfactual evidence",
+    "cost": "Check other complete-game cells for the cost of waiting, preserving every limit and error",
+    "next": "Retain only an informative change; a candidate with useful evidence must still face a fresh fixed comparison including M0, counter, external Supalosa and the third development map before release"
+  }
+}
