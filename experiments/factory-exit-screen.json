@@ -1,0 +1,32 @@
+{
+  "purpose": "Distinguish factory exit from whole-force proximity after the formed candidate regressed against urban Supalosa; fixed original economics and observation protocol",
+  "subjects": {
+    "assembly": {
+      "ref": "2759b635ba4e95f3034b0c02c280ed86e3bb92a0",
+      "mode": "assembly-only"
+    },
+    "formed": {
+      "ref": "6ab5c9f7c1a4ce3e82cb1ea4d76b3d45bcbfda91",
+      "mode": "formed"
+    },
+    "factory-exit": {
+      "ref": "b34abc50c7409f1140fa01e8e41e4e0c7ab90e26",
+      "mode": "factory-exit"
+    }
+  },
+  "opponents": {
+    "supalosa": { "native": "supalosa" },
+    "counter": {
+      "ref": "a64a79e32b7333c26b1d4bfdb43405464c51173a",
+      "mode": "counter"
+    }
+  },
+  "maps": ["mp29u2.map", "mp06t2.map"],
+  "rounds": 4,
+  "decision": {
+    "budget": "48 starts, inspect all outcomes once; no candidate changes during this batch",
+    "mechanism": "The new gate waits for four tanks outside vehicle-factory footprints. It does not require tanks already fighting to return to a six-tile group or avoid every other building rectangle.",
+    "diagnosis": "On the first urban candidate replay, check that destroying a local target is followed by continued progress rather than a return to the opening rally; preserve any counterexample",
+    "next": "A useful candidate must be compared afresh with M0 across the same full development pool before any player update. Keep the reserved mp08t2 map unplayed until a candidate has resolved the observed regression."
+  }
+}
