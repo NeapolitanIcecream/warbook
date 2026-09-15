@@ -61,3 +61,9 @@
 来源 `b34abc5`。[factory-exit-screen.json](../experiments/factory-exit-screen.json) 预定 48 次：assembly-only、formed、factory-exit × 城市回归/短图 × Supalosa/counter × 每格 4 次。原 formed 保持冻结，第一张新地图暂不使用。这样先定位退化，再由新比较决定是否保留简化条件。
 
 新地图已在策略比赛之前选定为 `mp08t2.map`，仅完成 tick 0 加载/布局检查：120×120 世界范围、两个起点、同一坦克可达区域、起点间 56 节点路径。另一个可枚举自定义地图文件本机缺失，加载错误保存在 `work/formation-new-map-inspection.json`，没有策略胜负。原 [formed-new-map.json](../experiments/formed-new-map.json) 因候选退化暂不执行，不用改后的候选冒充原冻结版本。
+
+48 次替代对照全部正常结束：assembly-only 12/16、formed 12/16、factory-exit 14/16。**factory-exit 对城市 Supalosa 的 4/4 全部来自出生位 1，尚未覆盖主要失败的出生位 0。** 不将其视作退化已经修复；首个候选回放通过核对，仍单列为该实际起点下的证据。
+
+随后仅将候选版本元数据定为 `warbook-0.1.5`（来源 `0a326ea`），未改策略。新的 [factory-exit-pool.json](../experiments/factory-exit-pool.json) 在比赛前固定相同九格开发池、每格 12 次、总计 216 次，重新比较 M0，特别检查实际出生位 0 的退化。通过后才执行 [factory-exit-new-map.json](../experiments/factory-exit-new-map.json) 的预留 48 次；当前仍未在新图运行策略。
+
+图形候选包 `e8ccdd201dce42bea6050cb0c4dd4be9fb2bd0d070b0155e956d7da3f97b80e4` 从同一 `0a326ea` 构建，在临时 8643 入口做玩家链路验收；默认 8642 继续固定 M0。功能验证不作为真人竞技成绩。
