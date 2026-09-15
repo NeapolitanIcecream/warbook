@@ -1,6 +1,6 @@
 import { distance2, type Observation, type Intent, type Unit, type Point } from './model.js';
 
-export const POLICY_VERSION = 'warbook-0.1.0';
+export const POLICY_VERSION = 'warbook-0.1.1';
 export type PolicyMode = 'baseline' | 'cohesive';
 
 /** Synchronous policy. It has no engine handle, world events, native IDs or wall clock. */
@@ -53,6 +53,11 @@ export class Commander {
     const enemies = [...o.enemies].sort((a,b)=>distance2(a,o.home)-distance2(b,o.home));
     const threat = enemies.find(e=>distance2(e,o.home)<625 && e.type!==2);
     if (enemies.length) this.lastEnemyPosition = enemies[0];
+    else if (this.lastEnemyPosition && army.some(u=>distance2(u,this.lastEnemyPosition!)<36)) {
+      // The remembered area was revisited without contact. Resume scouting;
+      // this does not assert that the former enemy was killed.
+      this.lastEnemyPosition=undefined;
+    }
     const unexplored = o.starts.map((p,i)=>({...p,i})).filter(p=>!this.exploredStarts.has(p.i));
     const destination = threat ?? enemies[0] ?? this.lastEnemyPosition ?? unexplored.sort((a,b)=>distance2(a,o.home)-distance2(b,o.home))[0]
       ?? o.starts[(Math.floor(o.tick/900)+1)%o.starts.length];

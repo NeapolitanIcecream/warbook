@@ -22,6 +22,14 @@ test('renaming entity references preserves the action choice',()=>{
   const normalize=(value:unknown)=>JSON.stringify(value).replaceAll('alpha','REF').replaceAll('arbitrary-9999','REF');
   assert.equal(normalize(new Commander().decide(a)),normalize(new Commander().decide(b)));
 });
+test('revisiting an empty last contact location resumes scouting',()=>{
+  const policy=new Commander();
+  const o=observation();
+  o.enemies=[{ref:'contact',name:'HTNK',type:7,x:35,y:35,hp:300,maxHp:300,observedTick:0}];
+  policy.decide(o);
+  const intents=policy.decide({...o,tick:450,own:[{...tank(),x:35,y:35}],enemies:[]});
+  assert.ok(intents.some(i=>i.kind==='attackMove'&&i.x===70&&i.y===70));
+});
 test('preserves an active production queue and does not send harvesters into the army',()=>{
   const o=observation([{...tank('miner'),name:'CMIN',harvester:true}]);
   o.products=[{name:'NAPOWR',cost:800,type:2,queue:0},{name:'HARV',cost:1400,type:7,queue:3}];

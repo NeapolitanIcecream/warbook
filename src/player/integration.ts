@@ -7,7 +7,7 @@ declare global {
 }
 
 export async function install():Promise<void> {
-  const [{BotFactory},{GameFactory},{SkirmishScreen},{StorageKey}]=await Promise.all([SystemJS.import('game/bot/BotFactory'),SystemJS.import('game/GameFactory'),SystemJS.import('gui/screen/mainMenu/lobby/SkirmishScreen'),SystemJS.import('LocalPrefs')]);
+  const [{BotFactory},{GameFactory},{SkirmishScreen},{StorageKey},{GameScreen}]=await Promise.all([SystemJS.import('game/bot/BotFactory'),SystemJS.import('game/GameFactory'),SystemJS.import('gui/screen/mainMenu/lobby/SkirmishScreen'),SystemJS.import('LocalPrefs'),SystemJS.import('gui/screen/game/GameScreen')]);
   const session=globalThis.WarbookSession={version:POLICY_VERSION,protocol:OBSERVATION_PROTOCOL,sessionId:crypto.randomUUID(),games:0,bots:[]} as typeof WarbookSession;
   const originalOptions=SkirmishScreen.prototype.initOptions;
   SkirmishScreen.prototype.initOptions=async function() {
@@ -40,14 +40,26 @@ export async function install():Promise<void> {
     return bot;
   };
   const originalCreate=GameFactory.create;
+  let currentGame:any;
+  let roster:any[]=[];
+  const recordStop=(kind:string)=>{
+    if(!currentGame) return;
+    const result={game:session.games,tick:currentGame.currentTick,status:currentGame.status,players:roster.map(p=>({name:p.name,defeated:p.defeated,resigned:p.resigned}))};
+    session.lastResult=result;
+    void fetch('/warbook/telemetry',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:session.sessionId,game:session.games,events:[{kind,...result}]})});
+  };
+  const originalLeave=GameScreen.prototype.onLeave;
+  GameScreen.prototype.onLeave=async function(...args:unknown[]){
+    recordStop('player_exit');
+    const result=await originalLeave.apply(this,args);
+    currentGame=undefined;session.bots=[];
+    return result;
+  };
   GameFactory.create=function(...args:unknown[]) {
     session.bots=[];session.games++;
     const game=originalCreate.apply(this,args);
-    game.onEnd.subscribe(()=>{
-      const result={game:session.games,tick:game.currentTick,status:game.status,players:game.getCombatants().map((p:any)=>({name:p.name,defeated:p.defeated}))};
-      session.lastResult=result;
-      void fetch('/warbook/telemetry',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:session.sessionId,game:session.games,events:[{kind:'game_end',...result}]})});
-    });
+    currentGame=game;roster=game.getCombatants();
+    game.onEnd.subscribe(()=>recordStop('game_end'));
     return game;
   };
   const bar=document.createElement('div');
