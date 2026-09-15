@@ -39,6 +39,78 @@ const observation = (own: Unit[] = [tank()]): Observation => ({
   buildSites: [],
 });
 
+test("opening formation waits for the fourth tank to exit and join the force", () => {
+  // Geometry recorded in assembly-recheck/mp06t2.map/counter/0-assembly:
+  // three tanks waited outside; the fourth appeared inside GAWEAP at tick 5886.
+  const factory = {
+    ...tank("factory"),
+    name: "GAWEAP",
+    type: 2,
+    x: 74,
+    y: 37,
+    width: 5,
+    height: 3,
+    mobile: false,
+    combat: false,
+  };
+  const o = {
+    ...observation([
+      factory,
+      { ...tank("a"), x: 76, y: 41 },
+      { ...tank("b"), x: 76, y: 42 },
+      { ...tank("c"), x: 78, y: 41 },
+      { ...tank("d"), x: 76, y: 38, idle: false },
+    ]),
+    home: { x: 71, y: 37 },
+    starts: [
+      { x: 71, y: 37 },
+      { x: 38, y: 73 },
+    ],
+    tick: 5886,
+  };
+  const policy = new Commander("formed");
+  assert.ok(policy.decide(o).some((i) => i.task === "counter-rally"));
+  assert.ok(
+    !new Commander("assembly-only")
+      .decide(o)
+      .some((i) => i.task === "counter-rally"),
+  );
+  const joined = {
+    ...o,
+    tick: 6100,
+    own: o.own.map((u) => (u.ref === "d" ? { ...u, x: 77, y: 42 } : u)),
+  };
+  assert.ok(
+    policy
+      .decide(joined)
+      .some((i) => i.kind === "attackMove" && i.x === 38 && i.y === 73),
+  );
+  const afterLoss = {
+    ...joined,
+    tick: 6550,
+    own: joined.own.filter((u) => u.ref !== "a"),
+  };
+  assert.ok(
+    !policy.decide(afterLoss).some((i) => i.task === "counter-rally"),
+    "opening commitment does not reset after casualties",
+  );
+  const dispersed = {
+    ...o,
+    own: o.own.map((u) => (u.ref === "d" ? { ...u, x: 60, y: 60 } : u)),
+  };
+  assert.ok(
+    new Commander("formed")
+      .decide(dispersed)
+      .some((i) => i.task === "counter-rally"),
+  );
+  assert.ok(
+    !new Commander("formed")
+      .decide({ ...dispersed, tick: 9000 })
+      .some((i) => i.task === "counter-rally"),
+    "the existing time cap still releases a force that cannot assemble",
+  );
+});
+
 test("a vanished enemy becomes a remembered position, never a new object-target attack", () => {
   const policy = new Commander();
   const o = observation();

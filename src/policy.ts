@@ -22,6 +22,7 @@ export type PolicyMode =
   | "counter"
   | "coordinated"
   | "assembly-only"
+  | "formed"
   | "contact-filter";
 export const POLICY_MODES: readonly PolicyMode[] = [
   "baseline",
@@ -36,6 +37,7 @@ export const POLICY_MODES: readonly PolicyMode[] = [
   "counter",
   "coordinated",
   "assembly-only",
+  "formed",
   "contact-filter",
 ];
 
@@ -105,6 +107,7 @@ export class Commander {
       "counter",
       "coordinated",
       "assembly-only",
+      "formed",
       "contact-filter",
     ].includes(this.mode);
     const names = allied
@@ -206,14 +209,34 @@ export class Commander {
       (u) => u.combat && (u.mobile || u.deployed) && !u.harvester && !u.mcv,
     );
     if (!army.length) return intents;
-    // Two program components are separated for the opening-phase attribution experiment.
-    const assemble = this.mode === "counter" || this.mode === "assembly-only";
+    const formUp = this.mode === "formed";
+    const assemble =
+      this.mode === "counter" || this.mode === "assembly-only" || formUp;
     const filterContacts =
       this.mode === "counter" || this.mode === "contact-filter";
-    if (
-      (assemble || filterContacts) &&
-      (count(names.tank) >= 4 || o.tick >= 9000)
-    )
+    // A newly visible tank can still be leaving the factory. Count a nearby
+    // force outside our building footprints, using only the ordinary observation.
+    const fieldArmor = formUp && !this.counterAttackStarted
+      ? army.filter(
+          (u) =>
+            u.name === names.tank &&
+            !o.own.some(
+              (b) =>
+                b.type === 2 &&
+                u.x >= b.x &&
+                u.x < b.x + b.width &&
+                u.y >= b.y &&
+                u.y < b.y + b.height,
+            ),
+        )
+      : [];
+    const openingReady = formUp
+      ? fieldArmor.some(
+          (center) =>
+            fieldArmor.filter((u) => distance2(u, center) <= 36).length >= 4,
+        )
+      : count(names.tank) >= 4;
+    if ((assemble || filterContacts) && (openingReady || o.tick >= 9000))
       this.counterAttackStarted = true;
     const holdingCounter = assemble && !this.counterAttackStarted;
     const filteringContacts = filterContacts && !this.counterAttackStarted;
@@ -340,6 +363,7 @@ export class Commander {
             "counter",
             "coordinated",
             "assembly-only",
+            "formed",
             "contact-filter",
           ].includes(this.mode) &&
           unit.crusher &&

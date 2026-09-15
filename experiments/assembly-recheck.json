@@ -1,0 +1,31 @@
+{
+  "purpose": "Recheck the assembly-only pilot signal against frozen aggressive and counter openings; development screening, not independent strength confirmation",
+  "subjects": {
+    "m0": {
+      "ref": "68852328061240c50e622aae64cef7e9289af444",
+      "mode": "combined"
+    },
+    "assembly": {
+      "ref": "2759b635ba4e95f3034b0c02c280ed86e3bb92a0",
+      "mode": "assembly-only"
+    }
+  },
+  "opponents": {
+    "m0": {
+      "ref": "68852328061240c50e622aae64cef7e9289af444",
+      "mode": "combined"
+    },
+    "counter": {
+      "ref": "a64a79e32b7333c26b1d4bfdb43405464c51173a",
+      "mode": "counter"
+    }
+  },
+  "maps": ["mp03t4.map", "mp06t2.map"],
+  "rounds": 4,
+  "decision": {
+    "budget": "32 new starts; inspect the complete batch, preserving errors and limits",
+    "question": "Does the opening rally retain its pilot benefit against early pressure and a patient opponent?",
+    "next": "Use verified replay windows to explain observed costs. Only a retained candidate goes to a larger frozen comparison including the external anchor and map regression.",
+    "promotion": "No automatic promotion from this screen; existing maps and opponents remain development sources"
+  }
+}
