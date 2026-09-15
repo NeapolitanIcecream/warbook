@@ -8,6 +8,7 @@
 
 | 文档 | 用途 |
 | --- | --- |
+| [首期战略规划](docs/strategy.md) | 修订时间、交付层次、主指标、实验投入与重构节奏；首期时间和指标以此为准 |
 | [前期分析收束](docs/preimplementation-decisions.md) | 新发现、首局默认选择、待实证问题与停止扩写分析的条件 |
 | [接口契约](docs/interface-contract.md) | 最小观察/动作/调度/结束记录，映射到真实 API |
 | [对手与数据](docs/opponents-and-data.md) | 固定公开版本、对手接入风险、地图与 replay 来源 |
