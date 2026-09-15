@@ -49,7 +49,7 @@ export class Commander {
       if(infantryThreat.length>=3 && count(allied?'GAPILL':'NALASR')<2) queue(allied?'GAPILL':'NALASR');
     }
 
-    const army = o.own.filter(u=>u.combat && u.mobile && !u.harvester && !u.mcv);
+    const army = o.own.filter(u=>u.combat && (u.mobile || u.deployed) && !u.harvester && !u.mcv);
     if (!army.length) return intents;
     for (const [i,p] of o.starts.entries()) {
       if (distance2(p,o.home)<25 || army.some(u=>distance2(u,p)<36)) this.exploredStarts.add(i);

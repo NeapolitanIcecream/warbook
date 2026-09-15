@@ -36,3 +36,7 @@ test('preserves an active production queue and does not send harvesters into the
   o.queues=[{type:0,size:1,status:1,items:[{name:'NAPOWR',quantity:1}]},{type:3,size:1,status:1,items:[{name:'HARV',quantity:1}]}];
   assert.deepEqual(new Commander().decide(o),[]);
 });
+test('deployed infantry can pack up after contact is lost',()=>{
+  const o=observation([{...tank('gi'),name:'E1',type:3,mobile:false,deployed:true}]);
+  assert.ok(new Commander('guarded').decide(o).some(i=>i.kind==='deploy'&&i.refs.includes('gi')));
+});
