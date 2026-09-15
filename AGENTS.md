@@ -2,6 +2,10 @@
 
 Build a Chrono Divide AI whose progress is supported by complete-game evidence. Read `README.md` and the relevant design document before working; keep records proportional to the task.
 
+- Development ownership: after execution is started, the root Agent owns technical planning, implementation, experiments, integration, evaluation, refactoring, performance and runnable releases. The user is a product user/player, not the engineer, experiment designer or project manager. Translate ordinary play feedback into evidence and tasks; lack of feedback does not block independent work or imply approval.
+- Plan time in measured wall-clock delivery time and rolling 24/72-hour forecasts after an initial 6–12-hour calibration window. These are planning checkpoints, not proven throughput or a promise of continuous execution. Include critical waiting and never convert human weeks using an invented speedup factor. Planning requests do not themselves start goals, automations or implementation.
+- A playable release must let the user join, act in a match, finish/exit and play again through an Agent-maintained entry point. A headless run or replay is separate evidence. Surface truly missing resources/access once, reuse existing authorization, and continue independent work while external prerequisites are pending.
+
 - Distinguish source-verified API facts, runtime measurements, hypotheses, and proposed defaults. Never report an unrun experiment as passing.
 - Use the pinned Chrono Divide engine as the behavioral reference. Player observations, action semantics, replay compatibility, initialization, and timing need explicit validation.
 - Keep engine truth separate from legal actor observations and inferred beliefs. Audit indirect leaks through events, masks, IDs, and runtime planning.
