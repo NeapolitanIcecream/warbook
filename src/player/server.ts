@@ -40,6 +40,26 @@ if (
   release.sha256
 )
   throw new Error("Player bundle hash mismatch");
+const challengerRelease = process.env.PLAYER_CHALLENGER
+  ? JSON.parse(
+      readFileSync(
+        `dist/player/${process.env.PLAYER_CHALLENGER}/release.json`,
+        "utf8",
+      ),
+    )
+  : undefined;
+const challengerBotPath = challengerRelease
+  ? `dist/player/${challengerRelease.sha256}/bot.js`
+  : undefined;
+if (
+  challengerRelease &&
+  (!/^[a-f0-9]{64}$/.test(challengerRelease.sha256) ||
+    challengerRelease.clientVersion !== CLIENT_VERSION ||
+    createHash("sha256")
+      .update(readFileSync(challengerBotPath!))
+      .digest("hex") !== challengerRelease.sha256)
+)
+  throw new Error("Challenger must be a verified bundle for the same client");
 const pending = new Map<string, Promise<{ body: Buffer; type: string }>>();
 // Keep one selected, completed match available without exposing local file paths.
 const watchResult = process.env.WATCH_MATCH
@@ -58,7 +78,9 @@ if (
     createHash("sha256").update(watchReplay!).digest("hex") !==
       watchResult.replay.sha256)
 )
-  throw new Error("WATCH_MATCH must reference a verified, compatible full game");
+  throw new Error(
+    "WATCH_MATCH must reference a verified, compatible full game",
+  );
 
 async function getClientAsset(
   path: string,
@@ -170,7 +192,7 @@ app.get("/warbook/gpu/:file", async (c) => {
 });
 app.get("/", (c) =>
   c.html(
-    `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Warbook · 本地对战</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b1119;color:#e5ebf0;font:17px/1.65 system-ui}main{max-width:680px;padding:48px}small{color:#8cabb8;letter-spacing:3px}h1{font-size:52px;margin:12px 0}p{color:#adbac7}.start{display:inline-block;padding:14px 28px;background:#c9aa65;color:#111820;text-decoration:none;font-weight:700;border-radius:5px;margin:20px 12px 20px 0}.watch{background:transparent;color:#c9aa65;border:1px solid #c9aa65}li{margin:6px 0}footer{margin-top:40px;font-size:13px;color:#758793}</style><main><small>WARBOOK / LOCAL PLAY</small><h1>指挥你的下一场战役。</h1><p>在红色警戒 2 的完整战场上，与 Warbook AI 对战。</p><a class="start" href="/game/">开始本地对战 →</a>${watchReplay ? '<a class="start watch" href="/watch">观看 AI 对局回放 →</a>' : ""}<ol><li>选择「本地对战」，点击「开始游戏」。</li><li>选择美国，展开基地车，建设基地并作战。</li><li>按 Esc 退出；回到菜单即可再次开局。</li></ol><p>首次打开会自动导入本机游戏资源，稍候即可。</p><footer>研发试玩版 · 客户端 ${CLIENT_VERSION} · AI 使用已探索区域的 API 观察。<br>支持基本建设、采矿、补兵和地面战斗；仍在持续改进。</footer></main></html>`,
+    `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Warbook · 本地对战</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b1119;color:#e5ebf0;font:17px/1.65 system-ui}main{max-width:680px;padding:48px}small{color:#8cabb8;letter-spacing:3px}h1{font-size:52px;margin:12px 0}p{color:#adbac7}.start{display:inline-block;padding:14px 28px;background:#c9aa65;color:#111820;text-decoration:none;font-weight:700;border-radius:5px;margin:20px 12px 20px 0}.watch{background:transparent;color:#c9aa65;border:1px solid #c9aa65}li{margin:6px 0}footer{margin-top:40px;font-size:13px;color:#758793}</style><main><small>WARBOOK / LOCAL PLAY</small><h1>指挥你的下一场战役。</h1><p>在红色警戒 2 的完整战场上，与 Warbook AI 对战。</p><a class="start" href="/game/">开始本地对战 →</a>${challengerRelease ? '<a class="start watch" href="/challenge/">挑战集结反击 AI →</a><p>实验对手：先守住开局，集中坦克后反击。</p>' : ""}${watchReplay ? '<a class="start watch" href="/watch">观看 AI 对局回放 →</a>' : ""}<ol><li>选择「本地对战」，点击「开始游戏」。</li><li>选择美国，展开基地车，建设基地并作战。</li><li>按 Esc 退出；回到菜单即可再次开局。</li></ol><p>首次打开会自动导入本机游戏资源，稍候即可。</p><footer>研发试玩版 · 客户端 ${CLIENT_VERSION} · AI 使用已探索区域的 API 观察。<br>支持基本建设、采矿、补兵和地面战斗；仍在持续改进。</footer></main></html>`,
   ),
 );
 app.get("/watch", (c) =>
@@ -195,33 +217,49 @@ app.get("/warbook/health", (c) =>
     offline: process.env.OFFLINE === "1",
     watchAvailable: Boolean(watchReplay),
     release,
+    challengerRelease,
   }),
 );
 app.get("/warbook/bot.js", serveStatic({ path: botPath }));
+if (challengerBotPath)
+  app.get("/warbook/challenger.js", serveStatic({ path: challengerBotPath }));
 app.get(
   "/warbook/ra2-local.zip",
   serveStatic({ path: "assets/ra2-local.zip" }),
 );
-app.post("/warbook/telemetry", async (c) => {
-  if (c.req.header("origin") !== localOrigin)
-    return c.text("Local origin required", 403);
-  const body = await c.req.text();
-  if (body.length > 2_000_000) return c.text("Telemetry too large", 413);
-  const payload = JSON.parse(body);
-  appendFileSync(
-    `${telemetryDir}/browser.ndjson`,
-    JSON.stringify({ release, port, ...payload }) + "\n",
+const receiveTelemetry =
+  (selectedRelease: typeof release) => async (c: Context) => {
+    if (c.req.header("origin") !== localOrigin)
+      return c.text("Local origin required", 403);
+    const body = await c.req.text();
+    if (body.length > 2_000_000) return c.text("Telemetry too large", 413);
+    const payload = JSON.parse(body);
+    appendFileSync(
+      `${telemetryDir}/browser.ndjson`,
+      JSON.stringify({ port, ...payload, release: selectedRelease }) + "\n",
+    );
+    return c.body(null, 204);
+  };
+app.post("/warbook/telemetry", receiveTelemetry(release));
+if (challengerRelease)
+  app.post(
+    "/warbook/challenger/telemetry",
+    receiveTelemetry(challengerRelease),
   );
-  return c.body(null, 204);
-});
 const localConfig = (c: Context) =>
   c.text(
     `[General]\nreplaysUrlWhitelist=127.0.0.1\nbotsEnabled=yes\nquickMatchEnabled=no\nunrankedQueueEnabled=no\nlegacyRegistrationEnabled=no\nviewport.width=1280\nviewport.height=800\ndefaultLanguage=zh-TW\ngameResArchiveUrl=${localOrigin}/warbook/ra2-local.zip\nserversUrl=${localOrigin}/warbook/servers.ini\nmapsBaseUrl=${localOrigin}/game/maps/\nmodsBaseUrl=${localOrigin}/game/mods/\n`,
   );
 app.get("/game/config.ini", localConfig);
+app.get("/challenge/config.ini", localConfig);
 app.get("/client/:version/config.ini", localConfig);
 app.get("/warbook/servers.ini", (c) => c.text("[Servers]\n"));
-app.get("/game/", async (c) => {
+const gamePage = (isChallenger: boolean) => async (c: Context) => {
+  if (isChallenger && !challengerRelease) return c.notFound();
+  const botUrl = isChallenger ? "/warbook/challenger.js" : "/warbook/bot.js";
+  const telemetryUrl = isChallenger
+    ? "/warbook/challenger/telemetry"
+    : "/warbook/telemetry";
   const { body } = await getClientAsset("/");
   let html = body.toString();
   html = html.replace(
@@ -239,7 +277,7 @@ app.get("/game/", async (c) => {
     'SystemJS.import("main")',
     `SystemJS.import('game/api/index').then(async api => {
     globalThis.WarbookEngineApi=api;
-    await new Promise((resolve,reject)=>{const s=document.createElement('script');s.src='/warbook/bot.js';s.onload=resolve;s.onerror=reject;document.head.append(s);});
+    await new Promise((resolve,reject)=>{const s=document.createElement('script');s.src=${JSON.stringify(botUrl)};s.onload=resolve;s.onerror=reject;document.head.append(s);});
     await Warbook.install();
     await SystemJS.import('main');
   }).catch(error=>{document.body.textContent='本地 AI 启动失败：'+error.message;console.error(error);})`,
@@ -249,6 +287,7 @@ app.get("/game/", async (c) => {
     `<script>
     const originalFetch=window.fetch;
     window.fetch=function(input,init){
+      if(input==='/warbook/telemetry') input=${JSON.stringify(telemetryUrl)};
       const prefix='https://unpkg.com/detect-gpu@5.0.42/dist/benchmarks/';
       if(typeof input==='string' && input.startsWith(prefix)) input='/warbook/gpu/'+input.slice(prefix.length);
       return originalFetch.call(this,input,init);
@@ -269,7 +308,10 @@ app.get("/game/", async (c) => {
   c.header("Cross-Origin-Opener-Policy", "same-origin");
   c.header("Cross-Origin-Embedder-Policy", "require-corp");
   return c.html(html);
-});
+};
+app.get("/game/", gamePage(false));
+app.get("/challenge", (c) => c.redirect("/challenge/"));
+app.get("/challenge/", gamePage(true));
 const clientAsset = async (c: Context) => {
   const url = new URL(c.req.url);
   const requestedVersion = c.req.param("version");

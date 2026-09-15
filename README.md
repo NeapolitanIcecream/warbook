@@ -6,11 +6,13 @@
 
 打开 **[本地玩家入口](http://127.0.0.1:8642/)**，选择「本地对战」→「开始游戏」。默认美国、美国小镇、10000 资金、零起始军队。
 
+也可以选择 **[集结反击 AI（实验对手）](http://127.0.0.1:8642/challenge/)**：它先在基地附近集中兵力，再组织进攻。默认入口继续使用冻结的 0.1.4；首轮固定开发池中，实验对手 17/24 胜、旧主线 15/24 胜，这个差距尚不足以确认整体更强。
+
 - 鼠标选择基地车，按 **D** 展开；在右侧建造栏生产和放置建筑。
 - **Esc → 放弃任务 → 退出** 可以结束当前局；结算后点「继续」再次开局。
 - 服务未启动时，双击 [Play Warbook.command](scripts/Play%20Warbook.command)。Agent 负责环境、版本、日志与运行维护。
 
-只想看 AI 对战，可以点击首页的「观看 AI 对局回放」，或打开 **[完整对局回放](http://127.0.0.1:8642/watch)**。当前本机提供 Warbook 0.1.4 对 Supalosa 的美国小镇对局，约 12 分钟。回放无需操作军队；窗口较窄时可用 Esc → 全屏展开画面。
+只想看 AI 对战，可以点击首页的「观看 AI 对局回放」，或打开 **[完整对局回放](http://127.0.0.1:8642/watch)**。当前本机提供集结反击 AI 对旧主线的美国小镇对局，约 15 分钟。回放无需操作军队；窗口较窄时可用 Esc → 全屏展开画面。
 
 这是基础地面作战研发版。当前重点是建设、采矿、出兵、坦克对步兵作战和寻找迁移的基地；不宣称已经覆盖所有兵种、地图或真人竞技水平。
 
@@ -26,7 +28,9 @@ npm run play
 
 首次启动缓存官方客户端，浏览器自动从本机导入资源；对局不需要账户或 Bot API key。准备完成后，`OFFLINE=1 npm run play` 禁止缓存缺失时联网。入口仅监听 `127.0.0.1`。
 
-Agent 在本地 `.env` 中用 `WATCH_MATCH=runs/<run-directory>/result.json` 选择首页回放，重启入口生效。服务检查正常结束记录、回放版本与文件 SHA-256；对局文件仍仅保存在忽略目录。未配置时首页只显示对战入口。
+Agent 在本地 `.env` 中用 `WATCH_MATCH=runs/<run-directory>/result.json` 选择首页回放，重启入口生效。服务检查正常结束记录、回放版本与文件 SHA-256；对局文件仍仅保存在忽略目录。未配置时首页不显示回放按钮。
+
+`PLAYER_RELEASE` 固定默认图形包，`PLAYER_CHALLENGER` 可固定同一客户端下的实验对手图形包，二者均为 `dist/player/<sha256>` 的内容哈希。这样重启服务或构建其他候选时，也不会悄悄替换已维护的默认策略。
 
 ```sh
 npm test
@@ -35,9 +39,12 @@ npm run match -- --units 0
 npm run match -- --mode baseline --opponent supalosa --units 0
 npm run batch -- --rounds 12 --modes baseline,combined --map mp03t4.map
 npm run replay -- runs/<run-directory>
+npm run bot:build -- --ref v0.1.4 --mode combined
+# 将构建返回的 release.json 路径交给 --actor-release / --opponent-release。
+# --swap 交换创建/执行槽位，不控制地图出生位置。
 ```
 
-`combined` 是当前发布策略：先形成早期坦克，再扩张经济；对可见地面步兵使用原生碾压指令，遇到空中威胁则生产防空车；清查出生点后继续侦察未探索区域。`baseline` 保留作为初始工程对照。全部实验与当前固定试玩版本见 [执行进展](docs/progress.md)。
+`combined` 是当前发布策略：先形成早期坦克，再扩张经济；对可见地面步兵使用原生碾压指令，遇到空中威胁则生产防空车；清查出生点后继续侦察未探索区域。`counter` 为保留的集结反击实验对手；`raid` 和 `coordinated` 尚未晋升，`baseline` 保留作为初始工程对照。模式名称本身不冻结代码，跨版本比较必须使用冻结包。全部实验与当前固定试玩版本见 [执行进展](docs/progress.md)。
 
 ## 固定版本与证据范围
 
@@ -59,6 +66,6 @@ npm run replay -- runs/<run-directory>
 
 ## 项目约定与交接
 
-下一轮研发依据：[小型对手池与共同演化方案](docs/opponent-pool.md)。已记录对手来源边界、双方版本冻结、挑战路线、完整一轮推演和主线晋升规则；方案尚未进入执行。
+研发依据：[小型对手池与共同演化方案](docs/opponent-pool.md)。首轮已完成双方版本冻结、挑战路线试跑与固定池比较；实际保留决定及后续工作以 [执行进展](docs/progress.md) 为准。
 
 先读 [AGENTS.md](AGENTS.md)、[HANDOFF.md](HANDOFF.md) 和 [当前进展](docs/progress.md)。实现依据包括 [接口契约](docs/interface-contract.md)、[环境审计](docs/environment-audit.md)、[策略与责任](docs/strategy.md)、[评估协议](docs/evaluation.md)；历史规划、来源记录和无资源探针保留用于追溯。

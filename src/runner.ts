@@ -109,7 +109,7 @@ async function main(): Promise<void> {
     api: "0.79.0",
     referenceClientVersion: "0.83.3",
     bundledEngineSourceVersion: "0.83.3",
-    policy: POLICY_VERSION,
+    policy: subject.release?.policyVersion ?? POLICY_VERSION,
     modes: agents.map((a) => a.mode),
     participants: agents.map((bot) => ({
       name: bot.name,
