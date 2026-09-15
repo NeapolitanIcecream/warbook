@@ -98,4 +98,10 @@ for (let round = 0; round < rounds; round++)
       ),
     );
     console.log(JSON.stringify(row));
+    if (result.status !== 0) {
+      console.error(
+        "Batch stopped after a process error; the failed run and partial summary are retained.",
+      );
+      process.exit(1);
+    }
   }

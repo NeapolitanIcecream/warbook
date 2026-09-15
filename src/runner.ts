@@ -10,7 +10,7 @@ import {
   appendFileSync,
   readFileSync,
 } from "node:fs";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
@@ -31,7 +31,10 @@ const { values } = parseArgs({
   },
 });
 const start = performance.now();
-const runId = new Date().toISOString().replace(/[:.]/g, "-");
+const runId =
+  new Date().toISOString().replace(/[:.]/g, "-") +
+  "-" +
+  randomUUID().slice(0, 8);
 const dir = resolve(values.out ?? `runs/${runId}`);
 mkdirSync(dir, { recursive: true });
 const mixDir = resolve(process.env.MIX_DIR ?? "assets/ra2");

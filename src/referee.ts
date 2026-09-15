@@ -8,8 +8,9 @@ export function recordDestruction(
 ): void {
   const known = new Map<number, { name: string; owner: string }>();
   const remember = (id: number) => {
-    const unit = api.getUnitData(id);
-    if (unit) known.set(id, { name: unit.name, owner: unit.owner });
+    // Spawn also fires for scenery, projectiles and debris; getUnitData throws for these.
+    const unit = api.getGameObjectData(id);
+    if (unit?.owner) known.set(id, { name: unit.name, owner: unit.owner });
   };
   api.getAllUnits().forEach(remember);
   bot.onGameEvent = (event) => {
