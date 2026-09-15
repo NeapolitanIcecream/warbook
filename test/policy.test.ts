@@ -71,6 +71,11 @@ test("opening formation waits for the fourth tank to exit and join the force", (
   const policy = new Commander("formed");
   assert.ok(policy.decide(o).some((i) => i.task === "counter-rally"));
   assert.ok(
+    new Commander("factory-exit")
+      .decide(o)
+      .some((i) => i.task === "counter-rally"),
+  );
+  assert.ok(
     !new Commander("assembly-only")
       .decide(o)
       .some((i) => i.task === "counter-rally"),
@@ -102,6 +107,12 @@ test("opening formation waits for the fourth tank to exit and join the force", (
     new Commander("formed")
       .decide(dispersed)
       .some((i) => i.task === "counter-rally"),
+  );
+  assert.ok(
+    !new Commander("factory-exit")
+      .decide(dispersed)
+      .some((i) => i.task === "counter-rally"),
+    "four tanks outside the factory can continue an existing engagement without returning to rally",
   );
   assert.ok(
     !new Commander("formed")
@@ -534,7 +545,12 @@ test("opening attribution variants keep the same economic decisions", () => {
   ];
   const economic = (
     mode:
-      "combined" | "counter" | "assembly-only" | "contact-filter" | "formed",
+      | "combined"
+      | "counter"
+      | "assembly-only"
+      | "contact-filter"
+      | "formed"
+      | "factory-exit",
   ) =>
     new Commander(mode)
       .decide(o)
@@ -544,6 +560,7 @@ test("opening attribution variants keep the same economic decisions", () => {
     "assembly-only",
     "contact-filter",
     "formed",
+    "factory-exit",
   ] as const)
     assert.deepEqual(economic(mode), economic("combined"));
 });

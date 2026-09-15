@@ -23,6 +23,7 @@ export type PolicyMode =
   | "coordinated"
   | "assembly-only"
   | "formed"
+  | "factory-exit"
   | "contact-filter";
 export const POLICY_MODES: readonly PolicyMode[] = [
   "baseline",
@@ -38,6 +39,7 @@ export const POLICY_MODES: readonly PolicyMode[] = [
   "coordinated",
   "assembly-only",
   "formed",
+  "factory-exit",
   "contact-filter",
 ];
 
@@ -108,6 +110,7 @@ export class Commander {
       "coordinated",
       "assembly-only",
       "formed",
+      "factory-exit",
       "contact-filter",
     ].includes(this.mode);
     const names = allied
@@ -210,20 +213,25 @@ export class Commander {
     );
     if (!army.length) return intents;
     const formUp = this.mode === "formed";
+    const clearFactory = this.mode === "factory-exit";
     const assemble =
-      this.mode === "counter" || this.mode === "assembly-only" || formUp;
+      this.mode === "counter" ||
+      this.mode === "assembly-only" ||
+      formUp ||
+      clearFactory;
     const filterContacts =
       this.mode === "counter" || this.mode === "contact-filter";
-    // A newly visible tank can still be leaving the factory. Count a nearby
-    // force outside our building footprints, using only the ordinary observation.
+    // A newly visible tank can still be leaving the factory. The factory-exit
+    // variant permits a force already in combat to continue without regrouping.
     const fieldArmor =
-      formUp && !this.counterAttackStarted
+      (formUp || clearFactory) && !this.counterAttackStarted
         ? army.filter(
             (u) =>
               u.name === names.tank &&
               !o.own.some(
                 (b) =>
                   b.type === 2 &&
+                  (!clearFactory || b.name === names.factory) &&
                   u.x >= b.x &&
                   u.x < b.x + b.width &&
                   u.y >= b.y &&
@@ -231,12 +239,14 @@ export class Commander {
               ),
           )
         : [];
-    const openingReady = formUp
-      ? fieldArmor.some(
-          (center) =>
-            fieldArmor.filter((u) => distance2(u, center) <= 36).length >= 4,
-        )
-      : count(names.tank) >= 4;
+    const openingReady = clearFactory
+      ? fieldArmor.length >= 4
+      : formUp
+        ? fieldArmor.some(
+            (center) =>
+              fieldArmor.filter((u) => distance2(u, center) <= 36).length >= 4,
+          )
+        : count(names.tank) >= 4;
     if ((assemble || filterContacts) && (openingReady || o.tick >= 9000))
       this.counterAttackStarted = true;
     const holdingCounter = assemble && !this.counterAttackStarted;
@@ -365,6 +375,7 @@ export class Commander {
             "coordinated",
             "assembly-only",
             "formed",
+            "factory-exit",
             "contact-filter",
           ].includes(this.mode) &&
           unit.crusher &&
