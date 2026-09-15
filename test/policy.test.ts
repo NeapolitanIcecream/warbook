@@ -414,3 +414,58 @@ test("an isolated tank waits for support against visible superior armor and resu
       .some((i) => i.kind === "attack" && i.refs.includes("front")),
   );
 });
+
+test("opening-factor toggles distinguish rally goals from explicit contact filtering", () => {
+  const o = observation();
+  o.enemies = [
+    {
+      ref: "outside-base",
+      name: "MTNK",
+      type: 7,
+      x: 40,
+      y: 30,
+      hp: 300,
+      maxHp: 300,
+      observedTick: 0,
+    },
+  ];
+  const base = new Commander("combined").decide(o);
+  const assembly = new Commander("assembly-only").decide(o);
+  const filtering = new Commander("contact-filter").decide(o);
+  const both = new Commander("counter").decide(o);
+  assert(base.some((i) => i.kind === "attack"));
+  assert(
+    assembly.some((i) => i.kind === "attack"),
+    "rally alone can still be overridden by a nearby contact",
+  );
+  assert(
+    filtering.some((i) => i.kind === "attackMove" && i.x === 40),
+    "filtering explicit targets alone still permits an advance goal",
+  );
+  assert(
+    both.some(
+      (i) =>
+        i.kind === "attackMove" && i.task === "counter-rally" && i.x === 29,
+    ),
+  );
+});
+
+test("opening attribution variants keep the same economic decisions", () => {
+  const o = observation();
+  o.products = [
+    { name: "GAPOWR", cost: 800, type: 2, queue: 0 },
+    { name: "CMIN", cost: 1400, type: 7, queue: 3 },
+  ];
+  o.queues = [
+    { type: 0, size: 0, status: 0, items: [] },
+    { type: 3, size: 0, status: 0, items: [] },
+  ];
+  const economic = (
+    mode: "combined" | "counter" | "assembly-only" | "contact-filter",
+  ) =>
+    new Commander(mode)
+      .decide(o)
+      .filter((i) => i.kind === "queue" || i.kind === "place");
+  for (const mode of ["counter", "assembly-only", "contact-filter"] as const)
+    assert.deepEqual(economic(mode), economic("combined"));
+});

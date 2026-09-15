@@ -20,7 +20,9 @@ export type PolicyMode =
   | "combined"
   | "raid"
   | "counter"
-  | "coordinated";
+  | "coordinated"
+  | "assembly-only"
+  | "contact-filter";
 export const POLICY_MODES: readonly PolicyMode[] = [
   "baseline",
   "cohesive",
@@ -33,6 +35,8 @@ export const POLICY_MODES: readonly PolicyMode[] = [
   "raid",
   "counter",
   "coordinated",
+  "assembly-only",
+  "contact-filter",
 ];
 
 /** Synchronous policy. It has no engine handle, world events, native IDs or wall clock. */
@@ -100,6 +104,8 @@ export class Commander {
       "raid",
       "counter",
       "coordinated",
+      "assembly-only",
+      "contact-filter",
     ].includes(this.mode);
     const names = allied
       ? {
@@ -200,10 +206,17 @@ export class Commander {
       (u) => u.combat && (u.mobile || u.deployed) && !u.harvester && !u.mcv,
     );
     if (!army.length) return intents;
-    if (this.mode === "counter" && (count(names.tank) >= 4 || o.tick >= 9000))
+    // Two program components are separated for the opening-phase attribution experiment.
+    const assemble = this.mode === "counter" || this.mode === "assembly-only";
+    const filterContacts =
+      this.mode === "counter" || this.mode === "contact-filter";
+    if (
+      (assemble || filterContacts) &&
+      (count(names.tank) >= 4 || o.tick >= 9000)
+    )
       this.counterAttackStarted = true;
-    const holdingCounter =
-      this.mode === "counter" && !this.counterAttackStarted;
+    const holdingCounter = assemble && !this.counterAttackStarted;
+    const filteringContacts = filterContacts && !this.counterAttackStarted;
     for (const [i, p] of o.starts.entries()) {
       if (distance2(p, o.home) < 25 || army.some((u) => distance2(u, p) < 36))
         this.exploredStarts.add(i);
@@ -310,7 +323,7 @@ export class Commander {
             (e) =>
               (!e.airborne || unit.antiAir) &&
               distance2(unit, e) < 196 &&
-              (!holdingCounter || distance2(e, o.home) < 144),
+              (!filteringContacts || distance2(e, o.home) < 144),
           )
           .sort(
             (a, b) =>
@@ -320,9 +333,15 @@ export class Commander {
           );
         const target = nearby[0];
         if (
-          ["crush", "combined", "raid", "counter", "coordinated"].includes(
-            this.mode,
-          ) &&
+          [
+            "crush",
+            "combined",
+            "raid",
+            "counter",
+            "coordinated",
+            "assembly-only",
+            "contact-filter",
+          ].includes(this.mode) &&
           unit.crusher &&
           target?.type === 3 &&
           !target.airborne &&
