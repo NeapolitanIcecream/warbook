@@ -41,6 +41,24 @@ if (
 )
   throw new Error("Player bundle hash mismatch");
 const pending = new Map<string, Promise<{ body: Buffer; type: string }>>();
+// Keep one selected, completed match available without exposing local file paths.
+const watchResult = process.env.WATCH_MATCH
+  ? JSON.parse(readFileSync(process.env.WATCH_MATCH, "utf8"))
+  : undefined;
+const watchReplay = watchResult
+  ? readFileSync(watchResult.replay.file)
+  : undefined;
+if (
+  watchResult &&
+  (!watchResult.cleanCompletionVerified ||
+    watchResult.stopState?.status !== "Ended" ||
+    watchResult.stopState?.turnManagerError !== false ||
+    CLIENT_VERSION !== PINNED_CLIENT.version ||
+    watchResult.replay.engineVersion !== "0.83" ||
+    createHash("sha256").update(watchReplay!).digest("hex") !==
+      watchResult.replay.sha256)
+)
+  throw new Error("WATCH_MATCH must reference a verified, compatible full game");
 
 async function getClientAsset(
   path: string,
@@ -152,14 +170,30 @@ app.get("/warbook/gpu/:file", async (c) => {
 });
 app.get("/", (c) =>
   c.html(
-    `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Warbook · 本地对战</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b1119;color:#e5ebf0;font:17px/1.65 system-ui}main{max-width:680px;padding:48px}small{color:#8cabb8;letter-spacing:3px}h1{font-size:52px;margin:12px 0}p{color:#adbac7}.start{display:inline-block;padding:14px 28px;background:#c9aa65;color:#111820;text-decoration:none;font-weight:700;border-radius:5px;margin:20px 0}li{margin:6px 0}footer{margin-top:40px;font-size:13px;color:#758793}</style><main><small>WARBOOK / LOCAL PLAY</small><h1>指挥你的下一场战役。</h1><p>在红色警戒 2 的完整战场上，与 Warbook AI 对战。</p><a class="start" href="/game/">开始本地对战 →</a><ol><li>选择「本地对战」，点击「开始游戏」。</li><li>选择美国，展开基地车，建设基地并作战。</li><li>按 Esc 退出；回到菜单即可再次开局。</li></ol><p>首次打开会自动导入本机游戏资源，稍候即可。</p><footer>研发试玩版 · 客户端 ${CLIENT_VERSION} · AI 使用已探索区域的 API 观察。<br>支持基本建设、采矿、补兵和地面战斗；仍在持续改进。</footer></main></html>`,
+    `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Warbook · 本地对战</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b1119;color:#e5ebf0;font:17px/1.65 system-ui}main{max-width:680px;padding:48px}small{color:#8cabb8;letter-spacing:3px}h1{font-size:52px;margin:12px 0}p{color:#adbac7}.start{display:inline-block;padding:14px 28px;background:#c9aa65;color:#111820;text-decoration:none;font-weight:700;border-radius:5px;margin:20px 12px 20px 0}.watch{background:transparent;color:#c9aa65;border:1px solid #c9aa65}li{margin:6px 0}footer{margin-top:40px;font-size:13px;color:#758793}</style><main><small>WARBOOK / LOCAL PLAY</small><h1>指挥你的下一场战役。</h1><p>在红色警戒 2 的完整战场上，与 Warbook AI 对战。</p><a class="start" href="/game/">开始本地对战 →</a>${watchReplay ? '<a class="start watch" href="/watch">观看 AI 对局回放 →</a>' : ""}<ol><li>选择「本地对战」，点击「开始游戏」。</li><li>选择美国，展开基地车，建设基地并作战。</li><li>按 Esc 退出；回到菜单即可再次开局。</li></ol><p>首次打开会自动导入本机游戏资源，稍候即可。</p><footer>研发试玩版 · 客户端 ${CLIENT_VERSION} · AI 使用已探索区域的 API 观察。<br>支持基本建设、采矿、补兵和地面战斗；仍在持续改进。</footer></main></html>`,
   ),
+);
+app.get("/watch", (c) =>
+  watchReplay
+    ? c.redirect(
+        `/game/#/replay/${encodeURIComponent(localOrigin + "/warbook/watch.rpl")}`,
+      )
+    : c.html('<p>还没有可观看的对局。</p><a href="/">返回本地入口</a>', 404),
+);
+app.get("/warbook/watch.rpl", (c) =>
+  watchReplay
+    ? c.body(new Uint8Array(watchReplay), 200, {
+        "Content-Type": "application/octet-stream",
+        "Cache-Control": "no-store",
+      })
+    : c.notFound(),
 );
 app.get("/warbook/health", (c) =>
   c.json({
     ok: true,
     clientVersion: CLIENT_VERSION,
     offline: process.env.OFFLINE === "1",
+    watchAvailable: Boolean(watchReplay),
     release,
   }),
 );
