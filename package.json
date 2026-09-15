@@ -27,6 +27,7 @@
     "@types/node": "26.5.1",
     "esbuild": "0.28.2",
     "playwright": "1.63.0",
+    "prettier": "3.9.6",
     "tsx": "4.23.13",
     "typescript": "7.0.2"
   },
