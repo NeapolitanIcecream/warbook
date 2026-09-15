@@ -110,6 +110,7 @@ app.get('/game/*',async c=>{
   if(path.includes('/locale/')) {
     const strings=JSON.parse(asset.body.toString());
     strings['gui:demo']='本地对战';
+    strings['gui:aieasybeta']='Warbook AI';
     return c.json(strings);
   }
   c.header('Content-Type',asset.type);c.header('Cross-Origin-Resource-Policy','same-origin');

@@ -1,7 +1,7 @@
 import { distance2, type Observation, type Intent, type Unit, type Point } from './model.js';
 
 export const POLICY_VERSION = 'warbook-0.1.1';
-export type PolicyMode = 'baseline' | 'cohesive';
+export type PolicyMode = 'baseline' | 'cohesive' | 'guarded';
 
 /** Synchronous policy. It has no engine handle, world events, native IDs or wall clock. */
 export class Commander {
@@ -44,6 +44,10 @@ export class Commander {
     queue(building);
     queue(o.own.filter(u=>u.harvester).length < 4 ? names.miner : names.tank);
     if (o.own.filter(u=>u.type===3 && u.combat).length<6 && o.credits>800) queue(names.infantry);
+    if(this.mode==='guarded') {
+      const infantryThreat=o.enemies.filter(e=>e.type===3 && distance2(e,o.home)<1600);
+      if(infantryThreat.length>=3 && count(allied?'GAPILL':'NALASR')<2) queue(allied?'GAPILL':'NALASR');
+    }
 
     const army = o.own.filter(u=>u.combat && u.mobile && !u.harvester && !u.mcv);
     if (!army.length) return intents;
@@ -81,6 +85,14 @@ export class Commander {
       for (const unit of army) {
         const nearby = [...o.enemies].filter(e=>distance2(unit,e)<196).sort((a,b)=>distance2(unit,a)-distance2(unit,b));
         const target=nearby[0];
+        if(this.mode==='guarded' && unit.name==='E1') {
+          if(target && distance2(unit,target)<64 && !unit.deployed) {
+            order([unit],'deploy-infantry',{kind:'deploy',refs:[]},90);continue;
+          }
+          if(!target && unit.deployed) {
+            order([unit],'undeploy-infantry',{kind:'deploy',refs:[]},90);continue;
+          }
+        }
         if (target) order([unit],'attack:'+target.ref,{kind:'attack',refs:[],target:target.ref},180);
         else order([unit],'advance:'+destination.x+':'+destination.y,{kind:'attackMove',refs:[],x:destination.x,y:destination.y},450);
       }

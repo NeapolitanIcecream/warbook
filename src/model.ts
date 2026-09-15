@@ -16,6 +16,7 @@ export interface Unit extends Point {
   refinery: boolean;
   combat: boolean;
   buildStatus?: number;
+  deployed?: boolean;
 }
 export interface Contact extends Point {
   ref: string;

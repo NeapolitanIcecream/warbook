@@ -11,15 +11,17 @@ export async function install():Promise<void> {
   const session=globalThis.WarbookSession={version:POLICY_VERSION,protocol:OBSERVATION_PROTOCOL,sessionId:crypto.randomUUID(),games:0,bots:[]} as typeof WarbookSession;
   const originalOptions=SkirmishScreen.prototype.initOptions;
   SkirmishScreen.prototype.initOptions=async function() {
-    const first=!localStorage.getItem('warbook.defaults.v1');
+    const first=!localStorage.getItem('warbook.defaults.v2');
     if(first){this.localPrefs.setItem(StorageKey.LastMap,'mp03t4.map');this.localPrefs.setItem(StorageKey.LastMode,'1');}
     await originalOptions.call(this);
     if(first){
       const country=this.getAvailablePlayerCountries().indexOf('Americans');
       this.gameOpts.humanPlayers[0].countryId=country;
+      this.localPrefs.setItem(StorageKey.LastPlayerCountry,String(country));
       for(const ai of this.gameOpts.aiPlayers) if(ai) ai.countryId=country;
-      Object.assign(this.gameOpts,{credits:10000,unitCount:0,gameSpeed:4,shortGame:true,cratesAppear:false,superWeapons:false});
-      localStorage.setItem('warbook.defaults.v1','1');
+      this.saveBotSettings();
+      this.applyGameOption((options:any)=>Object.assign(options,{credits:10000,unitCount:0,gameSpeed:4,shortGame:true,cratesAppear:false,superWeapons:false,buildOffAlly:false}));
+      localStorage.setItem('warbook.defaults.v2','1');
     }
   };
   BotFactory.prototype.create=function(player:any) {
@@ -69,7 +71,7 @@ export async function install():Promise<void> {
   document.body.append(bar);
   setInterval(()=>{
     const bot=session.bots[0];
-    bar.textContent=bot?.observation?`Warbook 本地 AI · ${POLICY_VERSION} · ${bot.name} · ${Math.floor(bot.observation.tick/15)} 秒`:`Warbook 本地 AI · ${POLICY_VERSION} · 点击「本地对战」开局`;
+    bar.textContent=bot?.observation?`Warbook 本地 AI · ${POLICY_VERSION} · 对战中`:`Warbook 本地 AI · ${POLICY_VERSION} · 点击「本地对战」开局`;
   },1000);
   window.addEventListener('error',event=>{session.error=event.message;});
 }

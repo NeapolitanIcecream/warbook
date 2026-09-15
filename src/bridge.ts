@@ -43,7 +43,7 @@ export class WarbookBot extends Bot {
       ref:this.ref(u),name:u.name,type:u.type,x:u.tile.rx,y:u.tile.ry,hp:u.hitPoints,maxHp:u.maxHitPoints,
       width:u.foundation.width,height:u.foundation.height,mobile:!!u.canMove,idle:!!u.isIdle,
       harvester:u.rules.harvester,mcv:!!u.rules.deploysInto && !u.rules.harvester,yard:u.rules.constructionYard,
-      refinery:u.rules.refinery,combat:u.rules.isSelectableCombatant,buildStatus:u.buildStatus,
+      refinery:u.rules.refinery,combat:u.rules.isSelectableCombatant,buildStatus:u.buildStatus,deployed:u.stance===3,
     }));
     const enemies=this.sorted(this.player.getVisibleUnits('enemy')).map(u=>({
       ref:this.ref(u),name:u.name,type:u.type,x:u.tile.rx,y:u.tile.ry,hp:u.hitPoints,maxHp:u.maxHitPoints,observedTick:tick,
@@ -63,7 +63,9 @@ export class WarbookBot extends Bot {
         }
       }
       const home={x:data.startLocation.x,y:data.startLocation.y};
-      for (const p of [...candidates.values()].sort((a,b)=>distance2(a,home)-distance2(b,home)||a.x-b.x||a.y-b.y)) {
+      const enemy=enemies.slice().sort((a,b)=>distance2(a,home)-distance2(b,home))[0];
+      const anchor=this.game.rules.getBuilding(name).isBaseDefense && enemy?enemy:home;
+      for (const p of [...candidates.values()].sort((a,b)=>distance2(a,anchor)-distance2(b,anchor)||a.x-b.x||a.y-b.y)) {
         let visible=true;
         for (let x=p.x;x<p.x+foundation.width;x++) for (let y=p.y;y<p.y+foundation.height;y++) {
           const tile=this.game.map.getTile(x,y);
