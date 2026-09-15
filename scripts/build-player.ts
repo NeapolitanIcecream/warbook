@@ -5,7 +5,7 @@ import { execFileSync } from "node:child_process";
 import { POLICY_VERSION, POLICY_MODES } from "../src/policy.js";
 import { PINNED_CLIENT, SDK_RESOURCE_SHA } from "../src/player/client.js";
 mkdirSync("dist/player", { recursive: true });
-const mode = process.env.PLAYER_POLICY ?? "combined";
+const mode = process.env.PLAYER_POLICY ?? "factory-exit";
 if (!POLICY_MODES.some((value) => value === mode))
   throw new Error("Unknown player policy");
 const output = await build({

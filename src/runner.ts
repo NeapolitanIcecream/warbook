@@ -28,7 +28,7 @@ const { values } = parseArgs({
     ticks: { type: "string", default: "54000" },
     seconds: { type: "string", default: "180" },
     units: { type: "string", default: "10" },
-    mode: { type: "string", default: "combined" },
+    mode: { type: "string", default: "factory-exit" },
     opponent: { type: "string", default: "supalosa" },
     "actor-release": { type: "string" },
     "opponent-release": { type: "string" },
