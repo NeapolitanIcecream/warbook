@@ -15,7 +15,10 @@
     "replay": "node --env-file-if-exists=.env --import tsx scripts/replay.ts",
     "batch": "node --import tsx scripts/batch.ts",
     "play": "npm run player:build && node --env-file-if-exists=.env --import tsx src/player/server.ts",
-    "bot:build": "node --import tsx scripts/build-bot.ts"
+    "bot:build": "node --import tsx scripts/build-bot.ts",
+    "analyze": "python3 analysis/compare_runs.py",
+    "analyze:encounter": "node --env-file-if-exists=.env --import tsx scripts/encounter.ts",
+    "test:analysis": "python3 -m unittest discover -s analysis -p 'test_*.py'"
   },
   "dependencies": {
     "@chronodivide/game-api": "0.79.0",
