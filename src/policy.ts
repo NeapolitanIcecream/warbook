@@ -6,7 +6,7 @@ import {
   type Point,
 } from "./model.js";
 
-export const POLICY_VERSION = "warbook-0.1.1";
+export const POLICY_VERSION = "warbook-0.1.2";
 export type PolicyMode =
   "baseline" | "cohesive" | "guarded" | "pillbox" | "sentry";
 
@@ -21,7 +21,7 @@ export class Commander {
   decide(o: Observation): Intent[] {
     const intents: Intent[] = [];
     const count = (name: string) => o.own.filter((u) => u.name === name).length;
-    const allied = o.own.some((u) => u.name === "AMCV" || u.name === "GACNST");
+    const allied = o.side === 0;
     const names = allied
       ? {
           power: "GAPOWR",

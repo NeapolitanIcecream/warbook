@@ -23,6 +23,7 @@ const tank = (ref = "tank"): Unit => ({
 });
 const observation = (own: Unit[] = [tank()]): Observation => ({
   tick: 0,
+  side: 0,
   credits: 10000,
   power: { total: 200, drain: 0, isLowPower: false },
   home: { x: 25, y: 25 },
@@ -120,5 +121,22 @@ test("deployed infantry can pack up after contact is lost", () => {
     new Commander("guarded")
       .decide(o)
       .some((i) => i.kind === "deploy" && i.refs.includes("gi")),
+  );
+});
+test("losing the construction yard does not switch the production faction", () => {
+  const o = observation([
+    tank(),
+    ...Array.from({ length: 4 }, (_, i) => ({
+      ...tank("miner-" + i),
+      name: "CMIN",
+      harvester: true,
+    })),
+  ]);
+  o.products = [{ name: "MTNK", cost: 700, type: 7, queue: 3 }];
+  o.queues = [{ type: 3, status: 0, size: 0, items: [] }];
+  assert.ok(
+    new Commander()
+      .decide(o)
+      .some((i) => i.kind === "queue" && i.product.name === "MTNK"),
   );
 });

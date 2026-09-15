@@ -43,6 +43,7 @@ export interface Queue {
 }
 export interface Observation {
   tick: number;
+  side: number;
   credits: number;
   power: { total: number; drain: number; isLowPower: boolean };
   home: Point;

@@ -8,6 +8,11 @@ import {
 } from "@chronodivide/game-api";
 import { Commander, type PolicyMode } from "./policy.js";
 import {
+  rememberIntent,
+  observedEffect,
+  type PendingEffect,
+} from "./effects.js";
+import {
   distance2,
   type Observation,
   type Intent,
@@ -30,6 +35,8 @@ export class WarbookBot extends Bot {
   private sequence = 0;
   private lastObservation?: Observation;
   private lastSnapshotTick = -150;
+  private intentSequence = 0;
+  private pendingEffects: PendingEffect[] = [];
   public trace?: (event: Trace) => void;
   public autoTick = false;
   public observation?: Observation;
@@ -109,14 +116,12 @@ export class WarbookBot extends Bot {
         observedTick: tick,
       }),
     );
-    const products = this.player.production
-      .getAvailableObjects()
-      .map((p) => ({
-        name: p.name,
-        type: p.type,
-        cost: p.cost,
-        queue: this.player.production.getQueueTypeForObject(p),
-      }));
+    const products = this.player.production.getAvailableObjects().map((p) => ({
+      name: p.name,
+      type: p.type,
+      cost: p.cost,
+      queue: this.player.production.getQueueTypeForObject(p),
+    }));
     const queues = [0, 1, 2, 3, 4, 5]
       .map((type) => this.player.production.getQueueData(type))
       .map((q) => ({
@@ -176,6 +181,7 @@ export class WarbookBot extends Bot {
     }
     const observation: Observation = {
       tick,
+      side: data.country!.side,
       credits: data.credits,
       power: {
         total: data.power.total,
@@ -213,6 +219,21 @@ export class WarbookBot extends Bot {
       this.lastSnapshotTick = tick;
     }
     this.lastObservation = this.observation = observation;
+    this.pendingEffects = this.pendingEffects.filter((p) => {
+      const effect = observedEffect(p, observation);
+      const expired = tick - p.tick >= 450;
+      if (effect || expired)
+        this.trace?.({
+          tick,
+          actor: this.name,
+          kind: effect ? "effect_observed" : "effect_unresolved",
+          intentId: p.id,
+          basedOnTick: p.tick,
+          effect,
+          source: "player_observation",
+        });
+      return !effect && !expired;
+    });
     return observation;
   }
   decide(observation: Observation): Intent[] {
@@ -246,6 +267,7 @@ export class WarbookBot extends Bot {
       }
       if ("refs" in intent) for (const ref of intent.refs) assigned.add(ref);
       try {
+        const intentId = `intent-${this.intentSequence++}`;
         switch (intent.kind) {
           case "deploy":
             this.player.actions.orderUnits(ids, OrderType.DeploySelected);
@@ -291,8 +313,11 @@ export class WarbookBot extends Bot {
           actor: this.name,
           kind: "submitted",
           intent,
+          intentId,
           effect: "not_yet_observed",
         });
+        if (this.trace)
+          this.pendingEffects.push(rememberIntent(intentId, intent, o));
       } catch (error) {
         this.trace?.({
           tick: o.tick,
