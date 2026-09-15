@@ -8,7 +8,7 @@ import {
 import { RaidTask } from "./raiding.js";
 import { RegroupTask } from "./regrouping.js";
 
-export const POLICY_VERSION = "warbook-0.1.5-dev";
+export const POLICY_VERSION = "warbook-0.1.5";
 export type PolicyMode =
   | "baseline"
   | "cohesive"
