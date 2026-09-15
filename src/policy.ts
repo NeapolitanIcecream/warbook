@@ -216,20 +216,21 @@ export class Commander {
       this.mode === "counter" || this.mode === "contact-filter";
     // A newly visible tank can still be leaving the factory. Count a nearby
     // force outside our building footprints, using only the ordinary observation.
-    const fieldArmor = formUp && !this.counterAttackStarted
-      ? army.filter(
-          (u) =>
-            u.name === names.tank &&
-            !o.own.some(
-              (b) =>
-                b.type === 2 &&
-                u.x >= b.x &&
-                u.x < b.x + b.width &&
-                u.y >= b.y &&
-                u.y < b.y + b.height,
-            ),
-        )
-      : [];
+    const fieldArmor =
+      formUp && !this.counterAttackStarted
+        ? army.filter(
+            (u) =>
+              u.name === names.tank &&
+              !o.own.some(
+                (b) =>
+                  b.type === 2 &&
+                  u.x >= b.x &&
+                  u.x < b.x + b.width &&
+                  u.y >= b.y &&
+                  u.y < b.y + b.height,
+              ),
+          )
+        : [];
     const openingReady = formUp
       ? fieldArmor.some(
           (center) =>

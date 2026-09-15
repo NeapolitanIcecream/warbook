@@ -533,11 +533,17 @@ test("opening attribution variants keep the same economic decisions", () => {
     { type: 3, size: 0, status: 0, items: [] },
   ];
   const economic = (
-    mode: "combined" | "counter" | "assembly-only" | "contact-filter",
+    mode:
+      "combined" | "counter" | "assembly-only" | "contact-filter" | "formed",
   ) =>
     new Commander(mode)
       .decide(o)
       .filter((i) => i.kind === "queue" || i.kind === "place");
-  for (const mode of ["counter", "assembly-only", "contact-filter"] as const)
+  for (const mode of [
+    "counter",
+    "assembly-only",
+    "contact-filter",
+    "formed",
+  ] as const)
     assert.deepEqual(economic(mode), economic("combined"));
 });
