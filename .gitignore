@@ -15,3 +15,8 @@ assets/
 *.rpl
 dist/
 coverage/
+.playwright-mcp/
+.playwright-cli/
+output/
+*.log
+*.MIX

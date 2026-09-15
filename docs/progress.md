@@ -1,0 +1,36 @@
+# 2026-09-15 执行进展
+
+- 启动：14:09 Asia/Shanghai；本期截止：17:30。用户随后明确不复用被放弃的本机版本，建议完全本地开发。
+- Git：`codex/real-games-player-entry`，远端 `NeapolitanIcecream/warbook`。已保留远端历史，未覆盖 main。
+- 新建 TypeScript 工程。固定官方 API 0.79.0 / 引擎 0.84；npm 锁文件；Hono 提供本地入口，esbuild 打包浏览器策略。同一个新策略用于 Node 和官方图形客户端。
+- 本地原版 MIX 已复制到忽略目录 `assets/ra2`，无需依赖旧项目运行。没有读取/继承其 AI 代码。所有运行产物在 `runs/`，官方客户端缓存在 `work/client-cache/`。
+
+## 已运行证据（截至 14:30）
+
+| 运行 | 结果 | 证据范围 |
+| --- | --- | --- |
+| `runs/first-engine-run` | tick 0 的无目标 Deploy 触发异常 | 真引擎机制失败；修为 DeploySelected |
+| `runs/second-engine-run` | 15,524 tick，蓝方 defeated，2.64 秒 | 起始军队交战；尚未可靠识别结束状态 |
+| `runs/first-full-economy` | 9,652 tick，红方存活，2.66 秒 | 已完成经济/生产/交战；旧结束规则保留未完全确认标签 |
+| `runs/verified-end` | 13,012 tick，正常结束，2.82 秒 | 无起始军队，双方经济生产；引擎状态 Ended、turn-manager error=false、单方败北 |
+| 同局官方 replay 重放 | 13,012 tick，败北状态与资金逐方相同，2.35 秒 | 真实回放仿真；不是仅解析 |
+| `runs/termination-limit` | tick 30，Started，无败北 | 截断正确保留未决，没有算作胜负 |
+| `runs/supalosa-first` | 9,284 tick 正常负于固定 Supalosa，3.08 秒 | 原生外部对手条件；首场诊断，不作胜率/泛化声明 |
+
+以上单局秒数为具体运行的端到端墙钟，含初始化、资源哈希和记录；不是稳定吞吐估计。前期运行带未提交工作区，后续在提交后继续固定批次。资源/依赖哈希、起点、动作、停止状态和 replay 路径均在每局产物中。
+
+## 信息与结束边界
+
+策略只接收普通数据，不接触 GameApi、全局事件或原生 ID。敌方只来自本方 shroud 查询；离开当前接触后只保留位置。建筑预检仅查询本基地周边、整个 footprint 已探索的候选；协议标为 `api-shroud-v0-visible-placement`，不宣称人类等价公平竞赛。
+
+`src/engine-diagnostics.mjs` 对官方 bundle 校验 SHA-256 后追加只读结束状态导出，不改引擎方法/状态/时序。读取 GameStatus 与 turn-manager error；仅 runner 使用。结果同时保留公开败北观察。回放使用未追加此诊断导出的官方模块重放。
+
+## 玩家入口与当前工作
+
+- 服务：`npm run play`，127.0.0.1:8642。仅本机监听。本地配置、客户端缓存、MIX 与遥测不进入 Git。
+- 玩家入口 → 官方客户端本地副本 → 原有 SkirmishScreen → 新 WarbookBot。原版图形/输入/战斗逻辑不重写；只在本地替换 BotFactory，并设置首局默认 Americans、mp03t4、零起始军队。
+- 已实际开局，通过键盘 N、D 展开了玩家基地；AI 在实时对局中建设。退出后重开仍在继续验证，不提前记作完整可玩验收。
+- 发现 worker 响应缺少 COEP 导致约 10 秒超时，已补响应头，正在复测。首次本地资源自动导入已通过。
+- 下一步：完成玩家控制/退出/重开与离线缓存验证；固定可玩版本；根据 Supalosa 首场时间线比较早期军力/经济分配；检查更多真实对局。
+
+6–12 小时校准窗口尚未达到，不虚构 24/72 小时吞吐预测。当前本期以 17:30 为边界交付已验证版本和未完成事项。
