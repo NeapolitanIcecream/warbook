@@ -1,0 +1,41 @@
+{
+  "purpose": "Full development-pool regression for the small opening-progress latch fix; candidate frozen before viewing predecessor new-map outcomes",
+  "subjects": {
+    "m0": {
+      "ref": "68852328061240c50e622aae64cef7e9289af444",
+      "mode": "combined"
+    },
+    "muster": {
+      "ref": "d73f7855419be3e53013d2e94c9d5ba1c307d574",
+      "mode": "factory-exit"
+    }
+  },
+  "opponents": {
+    "supalosa": {
+      "native": "supalosa"
+    },
+    "m0": {
+      "ref": "68852328061240c50e622aae64cef7e9289af444",
+      "mode": "combined"
+    },
+    "counter": {
+      "ref": "a64a79e32b7333c26b1d4bfdb43405464c51173a",
+      "mode": "counter"
+    }
+  },
+  "maps": [
+    "mp03t4.map",
+    "mp06t2.map",
+    "mp29u2.map"
+  ],
+  "rounds": 6,
+  "decision": {
+    "budget": "108 new starts, 54 per subject, six per original opponent x map cell; inspect the complete batch once",
+    "weights": "each of the nine opponent x map cells has weight 1/9",
+    "outcomes": "same clean normal wins per all starts; retain each error, limit and defeat without rerunning to replace a loss",
+    "information": "unchanged api-shroud-v0-visible-placement-frontier for self bots; native Supalosa remains an external diagnostic anchor with its original information conditions",
+    "promotion": "Retain M0 if the gain is ambiguous or there is a material unresolved regression. A useful candidate still needs player lifecycle validation before a player update. No claim about the original formal D_target or unseen maps follows from this development pool.",
+    "remainingQuestion": "Once four tanks have been observed, wait for surviving tanks to clear factories without reopening the production target after a casualty; all other policy rules are unchanged.",
+    "regression": "Check both the repaired urban start 0 and early-casualty start 1. The observed bug is losing a tank at tick 5904 after briefly owning four at 5886, which incorrectly erased opening readiness."
+  }
+}

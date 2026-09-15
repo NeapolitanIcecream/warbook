@@ -1,0 +1,37 @@
+{
+  "purpose": "Additional-map evaluation of the frozen final latch candidate, on mp08t2 selected by layout before any policy outcome",
+  "subjects": {
+    "m0": {
+      "ref": "68852328061240c50e622aae64cef7e9289af444",
+      "mode": "combined"
+    },
+    "muster": {
+      "ref": "d73f7855419be3e53013d2e94c9d5ba1c307d574",
+      "mode": "factory-exit"
+    }
+  },
+  "opponents": {
+    "supalosa": {
+      "native": "supalosa"
+    },
+    "m0": {
+      "ref": "68852328061240c50e622aae64cef7e9289af444",
+      "mode": "combined"
+    },
+    "counter": {
+      "ref": "a64a79e32b7333c26b1d4bfdb43405464c51173a",
+      "mode": "counter"
+    }
+  },
+  "maps": [
+    "mp08t2.map"
+  ],
+  "rounds": 8,
+  "decision": {
+    "budget": "48 starts, 24 per subject; report separately from development",
+    "selection": "Selected before any policy game on this map, after tick-zero layout/load inspection: 120x120 world extent, two starts, same tracked-vehicle region, 56-node path. The other inspected custom map was unavailable locally, with its load error retained.",
+    "condition": "Run this frozen candidate after its development regression; its code was committed before inspecting the predecessor 0a326ea new-map results. Do not tune on either batch or substitute the earlier candidate result for this version.",
+    "scope": "One additional map with the same opponent families, not formal D_target or general human-skill confirmation. Predecessor and final-candidate batches remain separate.",
+    "failure": "Preserve losses, limits and errors. Keep the old default if a material regression remains unresolved; no repeated candidate adjustments against this check while still calling it unseen."
+  }
+}
