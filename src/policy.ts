@@ -6,6 +6,7 @@ import {
   type Point,
 } from "./model.js";
 import { RaidTask } from "./raiding.js";
+import { RegroupTask } from "./regrouping.js";
 
 export const POLICY_VERSION = "warbook-0.1.5-dev";
 export type PolicyMode =
@@ -18,7 +19,8 @@ export type PolicyMode =
   | "tempo"
   | "combined"
   | "raid"
-  | "counter";
+  | "counter"
+  | "coordinated";
 export const POLICY_MODES: readonly PolicyMode[] = [
   "baseline",
   "cohesive",
@@ -30,6 +32,7 @@ export const POLICY_MODES: readonly PolicyMode[] = [
   "combined",
   "raid",
   "counter",
+  "coordinated",
 ];
 
 /** Synchronous policy. It has no engine handle, world events, native IDs or wall clock. */
@@ -44,6 +47,7 @@ export class Commander {
   private postponedScouts = new Map<string, number>();
   private readonly raiding = new RaidTask();
   private counterAttackStarted = false;
+  private readonly regrouping = new RegroupTask();
   constructor(readonly mode: PolicyMode = "baseline") {}
 
   private scout(o: Observation, army: Unit[]): Point | undefined {
@@ -90,9 +94,13 @@ export class Commander {
     const intents: Intent[] = [];
     const count = (name: string) => o.own.filter((u) => u.name === name).length;
     const allied = o.side === 0;
-    const earlyArmor = ["tempo", "combined", "raid", "counter"].includes(
-      this.mode,
-    );
+    const earlyArmor = [
+      "tempo",
+      "combined",
+      "raid",
+      "counter",
+      "coordinated",
+    ].includes(this.mode);
     const names = allied
       ? {
           power: "GAPOWR",
@@ -281,8 +289,22 @@ export class Commander {
         450,
       );
     } else {
+      const regroup =
+        this.mode === "coordinated"
+          ? this.regrouping.plan(o, army)
+          : new Map<string, Point>();
       // Each squad engages nearby legal contacts. Distant squads keep travelling instead of chasing a shared ID.
       for (const unit of army.filter((u) => !raiders.has(u.ref))) {
+        const regroupGoal = regroup.get(unit.ref);
+        if (regroupGoal) {
+          order(
+            [unit],
+            `regroup:${regroupGoal.x}:${regroupGoal.y}`,
+            { kind: "move", refs: [], ...regroupGoal, task: "regroup-armor" },
+            90,
+          );
+          continue;
+        }
         const nearby = [...o.enemies]
           .filter(
             (e) =>
@@ -298,7 +320,9 @@ export class Commander {
           );
         const target = nearby[0];
         if (
-          ["crush", "combined", "raid", "counter"].includes(this.mode) &&
+          ["crush", "combined", "raid", "counter", "coordinated"].includes(
+            this.mode,
+          ) &&
           unit.crusher &&
           target?.type === 3 &&
           !target.airborne &&

@@ -371,3 +371,46 @@ test("counterattack keeps early armor near base then commits its assembled force
       .some((i) => i.task === "counter-rally"),
   );
 });
+
+test("an isolated tank waits for support against visible superior armor and resumes when assembled", () => {
+  const policy = new Commander("coordinated");
+  const o = observation([
+    { ...tank("front"), x: 70, y: 70 },
+    { ...tank("support"), x: 50, y: 50 },
+    { ...tank("rear"), x: 40, y: 40 },
+  ]);
+  o.enemies = Array.from({ length: 3 }, (_, i) => ({
+    ref: `enemy-${i}`,
+    name: "MTNK",
+    type: 7,
+    x: 74 + i,
+    y: 70,
+    hp: 300,
+    maxHp: 300,
+    observedTick: 0,
+  }));
+  const first = policy.decide(o);
+  assert(
+    first.some(
+      (i) =>
+        i.kind === "move" &&
+        i.refs.includes("front") &&
+        i.task === "regroup-armor" &&
+        i.x === 50,
+    ),
+  );
+  const arrived = {
+    ...o,
+    tick: 60,
+    own: [
+      o.own[0],
+      { ...o.own[1], x: 68, y: 70 },
+      { ...o.own[2], x: 69, y: 70 },
+    ],
+  };
+  assert(
+    policy
+      .decide(arrived)
+      .some((i) => i.kind === "attack" && i.refs.includes("front")),
+  );
+});

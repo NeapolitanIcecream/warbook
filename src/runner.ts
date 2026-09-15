@@ -128,6 +128,7 @@ async function main(): Promise<void> {
       [
         "src/policy.ts",
         "src/raiding.ts",
+        "src/regrouping.ts",
         "src/bridge.ts",
         "src/runner.ts",
         "src/opponent.ts",
