@@ -6,8 +6,11 @@ import { parseArgs } from "node:util";
 const { values } = parseArgs({
   options: {
     rounds: { type: "string", default: "8" },
-    modes: { type: "string", default: "baseline,combined" },
+    modes: { type: "string" },
     opponent: { type: "string", default: "supalosa" },
+    "actor-release": { type: "string" },
+    "opponent-release": { type: "string" },
+    "balance-sides": { type: "boolean", default: true },
     map: { type: "string", default: "mp03t4.map" },
     out: { type: "string" },
   },
@@ -15,7 +18,17 @@ const { values } = parseArgs({
 const rounds = Number(values.rounds);
 if (!Number.isInteger(rounds) || rounds < 1 || rounds > 1000)
   throw new Error("rounds must be 1..1000");
-const modes = values.modes!.split(",");
+if (values["actor-release"] && values.modes)
+  throw new Error("A frozen actor already specifies its mode");
+const actorRelease = values["actor-release"]
+  ? JSON.parse(readFileSync(values["actor-release"], "utf8"))
+  : undefined;
+const opponentRelease = values["opponent-release"]
+  ? JSON.parse(readFileSync(values["opponent-release"], "utf8"))
+  : undefined;
+const modes: string[] = actorRelease
+  ? [actorRelease.mode]
+  : (values.modes ?? "baseline,combined").split(",");
 const root = resolve(
   values.out ?? `runs/batch-${new Date().toISOString().replace(/[:.]/g, "-")}`,
 );
@@ -26,11 +39,14 @@ writeFileSync(
   `${root}/plan.json`,
   JSON.stringify(
     {
-      purpose: "development screening; independent unseeded games",
+      purpose: "development screening; ordinary unseeded new games",
       rounds,
       modes,
       map: values.map,
       opponent: values.opponent,
+      actorRelease,
+      opponentRelease,
+      balanceSides: values["balance-sides"],
       units: 0,
       tickLimit: 54000,
       wallLimitPerGame: 180,
@@ -61,6 +77,13 @@ for (let round = 0; round < rounds; round++)
         mode,
         "--opponent",
         values.opponent!,
+        ...(values["actor-release"]
+          ? ["--actor-release", resolve(values["actor-release"])]
+          : []),
+        ...(values["opponent-release"]
+          ? ["--opponent-release", resolve(values["opponent-release"])]
+          : []),
+        ...(values["balance-sides"] && round % 2 === 1 ? ["--swap"] : []),
         "--out",
         dir,
       ],
@@ -80,6 +103,7 @@ for (let round = 0; round < rounds; round++)
     const row = {
       round,
       mode,
+      swapped: values["balance-sides"] && round % 2 === 1,
       dir,
       exitCode: result.status,
       stopReason: outcome.stopReason,

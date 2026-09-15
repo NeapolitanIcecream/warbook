@@ -20,6 +20,7 @@ import { POLICY_VERSION, POLICY_MODES, type PolicyMode } from "./policy.js";
 import { SupalosaOpponent } from "./opponent.js";
 import { recordDestruction } from "./referee.js";
 import { createOfficialOpponent } from "./official-opponent.js";
+import { loadBotRelease, type DrivenBot } from "./bot-release.js";
 
 const { values } = parseArgs({
   options: {
@@ -29,6 +30,9 @@ const { values } = parseArgs({
     units: { type: "string", default: "10" },
     mode: { type: "string", default: "combined" },
     opponent: { type: "string", default: "supalosa" },
+    "actor-release": { type: "string" },
+    "opponent-release": { type: "string" },
+    swap: { type: "boolean", default: false },
     out: { type: "string" },
   },
 });
@@ -57,9 +61,22 @@ async function main(): Promise<void> {
     if (!Number.isFinite(Number(values[key])) || Number(values[key]) < 0)
       throw new Error(`Invalid ${key}`);
   }
-  const agents = [
-    new WarbookBot("WarbookRed", "Americans", values.mode as PolicyMode),
-    values.opponent === "official"
+  const subject = values["actor-release"]
+    ? await loadBotRelease(values["actor-release"], "WarbookRed")
+    : {
+        bot: new WarbookBot(
+          "WarbookRed",
+          "Americans",
+          values.mode as PolicyMode,
+        ),
+        release: undefined,
+      };
+  const frozenOpponent = values["opponent-release"]
+    ? await loadBotRelease(values["opponent-release"], "WarbookBlue")
+    : undefined;
+  const opponent =
+    frozenOpponent?.bot ??
+    (values.opponent === "official"
       ? createOfficialOpponent("OfficialBlue")
       : values.opponent === "supalosa"
         ? new SupalosaOpponent("SupalosaBlue")
@@ -67,10 +84,16 @@ async function main(): Promise<void> {
             "WarbookBlue",
             "Americans",
             values.opponent as PolicyMode,
-          ),
-  ];
-  const warbookAgents = agents.filter(
-    (bot): bot is WarbookBot => bot instanceof WarbookBot,
+          ));
+  const opponentIsDriven =
+    Boolean(frozenOpponent) || allowedModes.includes(values.opponent!);
+  const agents = values.swap
+    ? [opponent, subject.bot]
+    : [subject.bot, opponent];
+  const driven = new Set<DrivenBot>([subject.bot]);
+  if (opponentIsDriven) driven.add(opponent as DrivenBot);
+  const warbookAgents = agents.filter((bot): bot is DrivenBot =>
+    driven.has(bot as DrivenBot),
   );
   warbookAgents.forEach((bot) => (bot.trace = trace));
   const manifest = {
@@ -88,6 +111,15 @@ async function main(): Promise<void> {
     bundledEngineSourceVersion: "0.83.3",
     policy: POLICY_VERSION,
     modes: agents.map((a) => a.mode),
+    participants: agents.map((bot) => ({
+      name: bot.name,
+      role: bot === subject.bot ? "subject" : "opponent",
+      controller: driven.has(bot as DrivenBot)
+        ? "synchronous-warbook"
+        : "native-opponent",
+      release: bot === subject.bot ? subject.release : frozenOpponent?.release,
+    })),
+    swapped: values.swap,
     observationProtocol: OBSERVATION_PROTOCOL,
     decisionInterval: 3,
     batchOrder: agents.map((a) => a.name),
@@ -103,6 +135,7 @@ async function main(): Promise<void> {
         "src/effects.ts",
         "src/referee.ts",
         "src/engine-diagnostics.mjs",
+        "src/bot-release.ts",
       ].map((path) => [path, sha256(path)]),
     ),
     resources: ["ra2.mix", "language.mix", "multi.mix"].map((name) => ({
@@ -132,7 +165,7 @@ async function main(): Promise<void> {
   const rulesHash = createHash("sha256")
     .update(game.gameApi.getRulesIni().toString())
     .digest("hex");
-  recordDestruction(agents[0], game.gameApi, (record) =>
+  recordDestruction(subject.bot, game.gameApi, (record) =>
     appendFileSync(`${dir}/referee.ndjson`, JSON.stringify(record) + "\n"),
   );
   const initial = game.getPlayerStats().map((p) => ({
@@ -178,10 +211,10 @@ async function main(): Promise<void> {
       }
       for (const bot of agents)
         if (
-          !(bot instanceof WarbookBot) &&
+          !driven.has(bot as DrivenBot) &&
           !game.gameApi.isPlayerDefeated(bot.name)
         )
-          bot.step(game.gameApi);
+          (bot as ReturnType<typeof createOfficialOpponent>).step(game.gameApi);
       await game.update();
       if (game.getCurrentTick() % 4500 === 0)
         console.log(

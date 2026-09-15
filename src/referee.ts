@@ -13,7 +13,9 @@ export function recordDestruction(
     if (unit?.owner) known.set(id, { name: unit.name, owner: unit.owner });
   };
   api.getAllUnits().forEach(remember);
-  bot.onGameEvent = (event) => {
+  const originalEvent = bot.onGameEvent.bind(bot);
+  bot.onGameEvent = (event, gameApi) => {
+    originalEvent(event, gameApi);
     if (event.type === ApiEventType.ObjectSpawn) remember(event.target);
     if (event.type === ApiEventType.ObjectDestroy) {
       write({
