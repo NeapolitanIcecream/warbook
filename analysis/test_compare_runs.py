@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from compare_runs import DataError, load_runs, summarize
+from compare_runs import DataError, binomial_interval, load_runs, summarize
 
 
 class ReportTests(unittest.TestCase):
@@ -39,7 +39,7 @@ class ReportTests(unittest.TestCase):
                               'stats': [{'name': 'red', 'defeated': not win}, {'name': 'blue', 'defeated': win}]}
                     for name, value in [('manifest', manifest), ('initial', initial), ('result', result)]:
                         self.write(directory / f'{name}.json', value)
-                    rows.append({'dir': str(directory)})
+                    rows.append({'dir': str(directory), 'subject': subject, 'opponent': opponent, 'map': 'map'})
         self.write(self.root / 'summary.json', {'rows': rows})
         self.write(self.root / 'plan.json', {'subjects': self.releases, 'maps': ['map'],
                                           'opponents': self.releases, 'rounds': 2})
@@ -86,6 +86,26 @@ class ReportTests(unittest.TestCase):
         data['options']['credits'] = 50000
         self.write(path, data)
         with self.assertRaisesRegex(DataError, 'Mixed comparison protocols'):
+            load_runs(self.root)
+
+    def test_tiny_perfect_samples_do_not_exclude_even_odds(self):
+        self.assertLess(binomial_interval(4, 4)[0], 0.5)
+        self.assertGreater(binomial_interval(0, 4)[1], 0.5)
+
+    def test_correct_total_does_not_hide_a_missing_treatment_cell(self):
+        path = self.root / 'summary.json'
+        data = json.loads(path.read_text())
+        data['rows'][-1]['opponent'] = 'old'
+        self.write(path, data)
+        with self.assertRaisesRegex(DataError, 'per-cell coverage'):
+            load_runs(self.root)
+
+    def test_mid_batch_actor_changes_cannot_hide_under_one_label(self):
+        path = self.root / 'new-old-0/manifest.json'
+        data = json.loads(path.read_text())
+        data['participants'][0]['release']['sha256'] = 'c' * 64
+        self.write(path, data)
+        with self.assertRaisesRegex(DataError, 'multiple actor versions'):
             load_runs(self.root)
 
 

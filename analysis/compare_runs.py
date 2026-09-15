@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Recompute frozen-run ledgers without changing scoring or inferring causality."""
 import argparse
+import hashlib
 import json
 from collections import Counter, defaultdict
 from pathlib import Path
 
-from statistical_budget import wilson
+import scipy
+from scipy.stats import binomtest
 
 
 class DataError(ValueError):
@@ -40,6 +42,11 @@ def load_runs(root):
         subjects = plan.get('subjects', plan.get('modes'))
         maps = plan.get('maps', [plan.get('map')])
         opponent_count = len(plan.get('opponents', {})) or 1
+        opponent_labels = list(plan.get('opponents', {})) or ['single']
+        planned_cells = {(subject, map_name, opponent): plan['rounds']
+                         for subject in subjects for map_name in maps for opponent in opponent_labels}
+        actual_cells = Counter()
+        alias_identities = defaultdict(set)
         expected = plan['rounds'] * len(subjects) * len(maps) * opponent_count
         if len(rows) != expected:
             raise DataError(f'Incomplete ledger {ledger}: expected {expected} starts, found {len(rows)}')
@@ -78,6 +85,13 @@ def load_runs(root):
             if set(starts) != {p['name'] for p in participants}:
                 raise DataError(f'Initial roster differs from participants: {directory}')
             options = {k: v for k, v in initial['options'].items() if k not in ('agents', 'mapName')}
+            subject_alias = row.get('subject') if 'subjects' in plan else row.get('mode')
+            opponent_alias = row.get('opponent') if 'opponents' in plan else 'single'
+            cell_key = (subject_alias, initial['options']['mapName'], opponent_alias)
+            if cell_key not in planned_cells:
+                raise DataError(f'Run does not belong to a planned treatment/map/opponent cell: {directory}')
+            actual_cells[cell_key] += 1
+            alias_identities[subject_alias].add(sid)
             protocol = {
                 'api': manifest['api'], 'engine': manifest['bundledEngineSourceVersion'],
                 'observation': subject_info.get('observationProtocol', manifest['observationProtocol']),
@@ -92,6 +106,10 @@ def load_runs(root):
                 'clean': clean, 'win': clean and winner == subject['name'], 'stop': result['stopReason'],
                 'replaySha256': result.get('replay', {}).get('sha256'),
             })
+        if dict(actual_cells) != planned_cells:
+            raise DataError('Incomplete per-cell coverage; the total run count alone is insufficient')
+        if any(len(identities) != 1 for identities in alias_identities.values()):
+            raise DataError('One treatment label contains multiple actor versions')
     # Different maps may legitimately carry different rules. Within a map the comparison must agree.
     by_map = defaultdict(set)
     for run in runs:
@@ -108,6 +126,11 @@ def cell(rows):
         'stops': dict(Counter(r['stop'] for r in rows)),
         'normalWinFractionOfStarts': sum(r['win'] for r in rows) / len(rows),
     }
+
+
+def binomial_interval(wins, n):
+    interval = binomtest(wins, n).proportion_ci(confidence_level=0.95, method='exact')
+    return [float(interval.low), float(interval.high)]
 
 
 def summarize(runs):
@@ -135,7 +158,7 @@ def summarize(runs):
         wins = sum(r['win'] if r['subject'] == a else not r['win'] for r in clean)
         duels.append({'a': a, 'b': b, 'starts': len(rows), 'aWins': wins, 'bWins': len(clean) - wins,
                       'nonClean': len(rows) - len(clean),
-                      'conditionalWilson95': wilson(wins, len(clean)) if len(clean) == len(rows) and clean else None})
+                      'conditionalBinomial95': binomial_interval(wins, len(clean)) if len(clean) == len(rows) and clean else None})
     starts = defaultdict(Counter)
     slots = defaultdict(Counter)
     replay_groups = defaultdict(list)
@@ -145,8 +168,10 @@ def summarize(runs):
         if run['replaySha256']:
             replay_groups[run['replaySha256']].append(run['id'])
     return {
+        'analysisSourceSha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         'scope': 'descriptive development analysis; no automatic promotion or causal attribution',
-        'intervalAssumptions': 'Wilson intervals only illustrate independent binary sampling uncertainty; independence, source generalization and multiple-selection adjustment are not established. These are not opponent-pool gain intervals.',
+        'intervalMethod': {'name': 'Clopper-Pearson exact binomial', 'scipy': scipy.__version__},
+        'intervalAssumptions': 'Intervals only illustrate independent binary sampling uncertainty; independence, source generalization and multiple-selection adjustment are not established. These are not opponent-pool gain intervals.',
         'starts': len(runs), 'totals': totals,
         'cells': [{'subject': key[0], 'map': key[1], 'opponent': key[2], **cell(rows)} for key, rows in sorted(groups.items())],
         'sameCellCoverage': balanced_cells,
@@ -177,8 +202,8 @@ def render(report):
     lines += ['', '## 直接对战与镜像', '',
               '下列区间仅表示独立二项抽样假设下的量级；未验证独立性，未作多重选择调整，不是固定池增益的置信区间。', '']
     for row in report['duels']:
-        interval = row['conditionalWilson95']
-        ci = f"；条件 Wilson 95% 区间 {interval[0]:.1%}–{interval[1]:.1%}" if interval else '；存在未正常结束局，不计算二项区间'
+        interval = row['conditionalBinomial95']
+        ci = f"；条件 Clopper–Pearson 95% 区间 {interval[0]:.1%}–{interval[1]:.1%}" if interval else '；存在未正常结束局，不计算二项区间'
         lines.append(f"- {short(row['a'])} 对 {short(row['b'])}：{row['aWins']}:{row['bWins']}，共 {row['starts']} 次启动{ci}。")
     for row in report['mirrors']:
         lines.append(f"- 镜像 {short(row['subject'])}：被评估槽位胜 {row['cleanWins']}/{row['starts']}，单列作初始化/槽位诊断。")

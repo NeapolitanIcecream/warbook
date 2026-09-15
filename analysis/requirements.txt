@@ -1,0 +1,2 @@
+# Matches the existing local analysis runtime; game/player code does not import SciPy.
+scipy==1.13.1

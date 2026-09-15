@@ -18,7 +18,8 @@
     "bot:build": "node --import tsx scripts/build-bot.ts",
     "analyze": "python3 analysis/compare_runs.py",
     "analyze:encounter": "node --env-file-if-exists=.env --import tsx scripts/encounter.ts",
-    "test:analysis": "python3 -m unittest discover -s analysis -p 'test_*.py'"
+    "test:analysis": "python3 -m unittest discover -s analysis -p 'test_*.py'",
+    "experiment:matrix": "node --import tsx scripts/matrix.ts"
   },
   "dependencies": {
     "@chronodivide/game-api": "0.79.0",

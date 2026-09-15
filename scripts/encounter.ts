@@ -14,6 +14,7 @@ import {
 import { createInterface } from "node:readline";
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
+import { fileURLToPath } from "node:url";
 import { fileHash } from "../src/bot-release.js";
 import { combatSignals } from "../src/analysis/combat-signals.js";
 
@@ -127,6 +128,7 @@ const anchors: any[] = [],
   mismatches: any[] = [],
   ambiguousRefs = new Set<string>();
 const aliases = new Map<string, number>();
+const refNames = new Map<string, string>();
 const anchorNames = new Set<string>();
 function anchor(kind: string, tick: number, detail: any = {}) {
   if (anchorNames.has(kind)) return;
@@ -140,6 +142,8 @@ const replay = Replay.parse(readFileSync(expected.replay.file, "utf8"));
 const start = performance.now();
 await cdapi.init(resolve(process.env.MIX_DIR ?? "assets/ra2"));
 const game = await cdapi.loadReplay(replay);
+const homeData = game.getPlayer(actor).getPlayerData().startLocation;
+const home = { x: homeData.x, y: homeData.y };
 let focusId: number | undefined,
   focusSeen: number | undefined,
   previous: { tick: number; tank: Tank } | undefined;
@@ -209,6 +213,7 @@ try {
           });
       }
       for (const hint of hints.get(tick) ?? []) {
+        refNames.set(hint.ref, hint.name);
         const matches = own.filter(
           (u) => signature(shape(u)) === signature(hint),
         );
@@ -256,6 +261,14 @@ try {
       while (ring.length && ring[0].tick < tick - 150) ring.shift();
       const focus = ownArmor.find((u) => u.id === focusId);
       if (focus) {
+        if (Math.hypot(focus.x - home.x, focus.y - home.y) > 12)
+          anchor("first_focus_observed_outside_home_12", tick, {
+            source:
+              "sampled tile position, not an assertion of assault commitment",
+            alreadyOutsideAtFirstSeen: tick === focusSeen,
+            ownArmor: ownArmor.length,
+            position: { x: focus.x, y: focus.y },
+          });
         const close = enemyArmor.filter((e) => distance(focus, e) < 12);
         if (close.length)
           anchor("first_visible_armor_within_12_tiles", tick, {
@@ -300,6 +313,10 @@ try {
         anchor("first_tagged_order", tick, {
           task: values.task,
           intent: tagged.intent,
+          units: tagged.intent.refs.map((ref: string) => ({
+            ref,
+            name: refNames.get(ref),
+          })),
           ownArmor: ownArmor.length,
           opponentArmor: frame.opponent.length,
           source:
@@ -346,10 +363,13 @@ try {
     informationBoundary:
       "weapon/attack inspection and opponent-owned state are diagnostic only, never fed to actors",
     source: {
+      analyzerSha256: fileHash(fileURLToPath(import.meta.url)),
+      signalRulesSha256: fileHash("src/analysis/combat-signals.ts"),
       directory,
       replaySha256: expected.replay.sha256,
       gameTimestamp: replay.gameTimestamp,
       actor,
+      home,
       opponent,
       task: values.task,
       policyReleases: manifest.participants,

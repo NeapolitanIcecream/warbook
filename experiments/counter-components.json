@@ -1,0 +1,56 @@
+{
+  "purpose": "Opening component attribution pilot; behavior and interaction checks, not strength confirmation",
+  "subjects": {
+    "neither": {
+      "ref": "68852328061240c50e622aae64cef7e9289af444",
+      "mode": "combined"
+    },
+    "assembly": {
+      "ref": "2759b635ba4e95f3034b0c02c280ed86e3bb92a0",
+      "mode": "assembly-only"
+    },
+    "filter": {
+      "ref": "2759b635ba4e95f3034b0c02c280ed86e3bb92a0",
+      "mode": "contact-filter"
+    },
+    "both": {
+      "ref": "a64a79e32b7333c26b1d4bfdb43405464c51173a",
+      "mode": "counter"
+    }
+  },
+  "opponents": {
+    "m0": {
+      "ref": "68852328061240c50e622aae64cef7e9289af444",
+      "mode": "combined"
+    }
+  },
+  "maps": [
+    "mp03t4.map",
+    "mp06t2.map"
+  ],
+  "rounds": 2,
+  "factors": {
+    "definitions": {
+      "A": "Opening rally destination until 4 tanks or tick 9000",
+      "B": "Explicit target filtering outside 12 tiles of own base during that same opening phase; does not disable native attack-move"
+    },
+    "conditions": {
+      "neither": {
+        "A": false,
+        "B": false
+      },
+      "assembly": {
+        "A": true,
+        "B": false
+      },
+      "filter": {
+        "A": false,
+        "B": true
+      },
+      "both": {
+        "A": true,
+        "B": true
+      }
+    }
+  }
+}
