@@ -49,6 +49,8 @@ export interface Observation {
   power: { total: number; drain: number; isLowPower: boolean };
   home: Point;
   starts: Point[];
+  scoutPoints?: readonly Point[];
+  scoutObservedTick?: number;
   own: Unit[];
   enemies: Contact[];
   products: Product[];

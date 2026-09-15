@@ -140,3 +140,40 @@ test("losing the construction yard does not switch the production faction", () =
       .some((i) => i.kind === "queue" && i.product.name === "MTNK"),
   );
 });
+test("after visiting the spawns, scouting continues and keeps a progressing destination", () => {
+  const policy = new Commander("combined");
+  const o = {
+    ...observation([{ ...tank(), x: 70, y: 70 }]),
+    scoutPoints: [
+      { x: 100, y: 100 },
+      { x: 120, y: 30 },
+    ],
+  };
+  assert.ok(
+    policy
+      .decide(o)
+      .some((i) => i.kind === "attackMove" && i.x === 100 && i.y === 100),
+  );
+  const later = { ...o, tick: 950, own: [{ ...tank(), x: 85, y: 85 }] };
+  assert.ok(
+    policy
+      .decide(later)
+      .some((i) => i.kind === "attackMove" && i.x === 100 && i.y === 100),
+  );
+});
+test("a scout destination without progress is postponed instead of retried forever", () => {
+  const policy = new Commander("combined");
+  const o = {
+    ...observation([{ ...tank(), x: 70, y: 70 }]),
+    scoutPoints: [
+      { x: 100, y: 100 },
+      { x: 120, y: 30 },
+    ],
+  };
+  policy.decide(o);
+  assert.ok(
+    policy
+      .decide({ ...o, tick: 950 })
+      .some((i) => i.kind === "attackMove" && i.x === 120 && i.y === 30),
+  );
+});

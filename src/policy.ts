@@ -6,7 +6,7 @@ import {
   type Point,
 } from "./model.js";
 
-export const POLICY_VERSION = "warbook-0.1.2";
+export const POLICY_VERSION = "warbook-0.1.3";
 export type PolicyMode =
   | "baseline"
   | "cohesive"
@@ -33,7 +33,51 @@ export class Commander {
   private lastDeploy = new Map<string, number>();
   private exploredStarts = new Set<number>();
   private lastEnemyPosition?: Point;
+  private scoutTarget?: Point;
+  private scoutBestDistance = Infinity;
+  private scoutProgressTick = 0;
+  private postponedScouts = new Map<string, number>();
   constructor(readonly mode: PolicyMode = "baseline") {}
+
+  private scout(o: Observation, army: Unit[]): Point | undefined {
+    const mobile = army.filter((u) => u.mobile);
+    if (!mobile.length) return undefined;
+    const points = o.scoutPoints ?? [];
+    const key = (p: Point) => `${p.x},${p.y}`;
+    if (this.scoutTarget) {
+      const target = this.scoutTarget;
+      const distance = Math.min(...mobile.map((u) => distance2(u, target)));
+      if (distance < this.scoutBestDistance) {
+        this.scoutBestDistance = distance;
+        this.scoutProgressTick = o.tick;
+      }
+      if (!points.some((p) => p.x === target.x && p.y === target.y))
+        this.scoutTarget = undefined;
+      else if (o.tick - this.scoutProgressTick >= 900) {
+        this.postponedScouts.set(key(target), o.tick + 3600);
+        this.scoutTarget = undefined;
+      }
+    }
+    if (!this.scoutTarget) {
+      const center = {
+        x: mobile.reduce((s, u) => s + u.x, 0) / mobile.length,
+        y: mobile.reduce((s, u) => s + u.y, 0) / mobile.length,
+      };
+      this.scoutTarget = [...points]
+        .filter((p) => (this.postponedScouts.get(key(p)) ?? 0) <= o.tick)
+        .sort(
+          (a, b) =>
+            distance2(a, center) - distance2(b, center) ||
+            a.x - b.x ||
+            a.y - b.y,
+        )[0];
+      this.scoutProgressTick = o.tick;
+      this.scoutBestDistance = this.scoutTarget
+        ? Math.min(...mobile.map((u) => distance2(u, this.scoutTarget!)))
+        : Infinity;
+    }
+    return this.scoutTarget;
+  }
 
   decide(o: Observation): Intent[] {
     const intents: Intent[] = [];
@@ -159,7 +203,8 @@ export class Commander {
       unexplored.sort(
         (a, b) => distance2(a, o.home) - distance2(b, o.home),
       )[0] ??
-      o.starts[(Math.floor(o.tick / 900) + 1) % o.starts.length];
+      this.scout(o, army) ??
+      o.starts.find((p) => distance2(p, o.home) > 25);
     if (!destination) return intents;
     const order = (
       units: Unit[],

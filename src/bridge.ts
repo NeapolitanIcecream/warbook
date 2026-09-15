@@ -17,9 +17,10 @@ import {
   type Observation,
   type Intent,
   type Unit,
+  type Point,
 } from "./model.js";
 
-export const OBSERVATION_PROTOCOL = "api-shroud-v0-visible-placement";
+export const OBSERVATION_PROTOCOL = "api-shroud-v0-visible-placement-frontier";
 export interface Trace {
   tick: number;
   actor: string;
@@ -37,6 +38,8 @@ export class WarbookBot extends Bot {
   private lastSnapshotTick = -150;
   private intentSequence = 0;
   private pendingEffects: PendingEffect[] = [];
+  private scoutPoints: readonly Point[] = [];
+  private lastScoutScan = -150;
   public trace?: (event: Trace) => void;
   public autoTick = false;
   public observation?: Observation;
@@ -82,6 +85,19 @@ export class WarbookBot extends Bot {
     this.currentRefs.clear();
     const data = this.player.getPlayerData();
     const tick = this.game.getCurrentTick();
+    if (tick - this.lastScoutScan >= 150) {
+      const size = this.game.map.getRealMapSize();
+      const points: Point[] = [];
+      for (let x = 4; x < size.width; x += 8)
+        for (let y = 4; y < size.height; y += 8) {
+          const tile = this.game.map.getTile(x, y);
+          // Static map domain and our own shroud only, without unseen terrain or occupancy queries.
+          if (tile && !this.game.map.isVisibleTile(tile, this.name))
+            points.push(Object.freeze({ x, y }));
+        }
+      this.scoutPoints = Object.freeze(points);
+      this.lastScoutScan = tick;
+    }
     const own = this.sorted(this.player.getVisibleUnits("self")).map(
       (u): Unit => ({
         ref: this.ref(u),
@@ -198,6 +214,8 @@ export class WarbookBot extends Bot {
       products,
       queues,
       buildSites,
+      scoutPoints: this.scoutPoints,
+      scoutObservedTick: this.lastScoutScan,
     };
     if (this.lastObservation) {
       const before = new Set(this.lastObservation.own.map((u) => u.ref));
