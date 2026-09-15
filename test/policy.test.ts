@@ -305,3 +305,32 @@ test("the first raider scouts a candidate spawn despite a nearer frontline enemy
   );
   assert(!orders.some((i) => i.kind === "attack"));
 });
+
+test("a damaged raider disengages from guards and keeps its retreat commitment", () => {
+  const o = observation([{ ...tank(), hp: 100 }]);
+  o.enemies = [
+    {
+      ref: "guard",
+      name: "HTNK",
+      type: 7,
+      x: 35,
+      y: 35,
+      hp: 300,
+      maxHp: 300,
+      observedTick: 0,
+    },
+  ];
+  const raid = new RaidTask();
+  const retreat = raid.plan(o, o.own, { x: 70, y: 70 });
+  assert(
+    retreat &&
+      retreat.intent.kind === "move" &&
+      retreat.intent.task === "raid-retreat",
+  );
+  assert.equal(retreat.intent.x, o.home.x);
+  assert.equal(
+    raid.plan({ ...o, tick: 60, enemies: [] }, o.own, { x: 70, y: 70 })?.intent
+      .task,
+    "raid-retreat",
+  );
+});

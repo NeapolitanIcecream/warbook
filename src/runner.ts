@@ -127,6 +127,7 @@ async function main(): Promise<void> {
     sourceHashes: Object.fromEntries(
       [
         "src/policy.ts",
+        "src/raiding.ts",
         "src/bridge.ts",
         "src/runner.ts",
         "src/opponent.ts",

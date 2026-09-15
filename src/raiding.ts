@@ -11,6 +11,8 @@ import {
 export class RaidTask {
   private members = new Set<string>();
   private lastContact?: Contact;
+  private retreatUntil = 0;
+  private retreatGoal?: Point;
 
   plan(
     o: Observation,
@@ -60,6 +62,48 @@ export class RaidTask {
     }
     const units = tanks.filter((u) => this.members.has(u.ref));
     if (!units.length) return undefined;
+    const guards = o.enemies.filter(
+      (e) =>
+        !e.airborne &&
+        e.type !== 2 &&
+        !["CMIN", "HARV"].includes(e.name) &&
+        units.some((u) => distance2(u, e) < 100),
+    );
+    const nearbyFriends = tanks.filter((u) =>
+      units.some((r) => distance2(u, r) < 100),
+    );
+    const armoredGuards = guards.filter((e) => e.type === 7);
+    const pressured =
+      guards.length > 0 &&
+      (units.some((u) => u.hp < u.maxHp * 0.65) ||
+        armoredGuards.length > nearbyFriends.length);
+    if (pressured) {
+      this.retreatUntil = o.tick + 180;
+      if (!this.retreatGoal) {
+        const support = tanks
+          .filter(
+            (u) =>
+              !this.members.has(u.ref) &&
+              guards.every((e) => distance2(u, e) >= 100),
+          )
+          .sort((a, b) => distance2(a, units[0]) - distance2(b, units[0]))[0];
+        this.retreatGoal = support
+          ? { x: support.x, y: support.y }
+          : { ...o.home };
+      }
+    }
+    if (this.retreatGoal && o.tick < this.retreatUntil)
+      return {
+        units,
+        key: `raid-retreat:${this.retreatGoal.x}:${this.retreatGoal.y}`,
+        intent: {
+          kind: "move",
+          refs: [],
+          ...this.retreatGoal,
+          task: "raid-retreat",
+        },
+      };
+    this.retreatGoal = undefined;
     return {
       units,
       key: target ? `raid:${target.ref}` : `raid-search:${goal.x}:${goal.y}`,
