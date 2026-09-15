@@ -1,0 +1,33 @@
+{
+  "purpose": "One new-map check of the frozen formed candidate after the development comparison; no tuning or map selection from its game outcomes",
+  "subjects": {
+    "m0": {
+      "ref": "68852328061240c50e622aae64cef7e9289af444",
+      "mode": "combined"
+    },
+    "formed": {
+      "ref": "6ab5c9f7c1a4ce3e82cb1ea4d76b3d45bcbfda91",
+      "mode": "formed"
+    }
+  },
+  "opponents": {
+    "supalosa": { "native": "supalosa" },
+    "m0": {
+      "ref": "68852328061240c50e622aae64cef7e9289af444",
+      "mode": "combined"
+    },
+    "counter": {
+      "ref": "a64a79e32b7333c26b1d4bfdb43405464c51173a",
+      "mode": "counter"
+    }
+  },
+  "maps": ["mp08t2.map"],
+  "rounds": 8,
+  "decision": {
+    "budget": "48 starts, 24 per subject; report separately from development",
+    "selection": "Selected before any policy game on this map, after tick-zero layout/load inspection: 120x120 world extent, two starts, same tracked-vehicle region, 56-node path. The other inspected custom map was unavailable locally, with its load error retained.",
+    "condition": "Run only if the frozen formed opening is retained after the larger development comparison; do not change its code or opponents for this check",
+    "scope": "Evidence for this additional map only. No new opponent family, human skill or formal D_target claim. Once its results guide changes it is an exposed development source.",
+    "failure": "Preserve losses, limits and errors. Keep the old default if a material regression remains unresolved; no repeated candidate adjustments against this check while still calling it unseen."
+  }
+}
