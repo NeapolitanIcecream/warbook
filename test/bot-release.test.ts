@@ -1,6 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { copyFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { resolve } from "node:path";
 import { buildBot } from "../scripts/build-bot.js";
 import { loadBotRelease } from "../src/bot-release.js";
@@ -95,6 +101,30 @@ test("a modified frozen artifact is refused before it can run", async () => {
     await assert.rejects(
       loadBotRelease(`${dir}/release.json`, "Untrusted"),
       /artifact hash mismatch/,
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("frozen runtime compatibility follows the SDK, not unrelated application lock metadata", async () => {
+  const release = await buildBot("HEAD");
+  const dir = mkdtempSync(resolve("work/bot-runtime-test-"));
+  try {
+    copyFileSync(resolve(release.path, "../bot.mjs"), `${dir}/bot.mjs`);
+    const metadata = {
+      ...JSON.parse(readFileSync(release.path, "utf8")),
+      lockSha256: "0".repeat(64),
+    };
+    writeFileSync(`${dir}/release.json`, JSON.stringify(metadata));
+    assert((await loadBotRelease(`${dir}/release.json`, "SameRuntime")).bot);
+    writeFileSync(
+      `${dir}/release.json`,
+      JSON.stringify({ ...metadata, apiSha256: "0".repeat(64) }),
+    );
+    await assert.rejects(
+      loadBotRelease(`${dir}/release.json`, "DifferentRuntime"),
+      /dependencies differ/,
     );
   } finally {
     rmSync(dir, { recursive: true, force: true });

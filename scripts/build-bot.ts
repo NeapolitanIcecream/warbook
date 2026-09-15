@@ -28,10 +28,14 @@ export async function buildBot(ref: string, mode = "combined") {
     });
     execFileSync("tar", ["-xf", "-", "-C", source], { input: archive });
     const lockSha256 = fileHash(`${source}/package-lock.json`);
-    if (lockSha256 !== fileHash("package-lock.json"))
-      throw new Error(
-        "Build the frozen source with its locked dependency environment",
-      );
+    const expectedApi = JSON.parse(
+      readFileSync(`${source}/package.json`, "utf8"),
+    ).dependencies["@chronodivide/game-api"];
+    const installedApi = JSON.parse(
+      readFileSync("node_modules/@chronodivide/game-api/package.json", "utf8"),
+    ).version;
+    if (expectedApi !== installedApi)
+      throw new Error("Build the frozen source with its pinned SDK version");
     const result = await build({
       absWorkingDir: source,
       stdin: {

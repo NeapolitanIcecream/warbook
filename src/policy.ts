@@ -17,7 +17,8 @@ export type PolicyMode =
   | "crush"
   | "tempo"
   | "combined"
-  | "raid";
+  | "raid"
+  | "counter";
 export const POLICY_MODES: readonly PolicyMode[] = [
   "baseline",
   "cohesive",
@@ -28,6 +29,7 @@ export const POLICY_MODES: readonly PolicyMode[] = [
   "tempo",
   "combined",
   "raid",
+  "counter",
 ];
 
 /** Synchronous policy. It has no engine handle, world events, native IDs or wall clock. */
@@ -41,6 +43,7 @@ export class Commander {
   private scoutProgressTick = 0;
   private postponedScouts = new Map<string, number>();
   private readonly raiding = new RaidTask();
+  private counterAttackStarted = false;
   constructor(readonly mode: PolicyMode = "baseline") {}
 
   private scout(o: Observation, army: Unit[]): Point | undefined {
@@ -87,7 +90,9 @@ export class Commander {
     const intents: Intent[] = [];
     const count = (name: string) => o.own.filter((u) => u.name === name).length;
     const allied = o.side === 0;
-    const earlyArmor = ["tempo", "combined", "raid"].includes(this.mode);
+    const earlyArmor = ["tempo", "combined", "raid", "counter"].includes(
+      this.mode,
+    );
     const names = allied
       ? {
           power: "GAPOWR",
@@ -187,6 +192,10 @@ export class Commander {
       (u) => u.combat && (u.mobile || u.deployed) && !u.harvester && !u.mcv,
     );
     if (!army.length) return intents;
+    if (this.mode === "counter" && (count(names.tank) >= 4 || o.tick >= 9000))
+      this.counterAttackStarted = true;
+    const holdingCounter =
+      this.mode === "counter" && !this.counterAttackStarted;
     for (const [i, p] of o.starts.entries()) {
       if (distance2(p, o.home) < 25 || army.some((u) => distance2(u, p) < 36))
         this.exploredStarts.add(i);
@@ -276,7 +285,10 @@ export class Commander {
       for (const unit of army.filter((u) => !raiders.has(u.ref))) {
         const nearby = [...o.enemies]
           .filter(
-            (e) => (!e.airborne || unit.antiAir) && distance2(unit, e) < 196,
+            (e) =>
+              (!e.airborne || unit.antiAir) &&
+              distance2(unit, e) < 196 &&
+              (!holdingCounter || distance2(e, o.home) < 144),
           )
           .sort(
             (a, b) =>
@@ -286,7 +298,7 @@ export class Commander {
           );
         const target = nearby[0];
         if (
-          ["crush", "combined", "raid"].includes(this.mode) &&
+          ["crush", "combined", "raid", "counter"].includes(this.mode) &&
           unit.crusher &&
           target?.type === 3 &&
           !target.airborne &&
@@ -295,7 +307,12 @@ export class Commander {
           order(
             [unit],
             "crush:" + target.ref,
-            { kind: "crush", refs: [], target: target.ref },
+            {
+              kind: "crush",
+              refs: [],
+              target: target.ref,
+              ...(holdingCounter ? { task: "counter-defense" } : {}),
+            },
             60,
           );
           continue;
@@ -323,12 +340,18 @@ export class Commander {
           order(
             [unit],
             "attack:" + target.ref,
-            { kind: "attack", refs: [], target: target.ref },
+            {
+              kind: "attack",
+              refs: [],
+              target: target.ref,
+              ...(holdingCounter ? { task: "counter-defense" } : {}),
+            },
             180,
           );
         else {
-          const goal =
-            !unit.antiAir && "airborne" in destination && destination.airborne
+          const goal = holdingCounter
+            ? { x: o.home.x + 4, y: o.home.y + 4 }
+            : !unit.antiAir && "airborne" in destination && destination.airborne
               ? (enemies.find((e) => !e.airborne) ?? o.home)
               : destination;
           order(
@@ -339,6 +362,7 @@ export class Commander {
               refs: [],
               x: goal.x,
               y: goal.y,
+              ...(holdingCounter ? { task: "counter-rally" } : {}),
             },
             450,
           );

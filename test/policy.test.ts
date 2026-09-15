@@ -334,3 +334,40 @@ test("a damaged raider disengages from guards and keeps its retreat commitment",
     "raid-retreat",
   );
 });
+
+test("counterattack keeps early armor near base then commits its assembled force", () => {
+  const counter = new Commander("counter");
+  const o = observation();
+  o.enemies = [
+    {
+      ref: "distant",
+      name: "HTNK",
+      type: 7,
+      x: 40,
+      y: 30,
+      hp: 300,
+      maxHp: 300,
+      observedTick: 0,
+    },
+  ];
+  const waiting = counter.decide(o);
+  assert(
+    waiting.some((i) => i.kind === "attackMove" && i.task === "counter-rally"),
+  );
+  assert(!waiting.some((i) => i.kind === "attack"));
+  const assembled = {
+    ...o,
+    tick: 450,
+    own: Array.from({ length: 4 }, (_, i) => tank(`tank-${i}`)),
+  };
+  assert(
+    counter
+      .decide(assembled)
+      .some((i) => i.kind === "attack" && i.target === "distant"),
+  );
+  assert(
+    !counter
+      .decide({ ...o, tick: 900 })
+      .some((i) => i.task === "counter-rally"),
+  );
+});

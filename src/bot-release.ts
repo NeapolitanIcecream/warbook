@@ -49,8 +49,7 @@ export async function loadBotRelease(path: string, name: string) {
   const hashes = engineHashes();
   if (
     hashes.apiSha256 !== release.apiSha256 ||
-    hashes.resourceSha256 !== release.resourceSha256 ||
-    fileHash("package-lock.json") !== release.lockSha256
+    hashes.resourceSha256 !== release.resourceSha256
   )
     throw new Error(
       "Frozen bot dependencies differ from the running environment",
