@@ -205,6 +205,27 @@ test("execution evidence reaches its owning task without treating movement as co
   assert.deepEqual(c.controlReport!.combat.executionEvidence, []);
 });
 
+test("old or unassigned command objects cannot cross the current execution boundary", () => {
+  const c = new Commander("factory-exit"),
+    o = observation();
+  const first = c.decide(o);
+  assert.doesNotThrow(() => c.assertCurrentIntent(first[0], o.tick));
+  const later = { ...o, tick: o.tick + 3 };
+  c.decide(later);
+  assert.throws(
+    () => c.assertCurrentIntent(first[0], later.tick),
+    /current control decision/,
+  );
+  assert.throws(
+    () =>
+      c.assertCurrentIntent(
+        { kind: "move", refs: ["a"], x: 20, y: 20 },
+        later.tick,
+      ),
+    /current control decision/,
+  );
+});
+
 test("decision shadow uses independent observation copies and fails on the first differing command", () => {
   const comparison = new DecisionShadow(),
     o = observation();

@@ -280,6 +280,7 @@ export class WarbookBot extends Bot {
     if (!o || o.tick !== this.game.getCurrentTick())
       throw new Error("Stale observation");
     const plan = this.commander.controlPlan;
+    if (plan && plan.tick !== o.tick) throw new Error("Stale control decision");
     if (
       plan &&
       (plan.combat.revision !== this.lastCombatRevision ||
@@ -309,6 +310,7 @@ export class WarbookBot extends Bot {
     const assigned = new Set<string>();
     const changedQueues = new Set<number>();
     for (const intent of intents) {
+      this.commander.assertCurrentIntent(intent, o.tick);
       if (
         "refs" in intent &&
         intent.refs.some((ref) => !owned.has(ref) || assigned.has(ref))

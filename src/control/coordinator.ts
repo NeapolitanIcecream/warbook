@@ -31,6 +31,17 @@ export class ControlCoordinator {
   origin(intent: Intent): IntentOrigin | undefined {
     return this.origins.get(intent);
   }
+  assertCurrentIntent(intent: Intent, tick: number): void {
+    const origin = this.origins.get(intent);
+    if (!origin || this.plan?.tick !== tick)
+      throw new Error("Intent is not from the current control decision");
+    const task =
+      origin.controller === "production"
+        ? this.plan.production
+        : this.plan.combat;
+    if (origin.id !== task.id || origin.revision !== task.revision)
+      throw new Error("Intent belongs to a superseded task");
+  }
 
   decide(o: Observation): Intent[] {
     const { strategy, tactics, production } = this.components;
@@ -80,6 +91,7 @@ export class ControlCoordinator {
     if (plan.tick !== o.tick) throw new Error("Stale control plan");
     if (plan.combat.id === plan.production.id)
       throw new Error("Task IDs must be distinct");
+    this.origins = new WeakMap();
     const owners = new Map<string, string>();
     const owned = new Set(o.own.map((u) => u.ref));
     for (const task of [

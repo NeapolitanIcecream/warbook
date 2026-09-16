@@ -69,6 +69,9 @@ export class Commander {
   intentOrigin(intent: Intent) {
     return this.control?.origin(intent);
   }
+  assertCurrentIntent(intent: Intent, tick: number) {
+    this.control?.assertCurrentIntent(intent, tick);
+  }
   acceptEffect(evidence: ExecutionEvidence) {
     this.control?.acceptEffect(evidence);
   }
