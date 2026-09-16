@@ -1,0 +1,8 @@
+{
+  "purpose":"Place the fort toward the observed mining approach and keep the garrison around its actual fire support position",
+  "subjects":{"line":{"ref":"5afd05d70def093ad9bca3dbc3f665b2a356588e","mode":"bastion"}},
+  "opponents":{"published":{"ref":"8326311288ec685c3da43b1d182071dc36938fe8","mode":"factory-exit"}},
+  "maps":["mp03t4.map","mp06t2.map"],
+  "rounds":2,
+  "decision":{"budget":"4 starts; normal resources and the same six-tank/mobile-defense policy","check":"Actual fort position, infantry and armor support overlap, economic survival and complete-game result"}
+}
