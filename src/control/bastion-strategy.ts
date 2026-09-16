@@ -229,7 +229,7 @@ export class BastionStrategy implements StrategicController {
         {
           product: fort,
           count:
-            false
+            this.doctrine === "bastion" && o.own.some((u) => u.name === factory)
               ? 1
               : 0,
         },
