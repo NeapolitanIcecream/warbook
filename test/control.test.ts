@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import type { Intent, Observation, Unit } from "../src/model.js";
 import { Commander } from "../src/policy.js";
 import { LegacyCommander } from "../src/legacy-policy.js";
-import { LocalCombat } from "../src/control/tactics.js";
+import { GroupedAdvance, LocalCombat } from "../src/control/tactics.js";
 import { ControlCoordinator } from "../src/control/coordinator.js";
 import type {
   CombatMission,
@@ -78,7 +78,7 @@ const economic = (intents: readonly Intent[]) =>
 
 test("layered opening preserves the published sequence through exit casualties and air contacts", () => {
   const old = new LegacyCommander("factory-exit"),
-    current = new Commander("factory-exit");
+    current = new Commander("factory-exit", { tactics: new LocalCombat() });
   let o = observation();
   for (const tick of [5886, 5889, 5892, 5904, 5952, 6000, 6450, 9000]) {
     o = { ...o, tick };
@@ -233,4 +233,51 @@ test("decision shadow uses independent observation copies and fails on the first
   );
   assert.equal(comparison.summary().mismatches, 1);
   assert.equal(comparison.summary().allComparedDecisionsMatched, false);
+});
+
+test("native marching groups preserve unit goals and production while keeping infantry and combat orders separate", () => {
+  const o = observation();
+  o.own = [
+    ...o.own.map((u) => (u.ref === "d" ? { ...u, x: 78, y: 40 } : u)),
+    { ...tank("gi", 76, 44), name: "E1", type: 3, crusher: false },
+  ];
+  const individual = new Commander("factory-exit", {
+    tactics: new LocalCombat(),
+  });
+  const grouped = new Commander("factory-exit", {
+    tactics: new GroupedAdvance(),
+  });
+  const before = individual.decide(o),
+    after = grouped.decide(o);
+  assert.deepEqual(individual.controlPlan, grouped.controlPlan);
+  assert.deepEqual(economic(before), economic(after));
+  const marching = after.filter(
+    (i): i is Extract<Intent, { kind: "attackMove" | "move" }> =>
+      i.kind === "attackMove",
+  );
+  assert.deepEqual(marching.map((i) => i.refs.length).sort(), [1, 4]);
+  const expand = (intents: Intent[]) =>
+    intents
+      .flatMap<Intent>((i) =>
+        "refs" in i ? i.refs.map((ref) => ({ ...i, refs: [ref] })) : [i],
+      )
+      .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+  assert.deepEqual(expand(before), expand(after));
+  const contact = {
+    ...o,
+    tick: o.tick + 90,
+    enemies: [
+      {
+        ref: "enemy-gi",
+        name: "E1",
+        type: 3,
+        x: 77,
+        y: 44,
+        hp: 125,
+        maxHp: 125,
+        observedTick: o.tick + 90,
+      },
+    ],
+  };
+  assert.deepEqual(individual.decide(contact), grouped.decide(contact));
 });

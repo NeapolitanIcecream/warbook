@@ -1,0 +1,31 @@
+{
+  "purpose": "Supplement the first shadow matrix with both creation slots on the known town/counter case; no strength inference",
+  "subjects": {
+    "published": {
+      "ref": "d73f7855419be3e53013d2e94c9d5ba1c307d574",
+      "mode": "factory-exit"
+    },
+    "layered": {
+      "ref": "d673dbe8a0057f6a26d0779874e7d8cab6ff160b",
+      "mode": "factory-exit"
+    }
+  },
+  "shadows": {
+    "published": {
+      "ref": "d673dbe8a0057f6a26d0779874e7d8cab6ff160b",
+      "mode": "factory-exit"
+    },
+    "layered": {
+      "ref": "d73f7855419be3e53013d2e94c9d5ba1c307d574",
+      "mode": "factory-exit"
+    }
+  },
+  "opponents": {
+    "counter": {
+      "ref": "a64a79e32b7333c26b1d4bfdb43405464c51173a",
+      "mode": "counter"
+    }
+  },
+  "maps": ["mp03t4.map"],
+  "rounds": 2
+}

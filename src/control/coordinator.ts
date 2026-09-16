@@ -1,6 +1,6 @@
 import type { Intent, Observation } from "../model.js";
 import { OpeningStrategy } from "./strategy.js";
-import { LocalCombat } from "./tactics.js";
+import { GroupedAdvance } from "./tactics.js";
 import { QueueProduction } from "./production.js";
 import type {
   ControlComponents,
@@ -21,7 +21,7 @@ export class ControlCoordinator {
   constructor(components: Partial<ControlComponents> = {}) {
     this.components = {
       strategy: components.strategy ?? new OpeningStrategy(),
-      tactics: components.tactics ?? new LocalCombat(),
+      tactics: components.tactics ?? new GroupedAdvance(),
       production: components.production ?? new QueueProduction(),
     };
   }

@@ -1,0 +1,41 @@
+{
+  "purpose": "Behavior-preserving extraction: compare every 3-tick decision on the same legal observation, alternating which frozen implementation actually controls the subject",
+  "subjects": {
+    "published": {
+      "ref": "d73f7855419be3e53013d2e94c9d5ba1c307d574",
+      "mode": "factory-exit"
+    },
+    "layered": {
+      "ref": "d673dbe8a0057f6a26d0779874e7d8cab6ff160b",
+      "mode": "factory-exit"
+    }
+  },
+  "shadows": {
+    "published": {
+      "ref": "d673dbe8a0057f6a26d0779874e7d8cab6ff160b",
+      "mode": "factory-exit"
+    },
+    "layered": {
+      "ref": "d73f7855419be3e53013d2e94c9d5ba1c307d574",
+      "mode": "factory-exit"
+    }
+  },
+  "opponents": {
+    "m0": {
+      "ref": "68852328061240c50e622aae64cef7e9289af444",
+      "mode": "combined"
+    },
+    "counter": {
+      "ref": "a64a79e32b7333c26b1d4bfdb43405464c51173a",
+      "mode": "counter"
+    },
+    "supalosa": { "native": "supalosa" }
+  },
+  "maps": ["mp03t4.map", "mp06t2.map", "mp29u2.map", "mp08t2.map"],
+  "rounds": 1,
+  "decision": {
+    "budget": "24 complete-game starts, 12 driven by each implementation; all actual games remain unseeded",
+    "acceptance": "Every compared intent must match exactly, with zero shadow submissions. Preserve and stop on the first mismatch. New controller-driven games must end normally. This checks covered trajectories, not equivalence of every possible state or improved strength.",
+    "timing": "Record isolated old/new decision-call cost on identical observations, alternating call order. Full match time includes shadow and logging overhead and is not a production-throughput comparison."
+  }
+}

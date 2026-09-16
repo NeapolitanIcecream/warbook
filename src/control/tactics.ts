@@ -158,3 +158,61 @@ export class LocalCombat implements TacticalController {
     };
   }
 }
+
+/** Experimental: use native group movement for marching tanks sharing one goal. */
+export class GroupedAdvance extends LocalCombat {
+  override readonly id = "grouped-advance-v1";
+  override control(
+    o: Observation,
+    mission: CombatMission,
+    evidence: readonly ExecutionEvidence[],
+  ): ControlResult {
+    const result = super.control(o, mission, evidence);
+    if (mission.kind !== "advance") return result;
+    const tankTypes = new Map(
+      o.own
+        .filter((u) => u.name === "MTNK" || u.name === "HTNK")
+        .map((u) => [u.ref, u.name]),
+    );
+    const groups = new Map<
+      string,
+      Extract<Intent, { kind: "attackMove" | "move" }>
+    >();
+    const intents: Intent[] = [];
+    for (const intent of result.intents) {
+      if (
+        intent.kind !== "attackMove" ||
+        intent.refs.length !== 1 ||
+        !tankTypes.has(intent.refs[0])
+      ) {
+        intents.push(intent);
+        continue;
+      }
+      const key = JSON.stringify([
+        tankTypes.get(intent.refs[0]),
+        intent.x,
+        intent.y,
+        intent.task,
+      ]);
+      const group = groups.get(key);
+      if (group) group.refs.push(...intent.refs);
+      else {
+        const grouped = { ...intent, refs: [...intent.refs] };
+        groups.set(key, grouped);
+        intents.push(grouped);
+      }
+    }
+    return {
+      ...result,
+      intents,
+      report: {
+        ...result.report,
+        proposedIntents: intents.length,
+        facts: {
+          ...result.report.facts,
+          mergedMarchOrders: result.intents.length - intents.length,
+        },
+      },
+    };
+  }
+}

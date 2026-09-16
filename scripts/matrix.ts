@@ -20,6 +20,7 @@ interface NativeOpponent {
 interface Plan {
   purpose: string;
   subjects: Record<string, Source>;
+  shadows?: Record<string, Source>;
   opponents: Record<string, Source | NativeOpponent>;
   maps: string[];
   rounds: number;
@@ -53,9 +54,14 @@ if (existsSync(root) && readdirSync(root).length)
   throw new Error("Refusing to overwrite an existing experiment");
 mkdirSync(root, { recursive: true });
 const subjects: Record<string, string> = {};
+const shadows: Record<string, string> = {};
 const opponents: Record<string, string | NativeOpponent> = {};
 for (const [label, source] of Object.entries(plan.subjects))
   subjects[label] = (await buildBot(source.ref, source.mode)).path;
+for (const [label, source] of Object.entries(plan.shadows ?? {})) {
+  if (!(label in subjects)) throw new Error("Shadow has no matching subject");
+  shadows[label] = (await buildBot(source.ref, source.mode)).path;
+}
 for (const [label, source] of Object.entries(plan.opponents)) {
   if ("native" in source) {
     if (source.native !== "supalosa")
@@ -70,6 +76,7 @@ writeFileSync(
       ...plan,
       sourcePlan: plan,
       subjects,
+      ...(Object.keys(shadows).length ? { shadows } : {}),
       opponents,
       units: 0,
       weights: "equal opponents and maps",
@@ -102,6 +109,7 @@ for (const map of plan.maps)
           "0",
           "--actor-release",
           release,
+          ...(shadows[subject] ? ["--shadow-release", shadows[subject]] : []),
           ...(typeof opponentRelease === "string"
             ? ["--opponent-release", opponentRelease]
             : ["--opponent", opponentRelease.native]),
@@ -133,6 +141,7 @@ for (const map of plan.maps)
             winner: result.outcome?.survivor,
             tick: result.tick,
             seconds: result.wallSeconds,
+            ...(result.shadow ? { shadow: result.shadow } : {}),
           };
           rows.push(row);
           writeFileSync(
