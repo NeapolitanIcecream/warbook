@@ -12,8 +12,6 @@ export interface CombatMission extends TaskIdentity {
   readonly groundDestination?: Point;
   readonly objective: string;
   readonly engagement: {
-    readonly contactRadius: number;
-    readonly crushRadius: number;
     readonly allowCrush: boolean;
   };
 }

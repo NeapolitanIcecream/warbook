@@ -12,6 +12,8 @@ import {
 /** Local engagement and native orders, bounded by the assigned combat mission. */
 export class LocalCombat implements TacticalController {
   readonly id: string = "local-combat-v1";
+  private readonly contactRadius = 14;
+  private readonly crushRadius = 10;
   private lastOrders = new Map<string, { tick: number; key: string }>();
   assess(o: Observation, request: AssessmentRequest): TacticalAssessment {
     const name = request.unitType;
@@ -68,7 +70,7 @@ export class LocalCombat implements TacticalController {
           .filter(
             (e) =>
               (!e.airborne || unit.antiAir) &&
-              distance2(unit, e) < mission.engagement.contactRadius ** 2,
+              distance2(unit, e) < this.contactRadius ** 2,
           )
           .sort(
             (a, b) =>
@@ -82,7 +84,7 @@ export class LocalCombat implements TacticalController {
           unit.crusher &&
           target?.type === 3 &&
           !target.airborne &&
-          distance2(unit, target) < mission.engagement.crushRadius ** 2
+          distance2(unit, target) < this.crushRadius ** 2
         ) {
           order(
             ref,

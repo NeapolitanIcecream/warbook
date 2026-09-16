@@ -202,7 +202,7 @@ export class OpeningStrategy implements StrategicController {
     }
     const kind = this.attackStarted ? "advance" : "assemble";
     const units = army.map((u) => u.ref);
-    const engagement = { contactRadius: 14, crushRadius: 10, allowCrush: true };
+    const engagement = { allowCrush: true };
     const combat: CombatMission = {
       id: "main-force",
       revision: this.combatRevision.update({
