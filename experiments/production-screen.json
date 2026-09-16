@@ -1,0 +1,18 @@
+{
+  "purpose": "Correct refinery/free-harvester accounting without changing strategy, tactics, observation, execution or scoring",
+  "subjects": {
+    "published": { "ref": "e3e338fe74236924500b46227fa2f4bbd65de23b", "mode": "factory-exit" },
+    "counted": { "ref": "e4e7c99add15179096f3be33c23003cb400b48d6", "mode": "factory-exit" }
+  },
+  "opponents": {
+    "published": { "ref": "e3e338fe74236924500b46227fa2f4bbd65de23b", "mode": "factory-exit" },
+    "counter": { "ref": "a64a79e32b7333c26b1d4bfdb43405464c51173a", "mode": "counter" }
+  },
+  "maps": ["mp03t4.map", "mp06t2.map"],
+  "rounds": 4,
+  "decision": {
+    "budget": "32 starts, alternating creation slots and subject order; preserve limits and errors",
+    "check": "Actual miner commitments, fourth-to-fifth tank appearance gap, complete-game outcomes and start-location coverage; no paired-spawn assumption",
+    "scope": "Behavior screening and concrete regression detection; not a formal strength claim"
+  }
+}

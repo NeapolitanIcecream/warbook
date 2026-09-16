@@ -1,0 +1,19 @@
+{
+  "purpose": "Frozen expanded development comparison of the harvester commitment correction",
+  "subjects": {
+    "published": { "ref": "e3e338fe74236924500b46227fa2f4bbd65de23b", "mode": "factory-exit" },
+    "counted": { "ref": "e4e7c99add15179096f3be33c23003cb400b48d6", "mode": "factory-exit" }
+  },
+  "opponents": {
+    "published": { "ref": "e3e338fe74236924500b46227fa2f4bbd65de23b", "mode": "factory-exit" },
+    "counter": { "ref": "a64a79e32b7333c26b1d4bfdb43405464c51173a", "mode": "counter" },
+    "supalosa": { "native": "supalosa" }
+  },
+  "maps": ["mp03t4.map", "mp06t2.map", "mp29u2.map", "mp08t2.map"],
+  "rounds": 6,
+  "decision": {
+    "budget": "144 starts; run only after the 32-start behavior screen supports the intended accounting change without a concrete blocker",
+    "check": "Report all starts, normal outcomes and exceptions, opponent/map slices, observed spawns and reinforcement gaps; inspect regressions before release",
+    "scope": "Known development maps; correctness and practical-value evidence, not unseen generalization or formal target-distribution gain"
+  }
+}
