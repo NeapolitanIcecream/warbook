@@ -156,6 +156,8 @@ async function main(): Promise<void> {
         "src/control/strategy.ts",
         "src/control/tactics.ts",
         "src/control/production.ts",
+        "src/control/bastion-strategy.ts",
+        "src/control/position-tactics.ts",
         "src/control/coordinator.ts",
         "src/analysis/shadow.ts",
         "src/raiding.ts",

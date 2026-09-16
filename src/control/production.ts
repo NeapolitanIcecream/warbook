@@ -66,6 +66,8 @@ export class QueueProduction implements ProductionController {
         ? power
         : plan.structures.find((g) => count(g.product) < g.count)?.product;
     queue(building);
+    for (const defense of plan.defenses ?? [])
+      if (count(defense.product) < defense.count) queue(defense.product);
     const v = plan.vehicles;
     const liveHarvesters = o.own.filter((u) => u.harvester).length;
     const queuedHarvesters = o.queues.reduce(

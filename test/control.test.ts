@@ -5,6 +5,7 @@ import { Commander } from "../src/policy.js";
 import { LegacyCommander } from "../src/legacy-policy.js";
 import { GroupedAdvance, LocalCombat } from "../src/control/tactics.js";
 import { ControlCoordinator } from "../src/control/coordinator.js";
+import { PositionTactics } from "../src/control/position-tactics.js";
 import type {
   CombatMission,
   ControlResult,
@@ -75,6 +76,141 @@ function observation(): Observation {
 }
 const economic = (intents: readonly Intent[]) =>
   intents.filter((i) => ["queue", "place", "deploy"].includes(i.kind));
+
+test("bastion keeps infantry at home and releases reinforcements as a separate batch", () => {
+  const c = new Commander("bastion");
+  const o = observation();
+  const gi = { ...tank("gi", 67, 41), name: "E1", type: 3, crusher: false };
+  o.own.push(gi);
+  c.decide(o);
+  assert.equal(c.controlPlan!.combat.kind, "defend");
+  assert(!c.controlPlan!.combat.units.includes("gi"));
+  assert.deepEqual(c.controlPlan!.additionalCombat![0].units, ["gi"]);
+  o.own = o.own.filter((u) => u.name !== "MTNK");
+  o.own.push(
+    ...Array.from({ length: 8 }, (_, i) => tank(`wave-${i}`, 68 + (i % 3), 42)),
+  );
+  o.tick += 3;
+  c.decide(o);
+  assert.equal(c.controlPlan!.combat.kind, "advance");
+  assert.equal(c.controlPlan!.combat.units.length, 8);
+  o.own.push(tank("fresh", 68, 43));
+  o.tick += 3;
+  c.decide(o);
+  assert.equal(c.controlPlan!.combat.units.length, 8);
+  assert.deepEqual(
+    c.controlPlan!.additionalCombat!.find((m) => m.id === "reserve-force")!
+      .units,
+    ["fresh"],
+  );
+  o.own.push(
+    ...Array.from({ length: 3 }, (_, i) => tank(`fresh-${i}`, 68, 43)),
+  );
+  o.tick += 3;
+  c.decide(o);
+  assert.equal(
+    c.controlPlan!.additionalCombat!.find((m) => m.id === "reinforcements")!
+      .units.length,
+    4,
+  );
+  assert(!c.controlPlan!.combat.units.includes("fresh"));
+  o.tick += 3;
+  c.decide(o);
+  assert.equal(c.controlPlan!.combat.units.length, 12);
+  assert(
+    !c.controlPlan!.additionalCombat!.some((m) => m.id === "reinforcements"),
+  );
+});
+
+test("bastion reforms after heavy losses without issuing the same unit to two tasks", () => {
+  const c = new Commander("bastion"),
+    o = observation();
+  o.own = o.own.filter((u) => u.name !== "MTNK");
+  o.own.push(
+    ...Array.from({ length: 8 }, (_, i) => tank(`wave-${i}`, 68 + (i % 3), 42)),
+  );
+  c.decide(o);
+  assert.equal(c.controlPlan!.combat.kind, "advance");
+  o.own = o.own.filter(
+    (u) => !u.ref.startsWith("wave-") || ["wave-0", "wave-1"].includes(u.ref),
+  );
+  o.tick += 3;
+  c.decide(o);
+  assert.equal(c.controlPlan!.combat.kind, "defend");
+  const missions = [c.controlPlan!.combat, ...c.controlPlan!.additionalCombat!];
+  const refs = missions.flatMap((m) => m.units);
+  assert.equal(new Set(refs).size, refs.length);
+});
+
+test("extra combat tasks keep separate ownership and receive only their own feedback", () => {
+  const c = new Commander("bastion"),
+    o = observation();
+  o.own.push({ ...tank("gi", 67, 41), name: "E1", type: 3 });
+  c.decide(o);
+  const garrison = c.controlPlan!.additionalCombat![0];
+  const effect: ExecutionEvidence = {
+    origin: {
+      id: garrison.id,
+      revision: garrison.revision,
+      controller: "tactics",
+    },
+    intentId: "gi-deployment",
+    basedOnTick: o.tick,
+    observedTick: o.tick + 3,
+    effect: "deployment_state_changed",
+    unresolved: false,
+  };
+  c.acceptEffect(effect);
+  o.tick += 3;
+  c.decide(o);
+  assert.deepEqual(c.controlReport!.additionalCombat![0].executionEvidence, [
+    effect,
+  ]);
+  assert.deepEqual(c.controlReport!.combat.executionEvidence, []);
+  const invalid = {
+    ...c.controlPlan!,
+    additionalCombat: [{ ...garrison, units: ["a"] }],
+  };
+  assert.throws(
+    () => new ControlCoordinator().compile(o, invalid, []),
+    /assignment/,
+  );
+});
+
+test("a defensive handoff cancels an offensive order even when the old hold key is cached", () => {
+  const tactics = new PositionTactics(),
+    o = observation();
+  o.own = [tank("a", 18, 20)];
+  const defense: CombatMission = {
+    id: "main",
+    revision: 1,
+    kind: "defend",
+    units: ["a"],
+    destination: { x: 20, y: 20 },
+    objective: "hold",
+    engagement: { allowCrush: false },
+  };
+  assert.equal(tactics.control(o, defense, []).intents[0].kind, "stop");
+  o.tick += 3;
+  assert.equal(
+    tactics.control(
+      o,
+      {
+        ...defense,
+        revision: 2,
+        kind: "advance",
+        destination: { x: 40, y: 40 },
+      },
+      [],
+    ).intents[0].kind,
+    "attackMove",
+  );
+  o.tick += 3;
+  assert.equal(
+    tactics.control(o, { ...defense, revision: 3 }, []).intents[0].kind,
+    "stop",
+  );
+});
 
 test("layered opening preserves the published sequence through exit casualties and air contacts", () => {
   const old = new LegacyCommander("factory-exit"),

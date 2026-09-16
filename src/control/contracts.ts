@@ -5,7 +5,7 @@ export interface TaskIdentity {
   readonly revision: number;
 }
 export interface CombatMission extends TaskIdentity {
-  readonly kind: "assemble" | "advance";
+  readonly kind: "assemble" | "advance" | "defend";
   readonly units: readonly string[];
   /** Undefined means preserve existing orders; it does not send Stop. */
   readonly destination?: Point;
@@ -19,6 +19,8 @@ export interface ProductionPlan extends TaskIdentity {
   readonly deploymentUnits: readonly string[];
   readonly power: { readonly product: string; readonly margin: number };
   readonly structures: readonly { product: string; count: number }[];
+  /** Separately queued armory items; absent for the historical opening. */
+  readonly defenses?: readonly { product: string; count: number }[];
   readonly vehicles: {
     readonly armor: string;
     readonly harvester: string;
@@ -36,6 +38,7 @@ export interface ProductionPlan extends TaskIdentity {
 export interface StrategicPlan {
   readonly tick: number;
   readonly combat: CombatMission;
+  readonly additionalCombat?: readonly CombatMission[];
   readonly production: ProductionPlan;
 }
 export interface TacticalAssessment {
@@ -79,6 +82,7 @@ export interface ControlReport {
     production: string;
   };
   readonly combat: TaskReport;
+  readonly additionalCombat?: readonly TaskReport[];
   readonly production: TaskReport;
 }
 export interface StrategicController {

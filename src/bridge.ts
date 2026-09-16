@@ -43,6 +43,7 @@ export class WarbookBot extends Bot {
   private lastControlReportTick = -150;
   private lastCombatRevision = -1;
   private lastProductionRevision = -1;
+  private lastAdditionalRevisions = "";
   public trace?: (event: Trace) => void;
   public autoTick = false;
   public observation?: Observation;
@@ -280,11 +281,15 @@ export class WarbookBot extends Bot {
     if (!o || o.tick !== this.game.getCurrentTick())
       throw new Error("Stale observation");
     const plan = this.commander.controlPlan;
+    const additionalRevisions = JSON.stringify(
+      plan?.additionalCombat?.map((m) => [m.id, m.revision]) ?? [],
+    );
     if (plan && plan.tick !== o.tick) throw new Error("Stale control decision");
     if (
       plan &&
       (plan.combat.revision !== this.lastCombatRevision ||
-        plan.production.revision !== this.lastProductionRevision)
+        plan.production.revision !== this.lastProductionRevision ||
+        additionalRevisions !== this.lastAdditionalRevisions)
     ) {
       this.trace?.({
         tick: o.tick,
@@ -294,6 +299,7 @@ export class WarbookBot extends Bot {
       });
       this.lastCombatRevision = plan.combat.revision;
       this.lastProductionRevision = plan.production.revision;
+      this.lastAdditionalRevisions = additionalRevisions;
     }
     const report = this.commander.controlReport;
     if (report && o.tick - this.lastControlReportTick >= 150) {
@@ -336,6 +342,9 @@ export class WarbookBot extends Bot {
       const origin = this.commander.intentOrigin(intent);
       try {
         switch (intent.kind) {
+          case "stop":
+            this.player.actions.orderUnits(ids, OrderType.Stop);
+            break;
           case "deploy":
             this.player.actions.orderUnits(ids, OrderType.DeploySelected);
             break;

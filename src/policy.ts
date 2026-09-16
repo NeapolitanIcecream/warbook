@@ -1,6 +1,8 @@
 import type { Intent, Observation } from "./model.js";
 import { LegacyCommander } from "./legacy-policy.js";
 import { ControlCoordinator } from "./control/coordinator.js";
+import { BastionStrategy } from "./control/bastion-strategy.js";
+import { PositionTactics } from "./control/position-tactics.js";
 import type {
   ControlComponents,
   ExecutionEvidence,
@@ -22,6 +24,7 @@ export type PolicyMode =
   | "assembly-only"
   | "formed"
   | "factory-exit"
+  | "bastion"
   | "contact-filter";
 export const POLICY_MODES: readonly PolicyMode[] = [
   "baseline",
@@ -38,6 +41,7 @@ export const POLICY_MODES: readonly PolicyMode[] = [
   "assembly-only",
   "formed",
   "factory-exit",
+  "bastion",
   "contact-filter",
 ];
 
@@ -51,6 +55,12 @@ export class Commander {
   ) {
     if (mode === "factory-exit")
       this.control = new ControlCoordinator(components);
+    else if (mode === "bastion")
+      this.control = new ControlCoordinator({
+        strategy: new BastionStrategy(),
+        tactics: new PositionTactics(),
+        ...components,
+      });
     else {
       if (components)
         throw new Error("Layer replacement is supported for factory-exit only");

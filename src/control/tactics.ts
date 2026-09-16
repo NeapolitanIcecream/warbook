@@ -14,7 +14,7 @@ export class LocalCombat implements TacticalController {
   readonly id: string = "local-combat-v1";
   private readonly contactRadius = 14;
   private readonly crushRadius = 10;
-  private lastOrders = new Map<string, { tick: number; key: string }>();
+  protected lastOrders = new Map<string, { tick: number; key: string }>();
   assess(o: Observation, request: AssessmentRequest): TacticalAssessment {
     const name = request.unitType;
     const factory = request.factoryType;

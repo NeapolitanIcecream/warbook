@@ -62,6 +62,7 @@ export interface Observation {
 }
 export type Intent = (
   | { kind: "deploy"; refs: string[] }
+  | { kind: "stop"; refs: string[] }
   | { kind: "queue"; product: Product }
   | { kind: "place"; name: string; x: number; y: number }
   | { kind: "attack" | "crush"; refs: string[]; target: string }

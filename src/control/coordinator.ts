@@ -38,8 +38,10 @@ export class ControlCoordinator {
     const task =
       origin.controller === "production"
         ? this.plan.production
-        : this.plan.combat;
-    if (origin.id !== task.id || origin.revision !== task.revision)
+        : [this.plan.combat, ...(this.plan.additionalCombat ?? [])].find(
+            (t) => t.id === origin.id,
+          );
+    if (!task || origin.id !== task.id || origin.revision !== task.revision)
       throw new Error("Intent belongs to a superseded task");
   }
 
@@ -54,12 +56,19 @@ export class ControlCoordinator {
       plan.production,
       evidence.filter((e) => e.origin.controller === "production"),
     );
-    const combat = tactics.control(
-      o,
-      plan.combat,
-      evidence.filter((e) => e.origin.controller === "tactics"),
+    const combatResults = [plan.combat, ...(plan.additionalCombat ?? [])].map(
+      (mission) =>
+        tactics.control(
+          o,
+          mission,
+          evidence.filter(
+            (e) =>
+              e.origin.controller === "tactics" && e.origin.id === mission.id,
+          ),
+        ),
     );
-    const intents = this.compile(o, plan, [economy, combat]);
+    const combat = combatResults[0];
+    const intents = this.compile(o, plan, [economy, ...combatResults]);
     this.plan = plan;
     this.report = {
       tick: o.tick,
@@ -78,6 +87,9 @@ export class ControlCoordinator {
         },
       },
       production: economy.report,
+      ...(plan.additionalCombat
+        ? { additionalCombat: combatResults.slice(1).map((r) => r.report) }
+        : {}),
     };
     return intents;
   }
@@ -89,14 +101,16 @@ export class ControlCoordinator {
     results: readonly ControlResult[],
   ): Intent[] {
     if (plan.tick !== o.tick) throw new Error("Stale control plan");
-    if (plan.combat.id === plan.production.id)
+    const missions = [plan.combat, ...(plan.additionalCombat ?? [])];
+    const taskIds = [plan.production.id, ...missions.map((m) => m.id)];
+    if (new Set(taskIds).size !== taskIds.length)
       throw new Error("Task IDs must be distinct");
     this.origins = new WeakMap();
     const owners = new Map<string, string>();
     const owned = new Set(o.own.map((u) => u.ref));
     for (const task of [
       { id: plan.production.id, refs: plan.production.deploymentUnits },
-      { id: plan.combat.id, refs: plan.combat.units },
+      ...missions.map((m) => ({ id: m.id, refs: m.units })),
     ])
       for (const ref of task.refs) {
         if (!owned.has(ref) || owners.has(ref))
@@ -110,8 +124,9 @@ export class ControlCoordinator {
       const task =
         result.origin.controller === "production"
           ? plan.production
-          : plan.combat;
+          : missions.find((m) => m.id === result.origin.id);
       if (
+        !task ||
         result.origin.id !== task.id ||
         result.origin.revision !== task.revision ||
         result.report.task.id !== task.id ||
