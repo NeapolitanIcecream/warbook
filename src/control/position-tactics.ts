@@ -14,17 +14,13 @@ import {
 
 /** Defenders occupy local posts; offensive missions still use the frozen local combat rules. */
 export class PositionTactics extends LocalCombat {
-  override readonly id = "position-tactics-v3";
+  override readonly id: string = "position-tactics-v3";
   private lastPositionOrders = new Map<string, { key: string; tick: number }>();
   private slots = new Map<string, number>();
   private nextSlot = 0;
   private roles = new Map<string, string>();
 
-  override control(
-    o: Observation,
-    mission: CombatMission,
-    evidence: readonly ExecutionEvidence[],
-  ): ControlResult {
+  protected prepareMission(mission: CombatMission): void {
     const role = `${mission.id}:${mission.kind}`;
     for (const ref of mission.units)
       if (this.roles.get(ref) !== role) {
@@ -32,6 +28,14 @@ export class PositionTactics extends LocalCombat {
         this.lastPositionOrders.delete(ref);
         this.lastOrders.delete(ref);
       }
+  }
+
+  override control(
+    o: Observation,
+    mission: CombatMission,
+    evidence: readonly ExecutionEvidence[],
+  ): ControlResult {
+    this.prepareMission(mission);
     if (mission.kind !== "defend") return super.control(o, mission, evidence);
     const intents: Intent[] = [];
     const owns = new Map(o.own.map((u) => [u.ref, u]));

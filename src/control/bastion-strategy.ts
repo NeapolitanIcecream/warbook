@@ -15,7 +15,7 @@ import {
 
 /** A local defender with persistent counterattack membership and a separate garrison. */
 export class BastionStrategy implements StrategicController {
-  readonly id = "bastion-strategy-v4";
+  readonly id: string;
   private readonly opening = new OpeningStrategy();
   private readonly revisions = new Map<string, TaskRevision>();
   private readonly productionRevision = new TaskRevision();
@@ -30,6 +30,11 @@ export class BastionStrategy implements StrategicController {
   private lastThreatTick = Number.NEGATIVE_INFINITY;
   private sawArmorPressure = false;
   private lastHeavyArmorTick = Number.NEGATIVE_INFINITY;
+
+  constructor(private readonly doctrine: "bastion" | "cohort" = "bastion") {
+    this.id =
+      doctrine === "bastion" ? "bastion-strategy-v4" : "cohort-strategy-v1";
+  }
 
   assessmentRequest(o: Observation) {
     return this.opening.assessmentRequest(o);
@@ -208,7 +213,13 @@ export class BastionStrategy implements StrategicController {
       ...base.production,
       defenseAnchor: requestedPost,
       defenses: [
-        { product: fort, count: o.own.some((u) => u.name === factory) ? 1 : 0 },
+        {
+          product: fort,
+          count:
+            this.doctrine === "bastion" && o.own.some((u) => u.name === factory)
+              ? 1
+              : 0,
+        },
       ],
     };
     const { revision: _oldRevision, ...productionDescription } = economy;

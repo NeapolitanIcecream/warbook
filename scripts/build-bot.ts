@@ -79,19 +79,23 @@ export async function buildBot(ref: string, mode = "combined") {
         )
       : undefined;
     const controlLayers =
-      layered && ["factory-exit", "bastion"].includes(mode)
+      layered && ["factory-exit", "bastion", "cohort"].includes(mode)
         ? Object.fromEntries(
-            [
-              "strategy",
-              "tactics",
-              "production",
-              "coordinator",
-              "contracts",
-            ].map((part) => [
+            Object.entries({
+              strategy:
+                mode === "factory-exit" ? "strategy" : "bastion-strategy",
+              tactics:
+                mode === "factory-exit"
+                  ? "tactics"
+                  : mode === "bastion"
+                    ? "position-tactics"
+                    : "cohort-tactics",
+              production: "production",
+              coordinator: "coordinator",
+              contracts: "contracts",
+            }).map(([part, file]) => [
               part,
-              sourceHashes![
-                `src/control/${mode === "bastion" && part === "strategy" ? "bastion-strategy" : mode === "bastion" && part === "tactics" ? "position-tactics" : part}.ts`
-              ],
+              sourceHashes![`src/control/${file}.ts`],
             ]),
           )
         : undefined;
