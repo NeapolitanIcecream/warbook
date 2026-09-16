@@ -26,6 +26,11 @@ export class OpeningStrategy implements StrategicController {
   private postponedScouts = new Map<string, number>();
   private combatRevision = new TaskRevision();
   private productionRevision = new TaskRevision();
+  assessmentRequest(o: Observation) {
+    return o.side === 0
+      ? { unitType: "MTNK", factoryType: "GAWEAP" }
+      : { unitType: "HTNK", factoryType: "NAWEAP" };
+  }
 
   private scout(o: Observation, army: readonly Unit[]): Point | undefined {
     const mobile = army.filter((u) => u.mobile);

@@ -45,7 +45,7 @@ export class ControlCoordinator {
 
   decide(o: Observation): Intent[] {
     const { strategy, tactics, production } = this.components;
-    const assessment = tactics.assess(o);
+    const assessment = tactics.assess(o, strategy.assessmentRequest(o));
     const plan = strategy.plan(o, assessment, this.report);
     const evidence = this.evidence;
     this.evidence = [];

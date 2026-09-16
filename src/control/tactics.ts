@@ -2,6 +2,7 @@ import { distance2, type Intent, type Observation } from "../model.js";
 import {
   currentEvidence,
   type CombatMission,
+  type AssessmentRequest,
   type ControlResult,
   type ExecutionEvidence,
   type TacticalAssessment,
@@ -12,9 +13,9 @@ import {
 export class LocalCombat implements TacticalController {
   readonly id: string = "local-combat-v1";
   private lastOrders = new Map<string, { tick: number; key: string }>();
-  assess(o: Observation): TacticalAssessment {
-    const name = o.side === 0 ? "MTNK" : "HTNK";
-    const factory = o.side === 0 ? "GAWEAP" : "NAWEAP";
+  assess(o: Observation, request: AssessmentRequest): TacticalAssessment {
+    const name = request.unitType;
+    const factory = request.factoryType;
     const army = o.own.filter(
       (u) => u.combat && (u.mobile || u.deployed) && !u.harvester && !u.mcv,
     );

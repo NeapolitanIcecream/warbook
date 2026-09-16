@@ -45,6 +45,10 @@ export interface TacticalAssessment {
   readonly observedArmor: number;
   readonly armorOutsideFactories: number;
 }
+export interface AssessmentRequest {
+  readonly unitType: string;
+  readonly factoryType: string;
+}
 export interface IntentOrigin extends TaskIdentity {
   readonly controller: "tactics" | "production";
 }
@@ -81,6 +85,7 @@ export interface ControlReport {
 }
 export interface StrategicController {
   readonly id: string;
+  assessmentRequest(observation: Observation): AssessmentRequest;
   plan(
     observation: Observation,
     assessment: TacticalAssessment,
@@ -89,7 +94,10 @@ export interface StrategicController {
 }
 export interface TacticalController {
   readonly id: string;
-  assess(observation: Observation): TacticalAssessment;
+  assess(
+    observation: Observation,
+    request: AssessmentRequest,
+  ): TacticalAssessment;
   control(
     observation: Observation,
     mission: CombatMission,
