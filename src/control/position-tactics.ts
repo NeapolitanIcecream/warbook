@@ -14,7 +14,7 @@ import {
 
 /** Defenders occupy local posts; offensive missions still use the frozen local combat rules. */
 export class PositionTactics extends LocalCombat {
-  override readonly id = "position-tactics-v1";
+  override readonly id = "position-tactics-v3";
   private lastPositionOrders = new Map<string, { key: string; tick: number }>();
   private slots = new Map<string, number>();
   private nextSlot = 0;
@@ -57,6 +57,57 @@ export class PositionTactics extends LocalCombat {
     for (const ref of mission.units) {
       const unit = owns.get(ref);
       if (!unit || !base) continue;
+      if (unit.type !== 3) {
+        const close = o.enemies.filter(
+          (e) =>
+            (!e.airborne || unit.antiAir) &&
+            distance2(e, base) <= 12 ** 2 &&
+            distance2(e, unit) <= 6 ** 2,
+        );
+        const infantry = unit.crusher
+          ? close
+              .filter(
+                (e) =>
+                  e.type === 3 && !e.airborne && distance2(e, unit) <= 3 ** 2,
+              )
+              .sort((a, b) => distance2(a, unit) - distance2(b, unit))[0]
+          : undefined;
+        if (infantry) {
+          issue(
+            ref,
+            `crush:${infantry.ref}`,
+            {
+              kind: "crush",
+              refs: [ref],
+              target: infantry.ref,
+              task: mission.id,
+            },
+            60,
+          );
+          continue;
+        }
+        const target = close.sort(
+          (a, b) =>
+            (unit.antiAir ? Number(!!b.airborne) - Number(!!a.airborne) : 0) ||
+            Number(b.type === 7) - Number(a.type === 7) ||
+            a.hp / a.maxHp - b.hp / b.maxHp ||
+            distance2(a, unit) - distance2(b, unit),
+        )[0];
+        if (target) {
+          issue(
+            ref,
+            `attack:${target.ref}`,
+            {
+              kind: "attack",
+              refs: [ref],
+              target: target.ref,
+              task: mission.id,
+            },
+            180,
+          );
+          continue;
+        }
+      }
       let slot = this.slots.get(ref);
       if (slot === undefined) this.slots.set(ref, (slot = this.nextSlot++));
       const offsets: Point[] = [
