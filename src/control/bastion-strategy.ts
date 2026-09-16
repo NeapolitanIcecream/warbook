@@ -15,13 +15,14 @@ import {
 
 /** A local defender with persistent counterattack membership and a separate garrison. */
 export class BastionStrategy implements StrategicController {
-  readonly id = "bastion-strategy-v2";
+  readonly id = "bastion-strategy-v3";
   private readonly opening = new OpeningStrategy();
   private readonly revisions = new Map<string, TaskRevision>();
   private readonly productionRevision = new TaskRevision();
   private assault = new Set<string>();
   private joining = new Set<string>();
   private approach?: Point;
+  private miningApproach?: Point;
   private nextLaunchTick = 0;
   private readonly launchSize = 6;
   private responsePost?: Point;
@@ -62,7 +63,14 @@ export class BastionStrategy implements StrategicController {
       )
       .sort((a, b) => distance2(a, o.home) - distance2(b, o.home))[0];
     if (!this.approach && threat) this.approach = { x: threat.x, y: threat.y };
-    const direction = this.approach ??
+    if (!this.miningApproach) {
+      const miner = o.own
+        .filter((u) => u.harvester && distance2(u, o.home) > 8 ** 2)
+        .sort((a, b) => distance2(b, o.home) - distance2(a, o.home))[0];
+      if (miner) this.miningApproach = { x: miner.x, y: miner.y };
+    }
+    const direction = this.miningApproach ??
+      this.approach ??
       o.starts
         .filter((p) => distance2(p, o.home) > 25)
         .sort((a, b) => distance2(a, o.home) - distance2(b, o.home))[0] ?? {
@@ -72,10 +80,22 @@ export class BastionStrategy implements StrategicController {
     const dx = direction.x - o.home.x,
       dy = direction.y - o.home.y,
       length = Math.hypot(dx, dy) || 1;
-    const post = {
+    const requestedPost = {
       x: Math.round(o.home.x + (6 * dx) / length),
       y: Math.round(o.home.y + (6 * dy) / length),
     };
+    const fortName = o.side === 0 ? "GAPILL" : "NALASR";
+    const existingFort = o.own.find((u) => u.name === fortName);
+    const post = existingFort
+      ? {
+          x: Math.round(
+            existingFort.x + existingFort.width / 2 + (2 * dx) / length,
+          ),
+          y: Math.round(
+            existingFort.y + existingFort.height / 2 + (2 * dy) / length,
+          ),
+        }
+      : requestedPost;
     const assets = o.own.filter((u) => u.harvester || u.refinery || u.yard);
     const incursions = o.enemies
       .filter((e) => !e.airborne && e.type !== 2)
@@ -167,6 +187,7 @@ export class BastionStrategy implements StrategicController {
     const fort = o.side === 0 ? "GAPILL" : "NALASR";
     const economy = {
       ...base.production,
+      defenseAnchor: requestedPost,
       defenses: [
         { product: fort, count: o.own.some((u) => u.name === factory) ? 1 : 0 },
       ],

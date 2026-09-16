@@ -14,7 +14,7 @@ import {
 
 /** Defenders occupy local posts; offensive missions still use the frozen local combat rules. */
 export class PositionTactics extends LocalCombat {
-  override readonly id = "position-tactics-v2";
+  override readonly id = "position-tactics-v1";
   private lastPositionOrders = new Map<string, { key: string; tick: number }>();
   private slots = new Map<string, number>();
   private nextSlot = 0;
@@ -57,47 +57,6 @@ export class PositionTactics extends LocalCombat {
     for (const ref of mission.units) {
       const unit = owns.get(ref);
       if (!unit || !base) continue;
-      // Vehicles defend an area together; a fixed parking slot must not prevent
-      // nearby tanks from bringing their weapons to bear on the same incursion.
-      const vehicleTarget =
-        unit.type !== 3
-          ? o.enemies
-              .filter(
-                (e) =>
-                  (!e.airborne || unit.antiAir) &&
-                  distance2(e, base) <= 10 ** 2,
-              )
-              .sort(
-                (a, b) =>
-                  (unit.antiAir
-                    ? Number(!!b.airborne) - Number(!!a.airborne)
-                    : 0) ||
-                  Number(
-                    b.type === 7 &&
-                      !["CMIN", "HARV", "AMCV", "SMCV"].includes(b.name),
-                  ) -
-                    Number(
-                      a.type === 7 &&
-                        !["CMIN", "HARV", "AMCV", "SMCV"].includes(a.name),
-                    ) ||
-                  a.hp / a.maxHp - b.hp / b.maxHp ||
-                  distance2(a, base) - distance2(b, base),
-              )[0]
-          : undefined;
-      if (vehicleTarget) {
-        issue(
-          ref,
-          `defend:${vehicleTarget.ref}`,
-          {
-            kind: "attack",
-            refs: [ref],
-            target: vehicleTarget.ref,
-            task: mission.id,
-          },
-          180,
-        );
-        continue;
-      }
       let slot = this.slots.get(ref);
       if (slot === undefined) this.slots.set(ref, (slot = this.nextSlot++));
       const offsets: Point[] = [

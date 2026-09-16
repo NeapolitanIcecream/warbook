@@ -212,53 +212,6 @@ test("a defensive handoff cancels an offensive order even when the old hold key 
   );
 });
 
-test("defensive vehicles share a visible target and release it when it leaves their area", () => {
-  const tactics = new PositionTactics(),
-    o = observation();
-  o.own = [tank("a", 18, 20), tank("b", 22, 20)];
-  o.enemies = [
-    {
-      ref: "healthy",
-      name: "MTNK",
-      type: 7,
-      x: 22,
-      y: 21,
-      hp: 300,
-      maxHp: 300,
-      observedTick: o.tick,
-    },
-    {
-      ref: "hurt",
-      name: "MTNK",
-      type: 7,
-      x: 25,
-      y: 21,
-      hp: 100,
-      maxHp: 300,
-      observedTick: o.tick,
-    },
-  ];
-  const mission: CombatMission = {
-    id: "defense",
-    revision: 1,
-    kind: "defend",
-    units: ["a", "b"],
-    destination: { x: 20, y: 20 },
-    objective: "hold",
-    engagement: { allowCrush: false },
-  };
-  const first = tactics.control(o, mission, []);
-  assert.equal(first.intents.length, 2);
-  assert(
-    first.intents.every((i) => i.kind === "attack" && i.target === "hurt"),
-  );
-  o.tick += 30;
-  o.enemies = o.enemies.map((e) => ({ ...e, x: 40, y: 40 }));
-  assert(
-    tactics.control(o, mission, []).intents.every((i) => i.kind !== "attack"),
-  );
-});
-
 test("layered opening preserves the published sequence through exit casualties and air contacts", () => {
   const old = new LegacyCommander("factory-exit"),
     current = new Commander("factory-exit", { tactics: new LocalCombat() });

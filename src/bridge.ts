@@ -184,8 +184,15 @@ export class WarbookBot extends Bot {
       const enemy = enemies
         .slice()
         .sort((a, b) => distance2(a, home) - distance2(b, home))[0];
-      const anchor =
-        this.game.rules.getBuilding(name).isBaseDefense && enemy ? enemy : home;
+      const productionPlan = this.commander.controlPlan?.production;
+      const plannedAnchor = productionPlan?.defenses?.some(
+        (g) => g.product === name,
+      )
+        ? productionPlan.defenseAnchor
+        : undefined;
+      const anchor = this.game.rules.getBuilding(name).isBaseDefense
+        ? (plannedAnchor ?? enemy ?? home)
+        : home;
       for (const p of [...candidates.values()].sort(
         (a, b) =>
           distance2(a, anchor) - distance2(b, anchor) || a.x - b.x || a.y - b.y,

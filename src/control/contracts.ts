@@ -21,6 +21,8 @@ export interface ProductionPlan extends TaskIdentity {
   readonly structures: readonly { product: string; count: number }[];
   /** Separately queued armory items; absent for the historical opening. */
   readonly defenses?: readonly { product: string; count: number }[];
+  /** Preferred defensive position; the bridge still checks only explored legal footprints. */
+  readonly defenseAnchor?: Point;
   readonly vehicles: {
     readonly armor: string;
     readonly harvester: string;
