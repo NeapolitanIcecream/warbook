@@ -1,0 +1,11 @@
+{
+  "purpose":"Check bounded close defense and exploiting a local counterattack window after armor pressure subsides",
+  "subjects":{
+    "local":{"ref":"a580008d7f18bfd5e090bf77de3635c32ad13a3d","mode":"bastion"},
+    "window":{"ref":"ca271351a3eb7c3d6b0a551276011272c8e2c671","mode":"bastion"}
+  },
+  "opponents":{"published":{"ref":"8326311288ec685c3da43b1d182071dc36938fe8","mode":"factory-exit"}},
+  "maps":["mp03t4.map","mp06t2.map"],
+  "rounds":2,
+  "decision":{"budget":"8 starts, both creation slots; preserve every stop","check":"Close infantry is handled without long pursuit, the main force uses observed local pressure to launch, and full games finish"}
+}
