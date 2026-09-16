@@ -23,7 +23,7 @@ export class BastionStrategy implements StrategicController {
   private joining = new Set<string>();
   private approach?: Point;
   private nextLaunchTick = 0;
-  private readonly launchSize = 8;
+  private readonly launchSize = 6;
   private responsePost?: Point;
   private lastResponseTick = Number.NEGATIVE_INFINITY;
   private lastThreatTick = Number.NEGATIVE_INFINITY;
