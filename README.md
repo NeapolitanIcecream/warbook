@@ -1,18 +1,18 @@
 # Warbook / Chrono Divide AI
 
-**当前版本：0.1.7。** 本地可玩的红色警戒 2 AI。本轮修正生产记账：将正在生产的矿车、在建矿场附带的矿车计入目标，避免重复购买。战略与战术保持原样；四图开发池为 53/72 胜，0.1.6 为 52/72，本次按正确性修复发布，不宣称综合棋力提升。
+**当前发行：0.1.8。** 新增可试玩的阵地反击对手：部署守军、有限工事、护矿和成批反击。默认主线继续固定为 0.1.7。该阵地路线在四图开发池对旧主线 12/16 胜，但对 Supalosa 仅 3/16，作为有明确专长与短板的挑战者保留。
 
 ## 试玩
 
 打开 **[本地玩家入口](http://127.0.0.1:8642/)**，选择「本地对战」→「开始游戏」。默认美国、美国小镇、10000 资金、零起始军队。
 
-也可以选择 **[集结反击 AI（实验对手）](http://127.0.0.1:8642/challenge/)**：它更注重基地附近的早期防守。默认主线使用新的集结进攻策略；旧主线和 counter 均保留为冻结对手。
+也可以选择 **[阵地反击 AI（0.1.8 实验对手）](http://127.0.0.1:8642/challenge/)**：步兵部署守家，坦克应对近处威胁并寻找反击窗口，后续援军先组成批次。游戏页下方显示所选 AI 的版本。旧 counter 仍保留为冻结研究对手。
 
 - 鼠标选择基地车，按 **D** 展开；在右侧建造栏生产和放置建筑。
 - **Esc → 放弃任务 → 退出** 可以结束当前局；结算后点「继续」再次开局。
 - 服务未启动时，双击 [Play Warbook.command](scripts/Play%20Warbook.command)。Agent 负责环境、版本、日志与运行维护。
 
-只想看 AI 对战，可以点击首页的「观看 AI 对局回放」，或打开 **[完整对局回放](http://127.0.0.1:8642/watch)**。当前本机提供 0.1.7（WarbookRed）对 0.1.6（WarbookBlue）的美国小镇对局，约 25 分钟，本局旧版获胜。回放无需操作军队；窗口较窄时可用 Esc → 全屏展开画面，也可加速观看。
+只想看 AI 对战，可以点击首页的「观看 AI 对局回放」，或打开 **[完整对局回放](http://127.0.0.1:8642/watch)**。当前本机提供 0.1.8 阵地反击（WarbookRed）对 0.1.7 主线（WarbookBlue）的美国小镇对局，约 20 分钟，本局阵地方获胜。回放无需操作军队；窗口较窄时可用 Esc → 全屏展开画面，也可加速观看。
 
 这是基础地面作战研发版。当前重点是建设、采矿、出兵、坦克对步兵作战和寻找迁移的基地；不宣称已经覆盖所有兵种、地图或真人竞技水平。
 
@@ -40,6 +40,7 @@ npm run match -- --mode baseline --opponent supalosa --units 0
 npm run batch -- --rounds 12 --modes baseline,combined --map mp03t4.map
 npm run replay -- runs/<run-directory>
 npm run bot:build -- --ref v0.1.7 --mode factory-exit
+npm run bot:build -- --ref v0.1.8 --mode bastion
 # 旧主线仍可用 --ref v0.1.4 --mode combined 冻结构建。
 # 将构建返回的 release.json 路径交给 --actor-release / --opponent-release。
 # --swap 交换创建/执行槽位，不控制地图出生位置。
@@ -47,8 +48,11 @@ npm run bot:build -- --ref v0.1.7 --mode factory-exit
 
 `factory-exit` 是当前发布策略：观察到首批四辆坦克后，等待存活坦克完成出厂，再继续进攻；出厂期间的伤亡不会让已完成的生产进度倒退。附近接战仍可提前发生。经济目标、碾压、防空和探索沿用原策略，生产会计入队列和施工矿场的矿车承诺。`combined` 是更早的主线，`counter` 是保留的实验对手；`formed`、`raid`、`coordinated` 等保留作研究对照。模式名称本身不冻结代码，跨版本比较必须使用冻结包。全部实验和固定试玩版本见 [执行进展](docs/progress.md)。
 
+`bastion` 使用分别归属的主力、守备、预备与汇合任务。`cohort-local` 是未晋升的主线编组研究模式。移动射击原型出现过三次上限，已从当前运行代码移除，冻结历史和失败记录见 [阵地与编组实验](docs/defense-cycle.md)。当前尚未实现成熟的 T 优、残血轮换、军犬屏护或完整中后期发展。
+
 ## 固定版本与证据范围
 
+- 阵地路线四图固定池 28/48，0.1.7 为 38/48，共 96 局均正常。对旧主线 / counter / Supalosa 分别为 12/16、13/16、3/16。后续部署/工事消融受到起点覆盖影响，尚未证明各组件的独立收益；短图起点 1 仍是明确弱点。发布检查分为先行包四局（18,823 次）和最终包两局（12,183 次），均正常且同观察指令一致，版本与证据分开记录在 [本轮记录](docs/defense-cycle.md)。
 - **SDK：`@chronodivide/game-api@0.79.0`。实际嵌入的引擎源码版本是 `0.83.3`，回放兼容标识是 `0.83`。** 这由发布包中的版本常量和真实回放确认；早期文档根据 changelog 写作「引擎 0.84」的映射已被实际结果修正。
 - 玩家客户端来自官方 [0.83.3 归档](https://game.chronodivide.com/old/v0.83.3/)，配合同一 SDK 的规则资源包；客户端代码、SDK 资源和 AI 包均校验哈希。最初的 0.84 客户端试玩记录保留为单独证据。
 - 0.1.7 生产修正的四图开发池：对冻结 0.1.6、counter、npm Supalosa，每格 6 次，两版合计 144 局全部正常结束，53/72 对 52/72。小镇补兵更早，其他地图没有一致收益；矿场被毁后重建仍可能附带第五辆矿车。城市切片的另 24 次复查、旧版上限局及保留决定见 [生产记账与实战](docs/production-cycle.md)。
@@ -60,6 +64,7 @@ npm run bot:build -- --ref v0.1.7 --mode factory-exit
 
 - [policy.ts](src/policy.ts)：当前主线的控制器入口，历史 mode 经 [legacy-policy.ts](src/legacy-policy.ts) 保留。
 - [strategy.ts](src/control/strategy.ts)：战略阶段、目标、兵力就绪需求和生产目标。
+- [bastion-strategy.ts](src/control/bastion-strategy.ts)、[position-tactics.ts](src/control/position-tactics.ts)：守备、反击、增援批次及有限近距自卫。
 - [tactics.ts](src/control/tactics.ts)、[production.ts](src/control/production.ts)：分别落实作战与生产任务。
 - [coordinator.ts](src/control/coordinator.ts)：任务修订、单位归属、结果反馈和过期命令检查。
 - [bridge.ts](src/bridge.ts)：观察白名单、局部引用、动作仲裁与提交。
