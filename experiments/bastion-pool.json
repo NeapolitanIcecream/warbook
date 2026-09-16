@@ -1,0 +1,15 @@
+{
+  "purpose":"Evaluate whether the defensive counterattack candidate provides useful pressure across the fixed development pool",
+  "subjects":{
+    "published":{"ref":"8326311288ec685c3da43b1d182071dc36938fe8","mode":"factory-exit"},
+    "bastion":{"ref":"ca271351a3eb7c3d6b0a551276011272c8e2c671","mode":"bastion"}
+  },
+  "opponents":{
+    "published":{"ref":"8326311288ec685c3da43b1d182071dc36938fe8","mode":"factory-exit"},
+    "counter":{"ref":"a64a79e32b7333c26b1d4bfdb43405464c51173a","mode":"counter"},
+    "supalosa":{"native":"supalosa"}
+  },
+  "maps":["mp03t4.map","mp06t2.map","mp29u2.map","mp08t2.map"],
+  "rounds":4,
+  "decision":{"budget":"96 starts fixed before running; all four maps are exposed development sources","check":"Full outcomes and per-map tradeoffs, actual deployment/fort support and counterattack, reserve batch joins and exceptions","scope":"Challenger retention and development comparison; no automatic promotion or unseen-source claim"}
+}
