@@ -1,0 +1,15 @@
+{
+  "purpose": "Investigate the urban Supalosa slice: 0.1.6 was 6/6 and counted was 4/6, with unequal spawn coverage and early army losses",
+  "subjects": {
+    "published": { "ref": "e3e338fe74236924500b46227fa2f4bbd65de23b", "mode": "factory-exit" },
+    "counted": { "ref": "e4e7c99add15179096f3be33c23003cb400b48d6", "mode": "factory-exit" }
+  },
+  "opponents": { "supalosa": { "native": "supalosa" } },
+  "maps": ["mp29u2.map"],
+  "rounds": 12,
+  "decision": {
+    "budget": "24 starts fixed before this diagnostic run, both creation slots; keep all results regardless of score",
+    "check": "Report spawn-specific outcomes and early army losses; investigate whether missing miner income or pre-reinforcement combat accounts for the adverse slice",
+    "scope": "Targeted post-screen investigation, reported separately from the four-map pool; not a new global promotion score"
+  }
+}
