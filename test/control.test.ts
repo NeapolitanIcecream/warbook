@@ -376,6 +376,27 @@ test("tactics cannot commandeer production-owned units or submit purchases", () 
   }
 });
 
+test("the coordinator enforces an explicit no-crushing mission even if a tactic ignores it", () => {
+  const c = new ControlCoordinator(),
+    o = observation();
+  c.decide(o);
+  const plan = {
+    ...c.plan!,
+    combat: { ...c.plan!.combat, engagement: { allowCrush: false } },
+  };
+  const result = c.components.tactics.control(o, plan.combat, []);
+  assert.throws(
+    () =>
+      c.compile(o, plan, [
+        {
+          ...result,
+          intents: [{ kind: "crush", refs: ["a"], target: "visible-infantry" }],
+        },
+      ]),
+    /forbids explicit crushing/,
+  );
+});
+
 test("mission revisions remain stable across observation reordering but reject superseded results", () => {
   const c = new ControlCoordinator();
   const o = observation();

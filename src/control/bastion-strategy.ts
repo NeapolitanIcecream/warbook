@@ -252,7 +252,7 @@ export class BastionStrategy implements StrategicController {
         : this.responsePost
           ? "protect-economy"
           : "muster-counterattack",
-      engagement: { allowCrush: assault.length > 0 },
+      engagement: { allowCrush: true },
     });
     const additionalCombat = [
       this.mission("base-garrison", {
@@ -272,7 +272,7 @@ export class BastionStrategy implements StrategicController {
           objective: this.responsePost
             ? "protect-economy"
             : "muster-reinforcements",
-          engagement: { allowCrush: false },
+          engagement: { allowCrush: true },
         }),
       );
     if (joiners.length)

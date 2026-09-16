@@ -12,6 +12,7 @@ export interface CombatMission extends TaskIdentity {
   readonly groundDestination?: Point;
   readonly objective: string;
   readonly engagement: {
+    /** Permission for explicit crushing orders; native incidental movement effects are separate. */
     readonly allowCrush: boolean;
   };
 }

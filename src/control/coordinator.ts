@@ -136,6 +136,12 @@ export class ControlCoordinator {
       for (const intent of result.intents) {
         if (result.origin.controller === "tactics" && !("refs" in intent))
           throw new Error("Tactics cannot spend production resources");
+        if (
+          intent.kind === "crush" &&
+          "engagement" in task &&
+          !task.engagement.allowCrush
+        )
+          throw new Error("Mission forbids explicit crushing");
         if ("refs" in intent)
           for (const ref of intent.refs) {
             if (owners.get(ref) !== task.id || assigned.has(ref))

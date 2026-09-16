@@ -68,14 +68,15 @@ export class PositionTactics extends LocalCombat {
             distance2(e, base) <= 12 ** 2 &&
             distance2(e, unit) <= 6 ** 2,
         );
-        const infantry = unit.crusher
-          ? close
-              .filter(
-                (e) =>
-                  e.type === 3 && !e.airborne && distance2(e, unit) <= 3 ** 2,
-              )
-              .sort((a, b) => distance2(a, unit) - distance2(b, unit))[0]
-          : undefined;
+        const infantry =
+          unit.crusher && mission.engagement.allowCrush
+            ? close
+                .filter(
+                  (e) =>
+                    e.type === 3 && !e.airborne && distance2(e, unit) <= 3 ** 2,
+                )
+                .sort((a, b) => distance2(a, unit) - distance2(b, unit))[0]
+            : undefined;
         if (infantry) {
           issue(
             ref,
