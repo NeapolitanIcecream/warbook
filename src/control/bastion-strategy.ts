@@ -15,7 +15,7 @@ import {
 
 /** A local defender with persistent counterattack membership and a separate garrison. */
 export class BastionStrategy implements StrategicController {
-  readonly id = "bastion-strategy-v1";
+  readonly id = "bastion-strategy-v2";
   private readonly opening = new OpeningStrategy();
   private readonly revisions = new Map<string, TaskRevision>();
   private readonly productionRevision = new TaskRevision();
@@ -23,7 +23,10 @@ export class BastionStrategy implements StrategicController {
   private joining = new Set<string>();
   private approach?: Point;
   private nextLaunchTick = 0;
-  private readonly launchSize = 6;
+  private readonly launchSize = 8;
+  private responsePost?: Point;
+  private lastResponseTick = Number.NEGATIVE_INFINITY;
+  private lastThreatTick = Number.NEGATIVE_INFINITY;
 
   assessmentRequest(o: Observation) {
     return this.opening.assessmentRequest(o);
@@ -73,6 +76,32 @@ export class BastionStrategy implements StrategicController {
       x: Math.round(o.home.x + (6 * dx) / length),
       y: Math.round(o.home.y + (6 * dy) / length),
     };
+    const assets = o.own.filter((u) => u.harvester || u.refinery || u.yard);
+    const incursions = o.enemies
+      .filter((e) => !e.airborne && e.type !== 2)
+      .flatMap((enemy) =>
+        assets
+          .filter((asset) => distance2(enemy, asset) <= 10 ** 2)
+          .map((asset) => ({
+            enemy,
+            asset,
+            distance: distance2(enemy, asset),
+          })),
+      )
+      .sort((a, b) => a.distance - b.distance);
+    if (incursions.length) {
+      this.lastThreatTick = o.tick;
+      if (o.tick - this.lastResponseTick >= 90) {
+        const { enemy, asset } = incursions[0];
+        this.responsePost = {
+          x: Math.round((enemy.x + asset.x) / 2),
+          y: Math.round((enemy.y + asset.y) / 2),
+        };
+        this.lastResponseTick = o.tick;
+      }
+    } else if (o.tick - this.lastThreatTick > 300)
+      this.responsePost = undefined;
+    const vehiclePost = this.responsePost ?? post;
     const outsideFactory = (u: Unit) =>
       !o.own.some(
         (b) =>
@@ -150,11 +179,15 @@ export class BastionStrategy implements StrategicController {
     const combat = this.mission("main-force", {
       kind: assault.length ? "advance" : "defend",
       units: (assault.length ? assault : reserve).map((u) => u.ref),
-      destination: assault.length ? base.combat.destination : post,
-      groundDestination: assault.length ? base.combat.groundDestination : post,
+      destination: assault.length ? base.combat.destination : vehiclePost,
+      groundDestination: assault.length
+        ? base.combat.groundDestination
+        : vehiclePost,
       objective: assault.length
         ? base.combat.objective
-        : "muster-counterattack",
+        : this.responsePost
+          ? "protect-economy"
+          : "muster-counterattack",
       engagement: { allowCrush: assault.length > 0 },
     });
     const additionalCombat = [
@@ -171,8 +204,10 @@ export class BastionStrategy implements StrategicController {
         this.mission("reserve-force", {
           kind: "defend",
           units: reserve.map((u) => u.ref),
-          destination: post,
-          objective: "muster-reinforcements",
+          destination: vehiclePost,
+          objective: this.responsePost
+            ? "protect-economy"
+            : "muster-reinforcements",
           engagement: { allowCrush: false },
         }),
       );
