@@ -160,7 +160,7 @@ export class PositionTactics extends LocalCombat {
           );
       } else {
         stationed++;
-        if (false && unit.name === "E1") {
+        if (unit.name === "E1") {
           if (unit.deployed) deployed++;
           else
             issue(
