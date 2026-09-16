@@ -1,0 +1,19 @@
+{
+  "purpose": "Check the versioned 0.1.7 release against the evaluated production candidate after metadata-only changes",
+  "subjects": {
+    "release": { "ref": "8326311288ec685c3da43b1d182071dc36938fe8", "mode": "factory-exit" }
+  },
+  "shadows": {
+    "release": { "ref": "e4e7c99add15179096f3be33c23003cb400b48d6", "mode": "factory-exit" }
+  },
+  "opponents": {
+    "counter": { "ref": "a64a79e32b7333c26b1d4bfdb43405464c51173a", "mode": "counter" },
+    "supalosa": { "native": "supalosa" }
+  },
+  "maps": ["mp03t4.map", "mp29u2.map"],
+  "rounds": 1,
+  "decision": {
+    "budget": "4 starts; compare every decision on the same legal observations",
+    "scope": "Release packaging equivalence to the evaluated candidate; no new strength claim"
+  }
+}
