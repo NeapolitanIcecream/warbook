@@ -27,6 +27,7 @@ export type PolicyMode =
   | "factory-exit"
   | "bastion"
   | "cohort"
+  | "cohort-local"
   | "contact-filter";
 export const POLICY_MODES: readonly PolicyMode[] = [
   "baseline",
@@ -45,6 +46,7 @@ export const POLICY_MODES: readonly PolicyMode[] = [
   "factory-exit",
   "bastion",
   "cohort",
+  "cohort-local",
   "contact-filter",
 ];
 
@@ -61,6 +63,12 @@ export class Commander {
     else if (mode === "bastion")
       this.control = new ControlCoordinator({
         strategy: new BastionStrategy(),
+        tactics: new PositionTactics(),
+        ...components,
+      });
+    else if (mode === "cohort-local")
+      this.control = new ControlCoordinator({
+        strategy: new BastionStrategy("cohort"),
         tactics: new PositionTactics(),
         ...components,
       });

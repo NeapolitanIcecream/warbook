@@ -79,7 +79,8 @@ export async function buildBot(ref: string, mode = "combined") {
         )
       : undefined;
     const controlLayers =
-      layered && ["factory-exit", "bastion", "cohort"].includes(mode)
+      layered &&
+      ["factory-exit", "bastion", "cohort", "cohort-local"].includes(mode)
         ? Object.fromEntries(
             Object.entries({
               strategy:
@@ -87,7 +88,7 @@ export async function buildBot(ref: string, mode = "combined") {
               tactics:
                 mode === "factory-exit"
                   ? "tactics"
-                  : mode === "bastion"
+                  : mode === "bastion" || mode === "cohort-local"
                     ? "position-tactics"
                     : "cohort-tactics",
               production: "production",
