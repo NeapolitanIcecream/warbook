@@ -1,0 +1,13 @@
+{
+  "purpose":"Check whether deployment and fort support materially contribute to the selected defender",
+  "subjects":{
+    "full":{"ref":"648b8882571f6c80c462dfbf9314cee7f2f18da3","mode":"bastion"},
+    "no-deploy":{"ref":"6f887cc1d93461686701ecad04c3dd0556827a16","mode":"bastion"},
+    "neither":{"ref":"d50377404f3aacd398e4b296f80bd5f7a9e68ef9","mode":"bastion"},
+    "no-fort":{"ref":"c2430c11aeb906a2b42894e7c40fb051f9dfb93d","mode":"bastion"}
+  },
+  "opponents":{"published":{"ref":"8326311288ec685c3da43b1d182071dc36938fe8","mode":"factory-exit"}},
+  "maps":["mp03t4.map","mp06t2.map"],
+  "rounds":4,
+  "decision":{"budget":"32 starts; keep all results","check":"Real deployment, fort contribution and whole-game outcomes","scope":"Removing a fort also frees its cost and changes the garrison anchor; not an isolated weapon-DPS measurement, no controlled seed"}
+}
