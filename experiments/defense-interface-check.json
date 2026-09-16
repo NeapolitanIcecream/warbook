@@ -1,0 +1,9 @@
+{
+  "purpose": "Check that plural combat tasks and Stop support preserve the existing factory-exit decisions",
+  "subjects": {"current": {"ref":"382951ba3fe33affcd151bf385bd4b9a8a2c05a1","mode":"factory-exit"}},
+  "shadows": {"current": {"ref":"8326311288ec685c3da43b1d182071dc36938fe8","mode":"factory-exit"}},
+  "opponents": {"published": {"ref":"8326311288ec685c3da43b1d182071dc36938fe8","mode":"factory-exit"}},
+  "maps": ["mp03t4.map","mp06t2.map"],
+  "rounds": 1,
+  "decision": {"budget":"2 full starts; zero intent mismatch required for the unchanged mode only"}
+}

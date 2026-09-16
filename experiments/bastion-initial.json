@@ -1,0 +1,8 @@
+{
+  "purpose": "Check actual deployed infantry, limited fortifications and a persistent counterattack cohort",
+  "subjects": {"bastion": {"ref":"382951ba3fe33affcd151bf385bd4b9a8a2c05a1","mode":"bastion"}},
+  "opponents": {"published": {"ref":"8326311288ec685c3da43b1d182071dc36938fe8","mode":"factory-exit"}},
+  "maps": ["mp03t4.map","mp06t2.map"],
+  "rounds": 2,
+  "decision": {"budget":"4 starts, both creation slots; preserve limits and failures","check":"Actual deployment/fortification, defensive concentration, counterattack and full-game outcome; not a strength claim"}
+}
