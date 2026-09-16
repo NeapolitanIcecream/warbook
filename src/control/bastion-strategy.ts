@@ -23,6 +23,7 @@ export class BastionStrategy implements StrategicController {
   private joining = new Set<string>();
   private approach?: Point;
   private nextLaunchTick = 0;
+  private readonly launchSize = 6;
 
   assessmentRequest(o: Observation) {
     return this.opening.assessmentRequest(o);
@@ -104,7 +105,8 @@ export class BastionStrategy implements StrategicController {
     if (
       !this.assault.size &&
       o.tick >= this.nextLaunchTick &&
-      ready.filter((u) => u.name === armor).length >= (o.tick >= 15000 ? 4 : 8)
+      ready.filter((u) => u.name === armor).length >=
+        (o.tick >= 15000 ? 4 : this.launchSize)
     ) {
       this.assault = new Set(ready.map((u) => u.ref));
       assault = vehicles.filter((u) => this.assault.has(u.ref));
