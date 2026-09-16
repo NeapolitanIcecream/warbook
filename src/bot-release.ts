@@ -27,6 +27,8 @@ export interface BotRelease {
   resourceSha256: string;
   lockSha256: string;
   esbuild: string;
+  sourceHashes?: Record<string, string>;
+  controlLayers?: Record<string, string>;
 }
 
 export const fileHash = (path: string): string =>

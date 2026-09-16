@@ -40,6 +40,7 @@ export class WarbookBot extends Bot {
   private pendingEffects: PendingEffect[] = [];
   private scoutPoints: readonly Point[] = [];
   private lastScoutScan = -150;
+  private lastControlReportTick = -150;
   public trace?: (event: Trace) => void;
   public autoTick = false;
   public observation?: Observation;
@@ -246,6 +247,15 @@ export class WarbookBot extends Bot {
     this.pendingEffects = this.pendingEffects.filter((p) => {
       const effect = observedEffect(p, observation);
       const expired = tick - p.tick >= 450;
+      if ((effect || expired) && p.origin)
+        this.commander.acceptEffect({
+          origin: p.origin,
+          intentId: p.id,
+          basedOnTick: p.tick,
+          observedTick: tick,
+          effect,
+          unresolved: !effect,
+        });
       if (effect || expired)
         this.trace?.({
           tick,
@@ -261,7 +271,18 @@ export class WarbookBot extends Bot {
     return observation;
   }
   decide(observation: Observation): Intent[] {
-    return this.commander.decide(observation);
+    const intents = this.commander.decide(observation);
+    const report = this.commander.controlReport;
+    if (report && observation.tick - this.lastControlReportTick >= 150) {
+      this.trace?.({
+        tick: observation.tick,
+        actor: this.name,
+        kind: "control_report",
+        report,
+      });
+      this.lastControlReportTick = observation.tick;
+    }
+    return intents;
   }
   submit(intents: Intent[]): void {
     const o = this.observation;
@@ -295,6 +316,7 @@ export class WarbookBot extends Bot {
       if ("refs" in intent) for (const ref of intent.refs) assigned.add(ref);
       try {
         const intentId = `intent-${this.intentSequence++}`;
+        const origin = this.commander.intentOrigin(intent);
         switch (intent.kind) {
           case "deploy":
             this.player.actions.orderUnits(ids, OrderType.DeploySelected);
@@ -345,9 +367,13 @@ export class WarbookBot extends Bot {
           intent,
           intentId,
           effect: "not_yet_observed",
+          ...(origin ? { origin } : {}),
         });
-        if (this.trace)
-          this.pendingEffects.push(rememberIntent(intentId, intent, o));
+        if (this.trace || origin)
+          this.pendingEffects.push({
+            ...rememberIntent(intentId, intent, o),
+            ...(origin ? { origin } : {}),
+          });
       } catch (error) {
         this.trace?.({
           tick: o.tick,

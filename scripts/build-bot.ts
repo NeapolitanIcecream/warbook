@@ -70,6 +70,26 @@ export async function buildBot(ref: string, mode = "combined") {
     mkdirSync(directory, { recursive: true });
     writeFileSync(`${directory}/bot.mjs`, code);
     const module = await import(pathToFileURL(`${directory}/bot.mjs`).href);
+    const layered = existsSync(`${source}/src/control/coordinator.ts`);
+    const sourceHashes = layered
+      ? Object.fromEntries(
+          Object.keys(result.metafile!.inputs)
+            .filter((path) => path !== "frozen-bot-entry.ts")
+            .map((path) => [path, fileHash(resolve(source, path))]),
+        )
+      : undefined;
+    const controlLayers =
+      layered && mode === "factory-exit"
+        ? Object.fromEntries(
+            [
+              "strategy",
+              "tactics",
+              "production",
+              "coordinator",
+              "contracts",
+            ].map((part) => [part, sourceHashes![`src/control/${part}.ts`]]),
+          )
+        : undefined;
     const release: BotRelease = {
       format: "warbook-bot-v1",
       git,
@@ -80,6 +100,8 @@ export async function buildBot(ref: string, mode = "combined") {
       ...engineHashes(),
       lockSha256,
       esbuild: esbuildVersion,
+      ...(sourceHashes ? { sourceHashes } : {}),
+      ...(controlLayers ? { controlLayers } : {}),
     };
     const metadata = JSON.stringify(release, null, 2);
     if (

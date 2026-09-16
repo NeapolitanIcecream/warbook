@@ -21,6 +21,7 @@ import { SupalosaOpponent } from "./opponent.js";
 import { recordDestruction } from "./referee.js";
 import { createOfficialOpponent } from "./official-opponent.js";
 import { loadBotRelease, type DrivenBot } from "./bot-release.js";
+import { DecisionShadow, ShadowMismatch } from "./analysis/shadow.js";
 
 const { values } = parseArgs({
   options: {
@@ -32,6 +33,7 @@ const { values } = parseArgs({
     opponent: { type: "string", default: "supalosa" },
     "actor-release": { type: "string" },
     "opponent-release": { type: "string" },
+    "shadow-release": { type: "string" },
     swap: { type: "boolean", default: false },
     out: { type: "string" },
   },
@@ -74,6 +76,19 @@ async function main(): Promise<void> {
   const frozenOpponent = values["opponent-release"]
     ? await loadBotRelease(values["opponent-release"], "WarbookBlue")
     : undefined;
+  const shadow = values["shadow-release"]
+    ? await loadBotRelease(values["shadow-release"], "DecisionShadow")
+    : undefined;
+  if (
+    shadow &&
+    (shadow.release.mode !== subject.bot.mode ||
+      shadow.release.observationProtocol !==
+        (subject.release?.observationProtocol ?? OBSERVATION_PROTOCOL))
+  )
+    throw new Error(
+      "A behavior shadow must share the subject mode and observation protocol",
+    );
+  const comparison = shadow ? new DecisionShadow() : undefined;
   const opponent =
     frozenOpponent?.bot ??
     (values.opponent === "official"
@@ -120,6 +135,15 @@ async function main(): Promise<void> {
       release: bot === subject.bot ? subject.release : frozenOpponent?.release,
     })),
     swapped: values.swap,
+    ...(shadow
+      ? {
+          shadow: {
+            release: shadow.release,
+            scope:
+              "decision-only; no engine initialization, observation or submission by the shadow",
+          },
+        }
+      : {}),
     observationProtocol: OBSERVATION_PROTOCOL,
     decisionInterval: 3,
     batchOrder: agents.map((a) => a.name),
@@ -127,6 +151,13 @@ async function main(): Promise<void> {
     sourceHashes: Object.fromEntries(
       [
         "src/policy.ts",
+        "src/legacy-policy.ts",
+        "src/control/contracts.ts",
+        "src/control/strategy.ts",
+        "src/control/tactics.ts",
+        "src/control/production.ts",
+        "src/control/coordinator.ts",
+        "src/analysis/shadow.ts",
         "src/raiding.ts",
         "src/regrouping.ts",
         "src/bridge.ts",
@@ -206,7 +237,15 @@ async function main(): Promise<void> {
           (a) => !runningGame.gameApi.isPlayerDefeated(a.name),
         );
         const observations = active.map((a) => a.observe());
-        const intents = active.map((a, i) => a.decide(observations[i]));
+        const intents = active.map((a, i) =>
+          a === subject.bot && comparison && shadow
+            ? comparison.decide(
+                observations[i],
+                (o) => a.decide(o),
+                (o) => shadow.bot.decide(o),
+              )
+            : a.decide(observations[i]),
+        );
         active.forEach((a, i) => a.submit(intents[i]));
         decisions += active.length;
         decisionMillis += performance.now() - t;
@@ -239,7 +278,22 @@ async function main(): Promise<void> {
     if (game.isFinished()) stopReason = "api_finished_unspecified";
   } catch (e) {
     error = e instanceof Error ? e.stack : String(e);
-    stopReason = "api_or_bot_exception";
+    stopReason =
+      e instanceof ShadowMismatch ? "shadow_mismatch" : "api_or_bot_exception";
+    if (e instanceof ShadowMismatch)
+      writeFileSync(
+        `${dir}/shadow-mismatch.json`,
+        JSON.stringify(
+          {
+            tick: e.observation.tick,
+            observation: e.observation,
+            live: e.live,
+            shadow: e.shadow,
+          },
+          null,
+          2,
+        ),
+      );
   }
   const stats = game.getPlayerStats().map((p) => ({
     name: p.name,
@@ -291,6 +345,7 @@ async function main(): Promise<void> {
     },
     decisions,
     decisionMillis,
+    ...(comparison ? { shadow: comparison.summary() } : {}),
   };
   writeFileSync(`${dir}/result.json`, JSON.stringify(result, null, 2));
   console.log(JSON.stringify({ event: "result", ...result }));

@@ -4,6 +4,7 @@ import {
   type Observation,
   type Unit,
 } from "./model.js";
+import type { IntentOrigin } from "./control/contracts.js";
 
 export interface PendingEffect {
   id: string;
@@ -11,6 +12,7 @@ export interface PendingEffect {
   intent: Intent;
   units: Unit[];
   targetHp?: number;
+  origin?: IntentOrigin;
 }
 
 export function rememberIntent(
