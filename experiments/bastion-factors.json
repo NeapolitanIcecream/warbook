@@ -1,0 +1,13 @@
+{
+  "purpose":"Separate the observed missed counterattack window from uncovered miners in the first defensive candidate",
+  "subjects":{
+    "eight-static":{"ref":"382951ba3fe33affcd151bf385bd4b9a8a2c05a1","mode":"bastion"},
+    "six-static":{"ref":"f11a1f09cda43c1c8188a83d1e4a65666a3753ce","mode":"bastion"},
+    "eight-mobile":{"ref":"cd9446b90db1e071fd5b93abc74c0000a5297952","mode":"bastion"},
+    "six-mobile":{"ref":"da3958a9a687cfd44ce11408f8a930c7068f990d","mode":"bastion"}
+  },
+  "opponents":{"published":{"ref":"8326311288ec685c3da43b1d182071dc36938fe8","mode":"factory-exit"}},
+  "maps":["mp03t4.map","mp06t2.map"],
+  "rounds":4,
+  "decision":{"budget":"32 starts; no adaptive extension","check":"Full outcomes, actual counterattack, miner survival and guard behavior; no paired-spawn claim"}
+}
