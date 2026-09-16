@@ -254,6 +254,53 @@ test("a local counterattack window can release four ready tanks after observed a
   assert.equal(c.controlPlan!.combat.units.length, 4);
 });
 
+test("a wiped assault releases surviving joiners back into the reserve", () => {
+  const c = new Commander("bastion"),
+    o = observation();
+  o.own = o.own.filter((u) => u.name !== "MTNK");
+  o.own.push(
+    ...Array.from({ length: 6 }, (_, i) => tank(`wave-${i}`, 68 + (i % 3), 42)),
+  );
+  c.decide(o);
+  assert.equal(c.controlPlan!.combat.kind, "advance");
+  o.own.push(
+    ...Array.from({ length: 4 }, (_, i) => tank(`reinforcement-${i}`, 68, 43)),
+  );
+  o.tick += 3;
+  c.decide(o);
+  assert(
+    c.controlPlan!.additionalCombat!.some((m) => m.id === "reinforcements"),
+  );
+  o.own = o.own.filter((u) => !u.ref.startsWith("wave-"));
+  o.tick += 3;
+  c.decide(o);
+  assert.equal(c.controlPlan!.combat.kind, "defend");
+  assert.equal(c.controlPlan!.combat.units.length, 4);
+  assert(
+    !c.controlPlan!.additionalCombat!.some((m) => m.id === "reinforcements"),
+  );
+});
+
+test("the offensive cohort funds its first force before expanding the economy", () => {
+  const c = new Commander("cohort-local"),
+    o = observation();
+  c.decide(o);
+  assert.equal(c.controlPlan!.production.vehicles.harvesters, 2);
+  assert(
+    c
+      .controlPlan!.production.structures.filter((g) => g.product === "GAREFN")
+      .every((g) => g.count === 1),
+  );
+  o.own = o.own.filter((u) => u.name !== "MTNK");
+  o.own.push(
+    ...Array.from({ length: 6 }, (_, i) => tank(`wave-${i}`, 68 + (i % 3), 42)),
+  );
+  o.tick += 3;
+  c.decide(o);
+  assert.equal(c.controlPlan!.combat.kind, "advance");
+  assert.equal(c.controlPlan!.production.vehicles.harvesters, 4);
+});
+
 test("extra combat tasks keep separate ownership and receive only their own feedback", () => {
   const c = new Commander("bastion"),
     o = observation();

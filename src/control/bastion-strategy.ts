@@ -30,10 +30,11 @@ export class BastionStrategy implements StrategicController {
   private lastThreatTick = Number.NEGATIVE_INFINITY;
   private sawArmorPressure = false;
   private lastHeavyArmorTick = Number.NEGATIVE_INFINITY;
+  private hasLaunched = false;
 
   constructor(private readonly doctrine: "bastion" | "cohort" = "bastion") {
     this.id =
-      doctrine === "bastion" ? "bastion-strategy-v4" : "cohort-strategy-v1";
+      doctrine === "bastion" ? "bastion-strategy-v5" : "cohort-strategy-v2";
   }
 
   assessmentRequest(o: Observation) {
@@ -62,6 +63,7 @@ export class BastionStrategy implements StrategicController {
     const infantry = assessment.army.filter((u) => u.type === 3);
     const vehicles = assessment.army.filter((u) => u.type !== 3);
     const alive = new Set(vehicles.map((u) => u.ref));
+    const hadAssault = this.assault.size > 0;
     this.assault = new Set([...this.assault].filter((ref) => alive.has(ref)));
     this.joining = new Set([...this.joining].filter((ref) => alive.has(ref)));
     const threat = o.enemies
@@ -154,10 +156,7 @@ export class BastionStrategy implements StrategicController {
       y: Math.round(units.reduce((s, u) => s + u.y, 0) / units.length),
     });
     let assault = vehicles.filter((u) => this.assault.has(u.ref));
-    if (
-      this.assault.size &&
-      assault.filter((u) => u.name === armor).length <= 2
-    ) {
+    if (hadAssault && assault.filter((u) => u.name === armor).length <= 2) {
       this.assault.clear();
       this.joining.clear();
       assault = [];
@@ -181,6 +180,7 @@ export class BastionStrategy implements StrategicController {
           : this.launchSize)
     ) {
       this.assault = new Set(ready.map((u) => u.ref));
+      this.hasLaunched = true;
       this.sawArmorPressure = false;
       assault = vehicles.filter((u) => this.assault.has(u.ref));
     }
@@ -209,8 +209,21 @@ export class BastionStrategy implements StrategicController {
       (u) => !this.assault.has(u.ref) && !this.joining.has(u.ref),
     );
     const fort = o.side === 0 ? "GAPILL" : "NALASR";
+    const refinery = o.side === 0 ? "GAREFN" : "NAREFN";
+    const mobilizing = this.doctrine === "cohort" && !this.hasLaunched;
     const economy = {
       ...base.production,
+      ...(mobilizing
+        ? {
+            structures: base.production.structures.map((g) => ({
+              ...g,
+              count: [refinery, factory].includes(g.product)
+                ? Math.min(1, g.count)
+                : g.count,
+            })),
+            vehicles: { ...base.production.vehicles, harvesters: 2 },
+          }
+        : {}),
       defenseAnchor: requestedPost,
       defenses: [
         {
