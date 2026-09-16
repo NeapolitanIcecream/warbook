@@ -1,0 +1,33 @@
+{
+  "purpose": "Final frozen 0.1.6 release: readiness requirements belong to strategy, local engagement distances belong to tactics, command behavior must match 0.1.5",
+  "subjects": {
+    "layered": {
+      "ref": "e3e338fe74236924500b46227fa2f4bbd65de23b",
+      "mode": "factory-exit"
+    }
+  },
+  "shadows": {
+    "layered": {
+      "ref": "d73f7855419be3e53013d2e94c9d5ba1c307d574",
+      "mode": "factory-exit"
+    }
+  },
+  "opponents": {
+    "counter": {
+      "ref": "a64a79e32b7333c26b1d4bfdb43405464c51173a",
+      "mode": "counter"
+    },
+    "supalosa": {
+      "native": "supalosa"
+    }
+  },
+  "maps": [
+    "mp03t4.map",
+    "mp29u2.map"
+  ],
+  "rounds": 2,
+  "decision": {
+    "budget": "8 starts covering both creation slots; retain any limit or failure and require zero command mismatches",
+    "scope": "Final execution/feedback integration and sampled behavior equivalence; not a strength improvement claim"
+  }
+}

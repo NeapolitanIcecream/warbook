@@ -1,6 +1,6 @@
 # Warbook / Chrono Divide AI
 
-**当前版本：0.1.5。** 本地可玩的红色警戒 2 AI。本轮改进早期坦克出发时机，修复出厂期间发生伤亡后重复等待的问题，并用冻结对手和完整对局验证。
+**当前版本：0.1.6。** 本地可玩的红色警戒 2 AI。本轮将战略、战术和生产控制分离，加入任务归属与效果反馈，保持 0.1.5 的决策行为。可以分别调整策略并验证相互影响；本次不宣称棋力提升。
 
 ## 试玩
 
@@ -39,7 +39,7 @@ npm run match -- --units 0
 npm run match -- --mode baseline --opponent supalosa --units 0
 npm run batch -- --rounds 12 --modes baseline,combined --map mp03t4.map
 npm run replay -- runs/<run-directory>
-npm run bot:build -- --ref v0.1.5 --mode factory-exit
+npm run bot:build -- --ref v0.1.6 --mode factory-exit
 # 旧主线仍可用 --ref v0.1.4 --mode combined 冻结构建。
 # 将构建返回的 release.json 路径交给 --actor-release / --opponent-release。
 # --swap 交换创建/执行槽位，不控制地图出生位置。
@@ -57,11 +57,16 @@ npm run bot:build -- --ref v0.1.5 --mode factory-exit
 
 ## 实现结构
 
-- [policy.ts](src/policy.ts)：纯数据、同步决策，没有引擎句柄。
+- [policy.ts](src/policy.ts)：当前主线的控制器入口，历史 mode 经 [legacy-policy.ts](src/legacy-policy.ts) 保留。
+- [strategy.ts](src/control/strategy.ts)：战略阶段、目标、兵力就绪需求和生产目标。
+- [tactics.ts](src/control/tactics.ts)、[production.ts](src/control/production.ts)：分别落实作战与生产任务。
+- [coordinator.ts](src/control/coordinator.ts)：任务修订、单位归属、结果反馈和过期命令检查。
 - [bridge.ts](src/bridge.ts)：观察白名单、局部引用、动作仲裁与提交。
 - [effects.ts](src/effects.ts)：区分「已经请求」和实际观察到的效果。
 - [runner.ts](src/runner.ts)、[referee.ts](src/referee.ts)：对局驱动与独立裁判记录。
 - [player](src/player/)：本地入口、官方客户端接入与固定版本服务。
+
+[分层实现与验证](docs/layered-control.md) 记录逐步影子比较、真实完整对局及独立战术试验。当前保持同步 API 控制；大模型战略、RPA 和完整多小队调度仍属于后续适配。
 
 ## 实用分析工具
 
