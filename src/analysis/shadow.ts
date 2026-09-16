@@ -61,7 +61,7 @@ export class DecisionShadow {
       liveDecisionMillis: this.liveMillis,
       shadowDecisionMillis: this.shadowMillis,
       timingScope:
-        "decision calls on identical observations, alternating call order; excludes observation, clone, submission and logging",
+        "decision calls on identical observations, alternating call order; excludes observation, clone and submission; includes any logging inside the compared decide methods",
     };
   }
 }

@@ -41,6 +41,8 @@ export class WarbookBot extends Bot {
   private scoutPoints: readonly Point[] = [];
   private lastScoutScan = -150;
   private lastControlReportTick = -150;
+  private lastCombatRevision = -1;
+  private lastProductionRevision = -1;
   public trace?: (event: Trace) => void;
   public autoTick = false;
   public observation?: Observation;
@@ -271,23 +273,37 @@ export class WarbookBot extends Bot {
     return observation;
   }
   decide(observation: Observation): Intent[] {
-    const intents = this.commander.decide(observation);
-    const report = this.commander.controlReport;
-    if (report && observation.tick - this.lastControlReportTick >= 150) {
-      this.trace?.({
-        tick: observation.tick,
-        actor: this.name,
-        kind: "control_report",
-        report,
-      });
-      this.lastControlReportTick = observation.tick;
-    }
-    return intents;
+    return this.commander.decide(observation);
   }
   submit(intents: Intent[]): void {
     const o = this.observation;
     if (!o || o.tick !== this.game.getCurrentTick())
       throw new Error("Stale observation");
+    const plan = this.commander.controlPlan;
+    if (
+      plan &&
+      (plan.combat.revision !== this.lastCombatRevision ||
+        plan.production.revision !== this.lastProductionRevision)
+    ) {
+      this.trace?.({
+        tick: o.tick,
+        actor: this.name,
+        kind: "strategic_plan",
+        plan,
+      });
+      this.lastCombatRevision = plan.combat.revision;
+      this.lastProductionRevision = plan.production.revision;
+    }
+    const report = this.commander.controlReport;
+    if (report && o.tick - this.lastControlReportTick >= 150) {
+      this.trace?.({
+        tick: o.tick,
+        actor: this.name,
+        kind: "control_report",
+        report,
+      });
+      this.lastControlReportTick = o.tick;
+    }
     const owned = new Set(o.own.map((u) => u.ref));
     const visible = new Set(o.enemies.map((u) => u.ref));
     const assigned = new Set<string>();
@@ -314,9 +330,9 @@ export class WarbookBot extends Bot {
         changedQueues.add(intent.product.queue);
       }
       if ("refs" in intent) for (const ref of intent.refs) assigned.add(ref);
+      const intentId = `intent-${this.intentSequence++}`;
+      const origin = this.commander.intentOrigin(intent);
       try {
-        const intentId = `intent-${this.intentSequence++}`;
-        const origin = this.commander.intentOrigin(intent);
         switch (intent.kind) {
           case "deploy":
             this.player.actions.orderUnits(ids, OrderType.DeploySelected);
@@ -380,6 +396,8 @@ export class WarbookBot extends Bot {
           actor: this.name,
           kind: "submission_error",
           intent,
+          intentId,
+          ...(origin ? { origin } : {}),
           possiblyPartiallySubmitted: true,
           error: String(error),
         });

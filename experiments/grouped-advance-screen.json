@@ -1,0 +1,28 @@
+{
+  "purpose": "First independent tactic comparison: same strategy, production, observation and execution bridge; batch same-goal marching tanks using the existing native group command",
+  "subjects": {
+    "individual": {
+      "ref": "d673dbe8a0057f6a26d0779874e7d8cab6ff160b",
+      "mode": "factory-exit"
+    },
+    "grouped": {
+      "ref": "cde89b5961fed5fc43aeb783340567382e07ae61",
+      "mode": "factory-exit"
+    }
+  },
+  "opponents": {
+    "counter": {
+      "ref": "a64a79e32b7333c26b1d4bfdb43405464c51173a",
+      "mode": "counter"
+    },
+    "supalosa": { "native": "supalosa" }
+  },
+  "maps": ["mp03t4.map", "mp06t2.map"],
+  "rounds": 2,
+  "decision": {
+    "budget": "16 new starts, inspect all outcomes before retaining the tactic",
+    "invariants": "Strategy, production, contracts, bridge and effects source hashes must match. Only the tactic and its default wiring differ. Actor observations and scoring are unchanged.",
+    "mechanism": "Verify multi-unit marching commands were actually submitted. Reconstruct the first town/counter run for each variant to inspect whether early armor participates together; fewer commands alone are not evidence of stronger combat.",
+    "next": "Keep the behavior-preserving individual tactic if grouping fails to improve the observed participation issue or introduces a material cost. Any strength claim requires a larger frozen comparison. No RPA capability is inferred."
+  }
+}
