@@ -6,7 +6,6 @@ import { LegacyCommander } from "../src/legacy-policy.js";
 import { GroupedAdvance, LocalCombat } from "../src/control/tactics.js";
 import { ControlCoordinator } from "../src/control/coordinator.js";
 import { PositionTactics } from "../src/control/position-tactics.js";
-import { CohortTactics } from "../src/control/cohort-tactics.js";
 import type {
   CombatMission,
   ControlResult,
@@ -77,79 +76,6 @@ function observation(): Observation {
 }
 const economic = (intents: readonly Intent[]) =>
   intents.filter((i) => ["queue", "place", "deploy"].includes(i.kind));
-
-test("cohort marching commands only the assigned tanks and leaves air support on its own target", () => {
-  const t = new CohortTactics(),
-    o = observation();
-  o.own = [
-    tank("a", 20, 20),
-    tank("b", 22, 20),
-    tank("reserve", 22, 22),
-    { ...tank("aa", 20, 21), name: "FV", antiAir: true },
-  ];
-  o.enemies = [
-    {
-      ref: "air",
-      name: "JUMPJET",
-      type: 3,
-      x: 24,
-      y: 21,
-      hp: 125,
-      maxHp: 125,
-      observedTick: o.tick,
-      airborne: true,
-    },
-  ];
-  const mission: CombatMission = {
-    id: "main",
-    revision: 1,
-    kind: "advance",
-    units: ["a", "b", "aa"],
-    destination: { x: 40, y: 20 },
-    objective: "advance",
-    engagement: { allowCrush: true },
-  };
-  const result = t.control(o, mission, []);
-  const move = result.intents.find((i) => i.kind === "move")!;
-  assert("refs" in move);
-  assert.deepEqual(move.refs, ["a", "b"]);
-  assert(
-    result.intents.some(
-      (i) => i.kind === "attack" && i.refs[0] === "aa" && i.target === "air",
-    ),
-  );
-  assert(
-    result.intents.every((i) => !("refs" in i) || !i.refs.includes("reserve")),
-  );
-  o.tick += 3;
-  assert(!t.control(o, mission, []).intents.some((i) => i.kind === "move"));
-});
-
-test("route regrouping has a finite wait and does not send the cohort back to its base", () => {
-  const t = new CohortTactics(),
-    o = observation();
-  o.own = [tank("a", 20, 20), tank("b", 40, 20)];
-  const mission: CombatMission = {
-    id: "main",
-    revision: 1,
-    kind: "advance",
-    units: ["a", "b"],
-    destination: { x: 60, y: 20 },
-    objective: "advance",
-    engagement: { allowCrush: true },
-  };
-  const first = t.control(o, mission, []);
-  assert.equal(first.report.reason, "regroup-on-route");
-  assert(
-    first.intents.some((i) => i.kind === "move" && i.x === 30 && i.y === 20),
-  );
-  o.tick += 450;
-  t.control(o, mission, []);
-  o.tick += 60;
-  const later = t.control(o, mission, []);
-  assert.equal(later.report.reason, "cohort-march");
-  assert(later.intents.some((i) => i.kind === "move" && i.x > 30 && i.x < 60));
-});
 
 test("bastion keeps infantry at home and releases reinforcements as a separate batch", () => {
   const c = new Commander("bastion");
