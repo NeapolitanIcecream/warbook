@@ -15,7 +15,7 @@ import {
 
 /** A local defender with persistent counterattack membership and a separate garrison. */
 export class BastionStrategy implements StrategicController {
-  readonly id = "bastion-strategy-v3";
+  readonly id = "bastion-strategy-v4";
   private readonly opening = new OpeningStrategy();
   private readonly revisions = new Map<string, TaskRevision>();
   private readonly productionRevision = new TaskRevision();
@@ -28,6 +28,8 @@ export class BastionStrategy implements StrategicController {
   private responsePost?: Point;
   private lastResponseTick = Number.NEGATIVE_INFINITY;
   private lastThreatTick = Number.NEGATIVE_INFINITY;
+  private sawArmorPressure = false;
+  private lastHeavyArmorTick = Number.NEGATIVE_INFINITY;
 
   assessmentRequest(o: Observation) {
     return this.opening.assessmentRequest(o);
@@ -122,6 +124,17 @@ export class BastionStrategy implements StrategicController {
     } else if (o.tick - this.lastThreatTick > 300)
       this.responsePost = undefined;
     const vehiclePost = this.responsePost ?? post;
+    const localArmor = o.enemies.filter(
+      (e) =>
+        e.type === 7 &&
+        !["CMIN", "HARV", "AMCV", "SMCV"].includes(e.name) &&
+        (distance2(e, o.home) <= 30 ** 2 ||
+          assets.some((a) => distance2(a, e) <= 15 ** 2)),
+    );
+    if (localArmor.length >= 2) {
+      this.sawArmorPressure = true;
+      this.lastHeavyArmorTick = o.tick;
+    }
     const outsideFactory = (u: Unit) =>
       !o.own.some(
         (b) =>
@@ -155,9 +168,15 @@ export class BastionStrategy implements StrategicController {
       !this.assault.size &&
       o.tick >= this.nextLaunchTick &&
       ready.filter((u) => u.name === armor).length >=
-        (o.tick >= 15000 ? 4 : this.launchSize)
+        (o.tick >= 15000 ||
+        (this.sawArmorPressure &&
+          localArmor.length <= 1 &&
+          o.tick - this.lastHeavyArmorTick >= 90)
+          ? 4
+          : this.launchSize)
     ) {
       this.assault = new Set(ready.map((u) => u.ref));
+      this.sawArmorPressure = false;
       assault = vehicles.filter((u) => this.assault.has(u.ref));
     }
     if (assault.length) {

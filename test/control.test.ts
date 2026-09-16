@@ -142,6 +142,44 @@ test("bastion reforms after heavy losses without issuing the same unit to two ta
   assert.equal(new Set(refs).size, refs.length);
 });
 
+test("a local counterattack window can release four ready tanks after observed armor pressure subsides", () => {
+  const c = new Commander("bastion"),
+    o = observation();
+  o.own = o.own.filter((u) => u.name !== "MTNK");
+  o.own.push(
+    ...Array.from({ length: 4 }, (_, i) => tank(`wave-${i}`, 68 + (i % 3), 42)),
+  );
+  o.enemies = [
+    {
+      ref: "enemy-a",
+      name: "MTNK",
+      type: 7,
+      x: 70,
+      y: 45,
+      hp: 300,
+      maxHp: 300,
+      observedTick: o.tick,
+    },
+    {
+      ref: "enemy-b",
+      name: "MTNK",
+      type: 7,
+      x: 71,
+      y: 45,
+      hp: 300,
+      maxHp: 300,
+      observedTick: o.tick,
+    },
+  ];
+  c.decide(o);
+  assert.equal(c.controlPlan!.combat.kind, "defend");
+  o.tick += 90;
+  o.enemies = o.enemies.slice(0, 1);
+  c.decide(o);
+  assert.equal(c.controlPlan!.combat.kind, "advance");
+  assert.equal(c.controlPlan!.combat.units.length, 4);
+});
+
 test("extra combat tasks keep separate ownership and receive only their own feedback", () => {
   const c = new Commander("bastion"),
     o = observation();
