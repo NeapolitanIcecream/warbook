@@ -7,9 +7,14 @@ import {
   type ProductionPlan,
 } from "./contracts.js";
 
+// Pinned 0.83.3 rules: each of these refineries grants one harvester when its
+// placed building changes from BuildUp (0) to Ready (1). Recompute from current
+// observations so cancellation, destruction, or a failed spawn releases it.
+const harvesterRefineries = new Set(["GAREFN", "NAREFN"]);
+
 /** Executes inventory goals and credit gates. It does not choose economic expansion policy. */
 export class QueueProduction implements ProductionController {
-  readonly id = "queue-production-v1";
+  readonly id = "queue-production-v2";
   private lastDeploy = new Map<string, number>();
   control(
     o: Observation,
@@ -62,10 +67,39 @@ export class QueueProduction implements ProductionController {
         : plan.structures.find((g) => count(g.product) < g.count)?.product;
     queue(building);
     const v = plan.vehicles;
+    const liveHarvesters = o.own.filter((u) => u.harvester).length;
+    const queuedHarvesters = o.queues.reduce(
+      (sum, q) =>
+        sum +
+        q.items.reduce(
+          (n, item) => n + (item.name === v.harvester ? item.quantity : 0),
+          0,
+        ),
+      0,
+    );
+    const refineryHarvesters =
+      o.queues.reduce(
+        (sum, q) =>
+          sum +
+          q.items.reduce(
+            (n, item) =>
+              n + (harvesterRefineries.has(item.name) ? item.quantity : 0),
+            0,
+          ),
+        0,
+      ) +
+      o.own.filter(
+        (u) => harvesterRefineries.has(u.name) && u.buildStatus === 0,
+      ).length +
+      intents.filter(
+        (i) => i.kind === "queue" && harvesterRefineries.has(i.product.name),
+      ).length;
+    const committedHarvesters =
+      liveHarvesters + queuedHarvesters + refineryHarvesters;
     queue(
       o.own.filter((u) => u.antiAir && u.mobile).length < v.mobileAntiAir
         ? v.antiAir
-        : o.own.filter((u) => u.harvester).length < v.harvesters
+        : committedHarvesters < v.harvesters
           ? v.harvester
           : v.armor,
     );
@@ -92,7 +126,14 @@ export class QueueProduction implements ProductionController {
             ? "production-gates"
             : "no-request",
         proposedIntents: intents.length,
-        facts: { credits: o.credits, ...blocked },
+        facts: {
+          credits: o.credits,
+          liveHarvesters,
+          queuedHarvesters,
+          refineryHarvesters,
+          committedHarvesters,
+          ...blocked,
+        },
         executionEvidence: currentEvidence(plan, evidence),
       },
     };
