@@ -76,7 +76,7 @@ npm run bot:build -- --ref v0.1.8 --mode bastion
 
 ## 实用分析工具
 
-[分析工具与验收记录](docs/analysis-tools.md) 说明每项改进对应的问题、实际反例和成本。`npm run analyze -- <批次目录>` 复算版本、直接对战、镜像和起点覆盖；`npm run analyze:encounter -- <单局目录>` 从原回放重建密集装甲时间线；`npm run experiment:matrix -- <计划文件> --out <新目录>` 执行冻结版本矩阵。分析依赖见 [requirements.txt](analysis/requirements.txt)，本机已具备。报告不自动判定因果、实力提升或晋升。
+[分析工具与验收记录](docs/analysis-tools.md) 说明每项改进对应的问题、实际反例和成本。`npm run analyze -- <批次目录>` 复算版本、直接对战、镜像和起点覆盖；`npm run analyze:encounter -- <单局目录>` 输出一页进攻计划、实际位移、行军停滞、建筑受损与步兵参战摘要。异常先直接看相关回放，需要逐帧数据时才加 `--window 起始tick:结束tick`。`npm run experiment:matrix -- <计划文件> --out <新目录>` 执行冻结版本矩阵。分析依赖见 [requirements.txt](analysis/requirements.txt)，本机已具备。报告不自动判定因果、实力提升或晋升。
 
 所有原版资源、客户端缓存、回放、浏览器数据、密钥及运行产物均被 Git 忽略。没有复用被放弃的本机项目代码。第三方软件说明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
