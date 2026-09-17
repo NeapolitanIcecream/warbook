@@ -1,11 +1,11 @@
 import { build } from "esbuild";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { POLICY_VERSION, POLICY_MODES } from "../src/policy.js";
 import { PINNED_CLIENT, SDK_RESOURCE_SHA } from "../src/player/client.js";
 mkdirSync("dist/player", { recursive: true });
-const mode = process.env.PLAYER_POLICY ?? "factory-exit";
+const mode = process.env.PLAYER_POLICY ?? "bastion";
 if (!POLICY_MODES.some((value) => value === mode))
   throw new Error("Unknown player policy");
 const output = await build({
@@ -40,8 +40,15 @@ const code = output.outputFiles[0].contents;
 const sha256 = createHash("sha256").update(code).digest("hex");
 const directory = `dist/player/${sha256}`;
 mkdirSync(directory, { recursive: true });
-writeFileSync(`${directory}/bot.js`, code);
-const release = {
+const bundlePath = `${directory}/bot.js`;
+if (existsSync(bundlePath)) {
+  if (
+    createHash("sha256").update(readFileSync(bundlePath)).digest("hex") !==
+    sha256
+  )
+    throw new Error("Existing player bundle hash mismatch");
+} else writeFileSync(bundlePath, code);
+let release = {
   clientVersion: PINNED_CLIENT.version,
   sdkResourceSha256: SDK_RESOURCE_SHA,
   sha256,
@@ -49,6 +56,20 @@ const release = {
   mode,
   git: execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
 };
-writeFileSync(`${directory}/release.json`, JSON.stringify(release, null, 2));
+const manifestPath = `${directory}/release.json`;
+if (existsSync(manifestPath)) {
+  const original = JSON.parse(readFileSync(manifestPath, "utf8"));
+  for (const key of [
+    "clientVersion",
+    "sdkResourceSha256",
+    "sha256",
+    "version",
+    "mode",
+  ] as const)
+    if (original[key] !== release[key])
+      throw new Error("Player metadata differs from its immutable bundle");
+  // Docs-only commits can rebuild identical bytes. Keep the recorded origin of those bytes.
+  release = original;
+} else writeFileSync(manifestPath, JSON.stringify(release, null, 2));
 writeFileSync("dist/player/current.json", JSON.stringify(release, null, 2));
 console.log(JSON.stringify(release));
