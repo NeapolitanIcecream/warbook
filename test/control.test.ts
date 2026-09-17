@@ -433,6 +433,48 @@ test("defending infantry do not chase a distant visitor away from the protected 
   assert.equal(tactics.control(o, mission, []).intents[0].kind, "deploy");
 });
 
+test("defensive armor can crush nearby infantry but first engages a closer tank", () => {
+  const tactics = new PositionTactics(),
+    o = observation();
+  o.own = [tank("a", 20, 20)];
+  o.enemies = [
+    {
+      ref: "infantry",
+      name: "E1",
+      type: 3,
+      x: 25,
+      y: 20,
+      hp: 125,
+      maxHp: 125,
+      observedTick: o.tick,
+    },
+  ];
+  const mission: CombatMission = {
+    id: "defense",
+    revision: 1,
+    kind: "defend",
+    units: ["a"],
+    destination: { x: 20, y: 20 },
+    objective: "protect-base",
+    engagement: { allowCrush: true },
+  };
+  assert.equal(tactics.control(o, mission, []).intents[0].kind, "crush");
+  o.tick += 60;
+  o.enemies.push({
+    ref: "tank",
+    name: "MTNK",
+    type: 7,
+    x: 22,
+    y: 20,
+    hp: 300,
+    maxHp: 300,
+    observedTick: o.tick,
+  });
+  const response = tactics.control(o, mission, []).intents[0];
+  assert.equal(response.kind, "attack");
+  assert.equal("target" in response && response.target, "tank");
+});
+
 test("layered opening preserves the published sequence through exit casualties and air contacts", () => {
   const old = new LegacyCommander("factory-exit"),
     current = new Commander("factory-exit", { tactics: new LocalCombat() });

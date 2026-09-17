@@ -147,7 +147,13 @@ export class PositionTactics extends LocalCombat {
             ? close
                 .filter(
                   (e) =>
-                    e.type === 3 && !e.airborne && distance2(e, unit) <= 3 ** 2,
+                    e.type === 3 &&
+                    !e.airborne &&
+                    !close.some(
+                      (other) =>
+                        other.type === 7 &&
+                        distance2(other, unit) < distance2(e, unit),
+                    ),
                 )
                 .sort((a, b) => distance2(a, unit) - distance2(b, unit))[0]
             : undefined;
