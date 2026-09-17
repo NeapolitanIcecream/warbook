@@ -35,7 +35,7 @@ export class BastionStrategy implements StrategicController {
 
   constructor(private readonly doctrine: "bastion" | "cohort" = "bastion") {
     this.id =
-      doctrine === "bastion" ? "bastion-strategy-v6" : "cohort-strategy-v3";
+      doctrine === "bastion" ? "bastion-strategy-v7" : "cohort-strategy-v4";
   }
 
   assessmentRequest(o: Observation) {

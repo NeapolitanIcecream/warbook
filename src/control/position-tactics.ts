@@ -14,7 +14,7 @@ import {
 
 /** Defense movement and deployment serve visible engagements; native orders handle travel. */
 export class PositionTactics extends LocalCombat {
-  override readonly id: string = "position-tactics-v4";
+  override readonly id: string = "position-tactics-v5";
   private lastPositionOrders = new Map<string, { key: string; tick: number }>();
   private slots = new Map<string, number>();
   private nextSlot = 0;
