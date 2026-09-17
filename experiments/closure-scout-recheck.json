@@ -1,0 +1,11 @@
+{
+  "purpose": "Check scout retreat and replacement fixes against the first independent-scout candidate",
+  "subjects": {
+    "first-scout": { "ref": "ff19dd8646c4b708ee7a04becec2fce8a192f3bc", "mode": "bastion" },
+    "safe-scout": { "ref": "23c0973e558fdfc4061c5f23073ff975ded070f8", "mode": "bastion" }
+  },
+  "opponents": { "supalosa": { "native": "supalosa" } },
+  "maps": ["mp06t2.map", "mp03t4.map"],
+  "rounds": 2,
+  "decision": { "budget": "8 full games; inspect actual production requests and unique dog refs, not repeated object appearances; check useful enemy contact and retreat" }
+}

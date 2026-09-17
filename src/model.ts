@@ -4,6 +4,10 @@ export interface Point {
   y: number;
 }
 export interface Unit extends Point {
+  /** World position in tile units: x/y ground plane, z elevation. */
+  position?: Point & { z: number };
+  /** Own attack animation/state only; never an enemy target ID. */
+  attackState?: number;
   ref: string;
   name: string;
   type: number;
@@ -27,6 +31,7 @@ export interface Unit extends Point {
   deployedWeaponRange?: number;
 }
 export interface Contact extends Point {
+  position?: Point & { z: number };
   ref: string;
   name: string;
   type: number;
@@ -78,3 +83,12 @@ export type Intent = (
 
 export const distance2 = (a: Point, b: Point): number =>
   (a.x - b.x) ** 2 + (a.y - b.y) ** 2;
+
+/** Ground weapon geometry uses 3D world distance, including infantry subcells. */
+export const weaponDistance2 = (
+  a: Point & { position?: Point & { z: number } },
+  b: Point & { position?: Point & { z: number } },
+): number =>
+  a.position && b.position
+    ? distance2(a.position, b.position) + (a.position.z - b.position.z) ** 2
+    : distance2(a, b);

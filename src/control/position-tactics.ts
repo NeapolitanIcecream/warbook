@@ -1,5 +1,6 @@
 import {
   distance2,
+  weaponDistance2,
   type Intent,
   type Observation,
   type Point,
@@ -60,7 +61,10 @@ export class PositionTactics extends LocalCombat {
       const previous = this.lastPositionOrders.get(ref);
       if (
         !previous ||
-        (previous.key !== key && o.tick - previous.tick >= 30) ||
+        (previous.key !== key &&
+          (o.tick - previous.tick >= 30 ||
+            previous.key === "deploy" ||
+            previous.key === "undeploy")) ||
         o.tick - previous.tick >= repeat
       ) {
         this.lastPositionOrders.set(ref, { key, tick: o.tick });
@@ -83,11 +87,11 @@ export class PositionTactics extends LocalCombat {
           (e) =>
             (!e.airborne || unit.antiAir) &&
             ((!mission.engagement.interrupt &&
-              distance2(e, unit) <= range ** 2) ||
+              weaponDistance2(e, unit) <= range ** 2) ||
               ((mission.threats
                 ? mission.threats.includes(e.ref)
                 : distance2(e, base) <= 12 ** 2) &&
-                (distance2(e, unit) <= range ** 2 ||
+                (weaponDistance2(e, unit) <= range ** 2 ||
                   (mission.protectedAssets
                     ? mission.protectedAssets.some((ref) => {
                         const asset = owns.get(ref);
@@ -110,20 +114,21 @@ export class PositionTactics extends LocalCombat {
         );
         const previousTarget = targets.find(
           (e) =>
-            e.ref === this.targets.get(ref) && distance2(e, unit) <= range ** 2,
+            e.ref === this.targets.get(ref) &&
+            weaponDistance2(e, unit) <= range ** 2,
         );
         const target =
           previousTarget ??
           targets.sort(
             (a, b) =>
-              Number(distance2(b, unit) <= range ** 2) -
-                Number(distance2(a, unit) <= range ** 2) ||
-              distance2(a, unit) - distance2(b, unit),
+              Number(weaponDistance2(b, unit) <= range ** 2) -
+                Number(weaponDistance2(a, unit) <= range ** 2) ||
+              weaponDistance2(a, unit) - weaponDistance2(b, unit),
           )[0];
         if (target) {
           this.targets.set(ref, target.ref);
           engaging++;
-          const distance = Math.sqrt(distance2(unit, target));
+          const distance = Math.sqrt(weaponDistance2(unit, target));
           if (unit.name === "E1" && unit.deployed && distance > range + 0.25) {
             issue(
               ref,
@@ -134,7 +139,7 @@ export class PositionTactics extends LocalCombat {
           } else if (
             unit.name === "E1" &&
             !unit.deployed &&
-            distance < range - 0.25
+            (distance <= range || (unit.attackState ?? 0) >= 3)
           ) {
             issue(
               ref,

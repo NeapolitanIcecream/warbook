@@ -409,6 +409,54 @@ test("a defensive handoff cancels an offensive order even when the old hold key 
   );
 });
 
+test("GI deploys using actual subcell range and attacks immediately after deployment is observed", () => {
+  const tactics = new PositionTactics(),
+    o = observation();
+  const gi = {
+    ...tank("gi", 60, 35),
+    name: "E1",
+    type: 3,
+    crusher: false,
+    deployed: false,
+    deployedWeaponRange: 5,
+    position: { x: 60.5, y: 35.5, z: 2 },
+  };
+  o.own = [gi];
+  o.enemies = [
+    {
+      ref: "enemy",
+      name: "E1",
+      type: 3,
+      x: 55,
+      y: 34,
+      position: { x: 56, y: 35.5, z: 2 },
+      hp: 125,
+      maxHp: 125,
+      observedTick: o.tick,
+    },
+  ];
+  const mission: CombatMission = {
+    id: "guard",
+    revision: 1,
+    kind: "defend",
+    units: [gi.ref],
+    destination: { x: 60, y: 35 },
+    objective: "guard-base",
+    engagement: { allowCrush: false },
+  };
+  assert.equal(tactics.control(o, mission, []).intents[0].kind, "deploy");
+  o.tick += 3;
+  gi.deployed = true;
+  assert.equal(tactics.control(o, mission, []).intents[0].kind, "attack");
+  o.tick += 60;
+  o.enemies[0].position!.z = 10;
+  assert.equal(
+    tactics.control(o, mission, []).intents[0].kind,
+    "deploy",
+    "a large elevation difference is not mistaken for range",
+  );
+});
+
 test("GI defense packs up out of range, approaches, deploys and actually attacks", () => {
   const tactics = new PositionTactics(),
     o = observation();

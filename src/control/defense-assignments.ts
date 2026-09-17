@@ -1,4 +1,10 @@
-import { distance2, type Contact, type Point, type Unit } from "../model.js";
+import {
+  distance2,
+  weaponDistance2,
+  type Contact,
+  type Point,
+  type Unit,
+} from "../model.js";
 
 interface Incursion {
   enemy: Contact;
@@ -93,7 +99,7 @@ export class DefenseAssignments {
     const canEngage = (unit: Unit, front: Front) =>
       front.contacts.some(
         (e) =>
-          distance2(unit, e) <=
+          weaponDistance2(unit, e) <=
           (unit.name === "E1"
             ? (unit.deployedWeaponRange ?? 5)
             : (unit.weaponRange ?? 4)) **
