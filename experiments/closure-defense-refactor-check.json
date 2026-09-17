@@ -1,0 +1,9 @@
+{
+  "purpose": "Prove the defensive-situation extraction preserves decisions before changing attack selection",
+  "subjects": { "refactor": { "ref": "c2e5e4094d66345ea410fc4f212964c7b4cb9012", "mode": "bastion" } },
+  "shadows": { "refactor": { "ref": "cf1b6efb5544502936a06f5a5b8cd1395a4e551d", "mode": "bastion" } },
+  "opponents": { "supalosa": { "native": "supalosa" } },
+  "maps": ["mp06t2.map", "mp03t4.map"],
+  "rounds": 1,
+  "decision": { "budget": "2 whole games with zero same-observation instruction differences required" }
+}
