@@ -1,0 +1,28 @@
+{
+  "purpose": "Isolate the straight waypoint defect in the frozen movement prototype by changing only its march destination to the full target",
+  "subjects": {
+    "short-waypoints": {
+      "ref": "4f107e705e9cbfb5bfbae60086171ac33f76377b",
+      "mode": "cohort"
+    },
+    "native-destination": {
+      "ref": "4ab2073c8e275637e1a09cf46c72ded47d70a3dc",
+      "mode": "cohort"
+    }
+  },
+  "opponents": {
+    "supalosa": {
+      "native": "supalosa"
+    }
+  },
+  "maps": [
+    "mp03t4.map",
+    "mp06t2.map"
+  ],
+  "rounds": 2,
+  "decision": {
+    "budget": "8 starts; all limits and failures retained; starting positions not controlled",
+    "check": "Does the first cohort reach and damage enemy buildings, and do long static marches remain?",
+    "scope": "Narrow movement intervention on the historical prototype, separate from active-defense candidates; no snapshot takeover or new economic rules"
+  }
+}

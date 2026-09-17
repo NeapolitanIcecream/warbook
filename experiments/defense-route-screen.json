@@ -1,0 +1,32 @@
+{
+  "purpose": "Check explored-route defensive staging against the focused defender with other controls fixed",
+  "subjects": {
+    "focused-defense": {
+      "ref": "f85f2df",
+      "mode": "bastion"
+    },
+    "routed-defense": {
+      "ref": "789c3b5c558633c35540299261fb1f41ab1ed53f",
+      "mode": "bastion"
+    }
+  },
+  "opponents": {
+    "published": {
+      "ref": "8326311288ec685c3da43b1d182071dc36938fe8",
+      "mode": "factory-exit"
+    },
+    "supalosa": {
+      "native": "supalosa"
+    }
+  },
+  "maps": [
+    "mp03t4.map",
+    "mp06t2.map"
+  ],
+  "rounds": 2,
+  "decision": {
+    "budget": "16 starts fixed before running; initial behavior screen, all stops retained; report actual starting locations rather than assume slot swaps control spawns",
+    "check": "Defenders move into contact, GI deploy/undeploy follows range, damaged production buildings receive support, attack resumes and ends the match",
+    "scope": "Development behavior and regression screen on exposed maps; no automatic strength promotion"
+  }
+}
