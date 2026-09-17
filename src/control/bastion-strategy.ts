@@ -273,6 +273,7 @@ export class BastionStrategy implements StrategicController {
         units: infantry.map((u) => u.ref),
         destination: vehiclePost,
         objective: "guard-base",
+        protectedAssets: assets.map((u) => u.ref),
         engagement: { allowCrush: false },
       }),
     ];

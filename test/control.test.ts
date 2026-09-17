@@ -396,6 +396,43 @@ test("a damaged factory redirects the assault and infantry without conflicting u
   );
 });
 
+test("defending infantry do not chase a distant visitor away from the protected buildings", () => {
+  const tactics = new PositionTactics(),
+    o = observation();
+  o.home = { x: 0, y: 0 };
+  o.own = [
+    { ...tank("gi", 0, 5), name: "E1", type: 3, crusher: false },
+    building("yard", "GACNST", 0, 0),
+  ];
+  const mission: CombatMission = {
+    id: "guard",
+    revision: 1,
+    kind: "defend",
+    units: ["gi"],
+    destination: { x: 0, y: 5 },
+    protectedAssets: ["yard"],
+    objective: "guard-base",
+    engagement: { allowCrush: false },
+  };
+  o.enemies = [
+    {
+      ref: "enemy",
+      name: "E1",
+      type: 3,
+      x: 0,
+      y: 13,
+      hp: 125,
+      maxHp: 125,
+      weaponRange: 5,
+      observedTick: o.tick,
+    },
+  ];
+  assert.equal(tactics.control(o, mission, []).intents[0].kind, "stop");
+  o.tick += 60;
+  o.enemies[0].y = 7;
+  assert.equal(tactics.control(o, mission, []).intents[0].kind, "deploy");
+});
+
 test("layered opening preserves the published sequence through exit casualties and air contacts", () => {
   const old = new LegacyCommander("factory-exit"),
     current = new Commander("factory-exit", { tactics: new LocalCombat() });

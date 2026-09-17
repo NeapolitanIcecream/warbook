@@ -142,6 +142,10 @@ export class WarbookBot extends Bot {
         maxHp: u.maxHitPoints,
         observedTick: tick,
         airborne: u.zone === 1,
+        weaponRange: Math.max(
+          u.primaryWeapon?.maxRange ?? 0,
+          u.secondaryWeapon?.maxRange ?? 0,
+        ),
       }),
     );
     const products = this.player.production.getAvailableObjects().map((p) => ({

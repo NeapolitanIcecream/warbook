@@ -68,7 +68,29 @@ export class PositionTactics extends LocalCombat {
             ? (unit.deployedWeaponRange ?? 5)
             : (unit.weaponRange ?? 4);
         const targets = o.enemies.filter(
-          (e) => (!e.airborne || unit.antiAir) && distance2(e, base) <= 12 ** 2,
+          (e) =>
+            (!e.airborne || unit.antiAir) &&
+            distance2(e, base) <= 12 ** 2 &&
+            (distance2(e, unit) <= range ** 2 ||
+              (mission.protectedAssets
+                ? mission.protectedAssets.some((ref) => {
+                    const asset = owns.get(ref);
+                    return (
+                      asset &&
+                      distance2(e, {
+                        x: Math.max(
+                          asset.x,
+                          Math.min(e.x, asset.x + asset.width),
+                        ),
+                        y: Math.max(
+                          asset.y,
+                          Math.min(e.y, asset.y + asset.height),
+                        ),
+                      }) <=
+                        ((e.weaponRange ?? 5) + 1) ** 2
+                    );
+                  })
+                : distance2(e, base) <= 6 ** 2)),
         );
         const target = targets.sort(
           (a, b) =>
@@ -182,6 +204,14 @@ export class PositionTactics extends LocalCombat {
         x: base.x + offsets[slot % offsets.length].x,
         y: base.y + offsets[slot % offsets.length].y,
       };
+      if (unit.type === 3) {
+        const dx = base.x - o.home.x,
+          dy = base.y - o.home.y;
+        const length = Math.hypot(dx, dy) || 1;
+        const side = [0, -1, 1, -2, 2, -3, 3][slot % 7];
+        desired.x = Math.round(base.x - (dy / length) * side);
+        desired.y = Math.round(base.y + (dx / length) * side);
+      }
       // Only own, already observed footprints influence the fallback post.
       const free = (p: Point) =>
         !o.own.some(

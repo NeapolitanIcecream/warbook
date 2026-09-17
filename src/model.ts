@@ -34,6 +34,8 @@ export interface Contact extends Point {
   maxHp: number;
   observedTick: number;
   airborne?: boolean;
+  /** Known weapon range of a currently visible unit; no target or cooldown state. */
+  weaponRange?: number;
 }
 export interface Product {
   name: string;
