@@ -14,18 +14,26 @@ import {
 
 /** Defense movement and deployment serve visible engagements; native orders handle travel. */
 export class PositionTactics extends LocalCombat {
-  override readonly id: string = "position-tactics-v5";
+  override readonly id: string = "position-tactics-v6";
   private lastPositionOrders = new Map<string, { key: string; tick: number }>();
   private slots = new Map<string, number>();
   private nextSlot = 0;
   private roles = new Map<string, string>();
+  private targets = new Map<string, string>();
 
   protected prepareMission(mission: CombatMission): void {
     const role = `${mission.id}:${mission.kind}`;
     for (const ref of mission.units)
       if (this.roles.get(ref) !== role) {
+        const continuingDefense =
+          this.roles.get(ref)?.endsWith(":defend") &&
+          mission.kind === "defend" &&
+          !mission.engagement.interrupt;
         this.roles.set(ref, role);
-        this.lastPositionOrders.delete(ref);
+        if (!continuingDefense) {
+          this.lastPositionOrders.delete(ref);
+          this.targets.delete(ref);
+        }
         this.lastOrders.delete(ref);
       }
   }
@@ -70,35 +78,46 @@ export class PositionTactics extends LocalCombat {
         const targets = o.enemies.filter(
           (e) =>
             (!e.airborne || unit.antiAir) &&
-            distance2(e, base) <= 12 ** 2 &&
-            (distance2(e, unit) <= range ** 2 ||
-              (mission.protectedAssets
-                ? mission.protectedAssets.some((ref) => {
-                    const asset = owns.get(ref);
-                    return (
-                      asset &&
-                      distance2(e, {
-                        x: Math.max(
-                          asset.x,
-                          Math.min(e.x, asset.x + asset.width),
-                        ),
-                        y: Math.max(
-                          asset.y,
-                          Math.min(e.y, asset.y + asset.height),
-                        ),
-                      }) <=
-                        ((e.weaponRange ?? 5) + 1) ** 2
-                    );
-                  })
-                : distance2(e, base) <= 6 ** 2)),
+            ((!mission.engagement.interrupt &&
+              distance2(e, unit) <= range ** 2) ||
+              ((mission.threats
+                ? mission.threats.includes(e.ref)
+                : distance2(e, base) <= 12 ** 2) &&
+                (distance2(e, unit) <= range ** 2 ||
+                  (mission.protectedAssets
+                    ? mission.protectedAssets.some((ref) => {
+                        const asset = owns.get(ref);
+                        return (
+                          asset &&
+                          distance2(e, {
+                            x: Math.max(
+                              asset.x,
+                              Math.min(e.x, asset.x + asset.width),
+                            ),
+                            y: Math.max(
+                              asset.y,
+                              Math.min(e.y, asset.y + asset.height),
+                            ),
+                          }) <=
+                            ((e.weaponRange ?? 5) + 1) ** 2
+                        );
+                      })
+                    : distance2(e, base) <= 6 ** 2)))),
         );
-        const target = targets.sort(
-          (a, b) =>
-            Number(distance2(b, unit) <= range ** 2) -
-              Number(distance2(a, unit) <= range ** 2) ||
-            distance2(a, unit) - distance2(b, unit),
-        )[0];
+        const previousTarget = targets.find(
+          (e) =>
+            e.ref === this.targets.get(ref) && distance2(e, unit) <= range ** 2,
+        );
+        const target =
+          previousTarget ??
+          targets.sort(
+            (a, b) =>
+              Number(distance2(b, unit) <= range ** 2) -
+                Number(distance2(a, unit) <= range ** 2) ||
+              distance2(a, unit) - distance2(b, unit),
+          )[0];
         if (target) {
+          this.targets.set(ref, target.ref);
           engaging++;
           const distance = Math.sqrt(distance2(unit, target));
           if (unit.name === "E1" && unit.deployed && distance > range + 0.25) {
@@ -135,6 +154,7 @@ export class PositionTactics extends LocalCombat {
           }
           continue;
         }
+        this.targets.delete(ref);
       } else {
         const close = o.enemies.filter(
           (e) =>
@@ -265,6 +285,7 @@ export class PositionTactics extends LocalCombat {
         this.lastPositionOrders.delete(ref);
         this.roles.delete(ref);
         this.lastOrders.delete(ref);
+        this.targets.delete(ref);
       }
     return {
       origin: {

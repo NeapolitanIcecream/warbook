@@ -433,6 +433,76 @@ test("defending infantry do not chase a distant visitor away from the protected 
   assert.equal(tactics.control(o, mission, []).intents[0].kind, "deploy");
 });
 
+test("a moving guard post preserves a nearby engagement, but an urgent reassignment can interrupt it", () => {
+  const tactics = new PositionTactics(),
+    o = observation();
+  o.own = [
+    {
+      ...tank("gi", 0, 0),
+      name: "E1",
+      type: 3,
+      deployed: true,
+      crusher: false,
+    },
+  ];
+  o.enemies = [
+    {
+      ref: "upper",
+      name: "E1",
+      type: 3,
+      x: 4,
+      y: 0,
+      hp: 50,
+      maxHp: 125,
+      observedTick: o.tick,
+    },
+    {
+      ref: "lower",
+      name: "E1",
+      type: 3,
+      x: 0,
+      y: 19,
+      hp: 125,
+      maxHp: 125,
+      observedTick: o.tick,
+    },
+  ];
+  const mission: CombatMission = {
+    id: "guard",
+    revision: 1,
+    kind: "defend",
+    units: ["gi"],
+    destination: { x: 0, y: 18 },
+    objective: "guard-base",
+    threats: ["lower"],
+    engagement: { allowCrush: false },
+  };
+  assert.deepEqual(tactics.control(o, mission, []).intents, [
+    { kind: "attack", refs: ["gi"], target: "upper", task: "guard" },
+  ]);
+  // A closer newcomer does not continually reset the existing native attack order.
+  o.tick += 60;
+  o.enemies.push({ ...o.enemies[0], ref: "newcomer", x: 3 });
+  assert.equal(tactics.control(o, mission, []).intents.length, 0);
+  o.tick += 60;
+  assert.equal(
+    tactics.control(
+      o,
+      {
+        ...mission,
+        revision: 2,
+        engagement: { allowCrush: false, interrupt: true },
+      },
+      [],
+    ).intents[0].kind,
+    "deploy",
+  );
+  o.tick += 60;
+  o.own[0].deployed = false;
+  o.own[0].y = 17;
+  assert.equal(tactics.control(o, mission, []).intents[0].kind, "deploy");
+});
+
 test("defensive armor can crush nearby infantry but first engages a closer tank", () => {
   const tactics = new PositionTactics(),
     o = observation();

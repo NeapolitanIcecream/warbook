@@ -15,9 +15,13 @@ export interface CombatMission extends TaskIdentity {
   readonly protectedAssets?: readonly string[];
   /** A known approach direction for an explored-terrain staging request. */
   readonly approach?: Point;
+  /** Currently visible contacts assigned to this defense group; absent for area guard. */
+  readonly threats?: readonly string[];
   readonly engagement: {
     /** Permission for explicit crushing orders; native incidental movement effects are separate. */
     readonly allowCrush: boolean;
+    /** An urgent reassignment may interrupt an otherwise useful nearby engagement. */
+    readonly interrupt?: boolean;
   };
 }
 export interface ProductionPlan extends TaskIdentity {
