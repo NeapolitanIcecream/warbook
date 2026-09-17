@@ -43,6 +43,8 @@ export interface Contact extends Point {
   airborne?: boolean;
   /** Known weapon range of a currently visible unit; no target or cooldown state. */
   weaponRange?: number;
+  canThreatenBuildings?: boolean;
+  canThreatenVehicles?: boolean;
 }
 export interface Product {
   name: string;

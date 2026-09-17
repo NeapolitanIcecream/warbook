@@ -141,7 +141,12 @@ export class Operations {
       const horizon = travelSeconds + killSeconds;
       let defenders = 0;
       for (const e of this.known.values()) {
-        if (!(e.weaponRange ?? 0) || e.airborne) continue;
+        if (
+          !(e.weaponRange ?? 0) ||
+          e.airborne ||
+          e.canThreatenVehicles === false
+        )
+          continue;
         const speed = e.type === 2 ? 0 : e.type === 3 ? 0.45 : 0.8;
         const age = Math.min(30, (o.tick - e.observedTick) / 15);
         if (distance(e, target) > 7 + speed * (horizon + age)) continue;

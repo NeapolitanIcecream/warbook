@@ -8,6 +8,7 @@ import {
   type TechnoRules,
 } from "@chronodivide/game-api";
 import { defenseRoute } from "./defense-route.js";
+import { combatCapabilities } from "./unit-capabilities.js";
 import { Commander, type PolicyMode } from "./policy.js";
 import {
   rememberIntent,
@@ -164,12 +165,11 @@ export class WarbookBot extends Bot {
         buildStatus: u.buildStatus,
         deployed: u.stance === 3,
         crusher: u.rules.crusher,
-        antiAir: !!(
-          u.primaryWeapon?.projectileRules.isAntiAir ||
-          u.secondaryWeapon?.projectileRules.isAntiAir
-        ),
+        antiAir: combatCapabilities(u).antiAir,
         weaponRange: u.primaryWeapon?.maxRange,
-        deployedWeaponRange: u.secondaryWeapon?.maxRange,
+        deployedWeaponRange: u.secondaryWeapon?.rules.neverUse
+          ? undefined
+          : u.secondaryWeapon?.maxRange,
       }),
     );
     const enemies = this.sorted(this.player.getVisibleUnits("enemy")).map(
@@ -188,10 +188,7 @@ export class WarbookBot extends Bot {
         maxHp: u.maxHitPoints,
         observedTick: tick,
         airborne: u.zone === 1,
-        weaponRange: Math.max(
-          u.primaryWeapon?.maxRange ?? 0,
-          u.secondaryWeapon?.maxRange ?? 0,
-        ),
+        ...combatCapabilities(u),
       }),
     );
     const products = this.player.production.getAvailableObjects().map((p) => ({

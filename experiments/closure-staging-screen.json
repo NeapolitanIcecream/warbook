@@ -1,0 +1,14 @@
+{
+  "purpose": "Resolve excessive waiting from defensive staging and pessimistic travel estimates",
+  "subjects": {
+    "first-operations": { "ref": "5a47c8cb711d1eb1b17e14d09eb262f5f7519e58", "mode": "bastion" },
+    "objective-staging": { "ref": "be6afa5c58e9958375a60cfa6631ffbdec1b926d", "mode": "bastion" }
+  },
+  "opponents": {
+    "old-main": { "ref": "8326311288ec685c3da43b1d182071dc36938fe8", "mode": "factory-exit" },
+    "supalosa": { "native": "supalosa" }
+  },
+  "maps": ["mp06t2.map", "mp03t4.map"],
+  "rounds": 2,
+  "decision": { "budget": "16 ordinary complete games; compare actual departure, staging location and failed attacks. Staging paths use explored terrain only; speed estimate is observational, not an oracle." }
+}

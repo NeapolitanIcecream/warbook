@@ -19,7 +19,9 @@ export class DefenseSituation {
         (e) =>
           e.type !== 2 &&
           !e.airborne &&
-          (e.weaponRange ?? 1) > 0 &&
+          ((e.weaponRange ?? 1) > 0 || e.canThreatenBuildings) &&
+          (e.canThreatenBuildings !== false ||
+            e.canThreatenVehicles !== false) &&
           distance2(e, o.home) < 30 ** 2,
       )
       .sort((a, b) => distance2(a, o.home) - distance2(b, o.home))[0];
@@ -57,10 +59,21 @@ export class DefenseSituation {
         y: Math.max(asset.y, Math.min(enemy.y, asset.y + asset.height)),
       });
     const incursions = o.enemies
-      .filter((e) => !e.airborne && e.type !== 2 && (e.weaponRange ?? 1) > 0)
+      .filter(
+        (e) =>
+          !e.airborne &&
+          e.type !== 2 &&
+          ((e.weaponRange ?? 1) > 0 || e.canThreatenBuildings),
+      )
       .flatMap((enemy) =>
         assets
-          .filter((asset) => assetDistance(enemy, asset) <= 10 ** 2)
+          .filter(
+            (asset) =>
+              (asset.type === 2
+                ? enemy.canThreatenBuildings !== false
+                : enemy.canThreatenVehicles !== false) &&
+              assetDistance(enemy, asset) <= 10 ** 2,
+          )
           .map((asset) => ({
             enemy,
             asset,
