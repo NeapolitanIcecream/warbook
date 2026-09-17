@@ -82,14 +82,7 @@ export class CohortTactics extends PositionTactics {
         action = "maneuver-with-opportunity-fire";
       } else {
         state.regroupSince = undefined;
-        const dx = goal.x - center.x,
-          dy = goal.y - center.y,
-          length = Math.hypot(dx, dy) || 1,
-          step = Math.min(6, length);
-        destination = {
-          x: Math.round(center.x + (step * dx) / length),
-          y: Math.round(center.y + (step * dy) / length),
-        };
+        destination = { x: goal.x, y: goal.y };
         action = "cohort-march";
       }
       const refs = [...tankRefs].sort();
