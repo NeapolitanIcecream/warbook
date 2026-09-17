@@ -1,0 +1,15 @@
+{
+  "purpose": "Test supported strike movement and shared targets against independent per-unit attacks",
+  "subjects": {
+    "capabilities": { "ref": "1193ae5", "mode": "bastion" },
+    "supported-strike": { "ref": "cf29b9264a124ecd906db0bd8a09b2a8521bb445", "mode": "bastion" }
+  },
+  "opponents": {
+    "old-main": { "ref": "8326311288ec685c3da43b1d182071dc36938fe8", "mode": "factory-exit" },
+    "old-defense": { "ref": "b3a1f7ce69ed140fbafb82799f6d2b14d487c052", "mode": "bastion" },
+    "supalosa": { "native": "supalosa" }
+  },
+  "maps": ["mp06t2.map", "mp03t4.map"],
+  "rounds": 2,
+  "decision": { "budget": "24 ordinary full games, all outcomes retained; inspect unsupported losses, grouping/retreat cycles and liveness. Native paths and attack actions remain the engine reference." }
+}
