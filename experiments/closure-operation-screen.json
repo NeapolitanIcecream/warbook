@@ -1,0 +1,14 @@
+{
+  "purpose": "Test scouting-informed attacks, exposed construction targets and initial army funding",
+  "subjects": {
+    "world-range": { "ref": "c2e5e4094d66345ea410fc4f212964c7b4cb9012", "mode": "bastion" },
+    "opportunities": { "ref": "5a47c8cb711d1eb1b17e14d09eb262f5f7519e58", "mode": "bastion" }
+  },
+  "opponents": {
+    "old-main": { "ref": "8326311288ec685c3da43b1d182071dc36938fe8", "mode": "factory-exit" },
+    "supalosa": { "native": "supalosa" }
+  },
+  "maps": ["mp06t2.map", "mp03t4.map"],
+  "rounds": 2,
+  "decision": { "budget": "16 full games; inspect contact-to-action delay, MCV/yard exposure, first formation funding and failures. Rough travel/production estimates are policy defaults, not verified upper bounds or predictions of victory." }
+}

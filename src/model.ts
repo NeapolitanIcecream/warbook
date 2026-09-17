@@ -8,6 +8,8 @@ export interface Unit extends Point {
   position?: Point & { z: number };
   /** Own attack animation/state only; never an enemy target ID. */
   attackState?: number;
+  onBridge?: boolean;
+  sight?: number;
   ref: string;
   name: string;
   type: number;
@@ -64,6 +66,7 @@ export interface Observation {
   scoutPoints?: readonly Point[];
   scoutObservedTick?: number;
   defenseRoute?: { towards: Point; point: Point; observedTick: number };
+  stagingRoute?: { towards: Point; point: Point; observedTick: number };
   own: Unit[];
   enemies: Contact[];
   products: Product[];

@@ -47,6 +47,7 @@ export class WarbookBot extends Bot {
   private lastProductionRevision = -1;
   private lastAdditionalRevisions = "";
   private defenseRoute?: Observation["defenseRoute"];
+  private stagingRoute?: Observation["stagingRoute"];
   private lastDefenseRouteTick = -150;
   public trace?: (event: Trace) => void;
   public autoTick = false;
@@ -96,7 +97,8 @@ export class WarbookBot extends Bot {
     const towards = this.commander.controlPlan?.additionalCombat?.find(
       (m) => m.approach,
     )?.approach;
-    if (towards && tick - this.lastDefenseRouteTick >= 150) {
+    const staging = this.commander.controlPlan?.combat.approach;
+    if ((towards || staging) && tick - this.lastDefenseRouteTick >= 150) {
       const home = { x: data.startLocation.x, y: data.startLocation.y };
       const speed = (
         this.game.rules.getObject(
@@ -105,12 +107,19 @@ export class WarbookBot extends Bot {
         ) as TechnoRules
       ).speedType;
       const point =
-        speed === undefined
+        speed === undefined || !towards
           ? undefined
           : defenseRoute(this.game.map, this.name, home, towards, speed);
-      this.defenseRoute = point
-        ? { towards, point, observedTick: tick }
-        : undefined;
+      this.defenseRoute =
+        point && towards ? { towards, point, observedTick: tick } : undefined;
+      const stagePoint =
+        staging && speed !== undefined
+          ? defenseRoute(this.game.map, this.name, home, staging, speed)
+          : undefined;
+      this.stagingRoute =
+        stagePoint && staging
+          ? { towards: staging, point: stagePoint, observedTick: tick }
+          : undefined;
       this.lastDefenseRouteTick = tick;
     }
     if (tick - this.lastScoutScan >= 150) {
@@ -139,6 +148,8 @@ export class WarbookBot extends Bot {
           z: u.worldPosition.y / 256,
         },
         attackState: u.attackState,
+        onBridge: u.onBridge,
+        sight: u.sight,
         hp: u.hitPoints,
         maxHp: u.maxHitPoints,
         width: u.foundation.width,
@@ -274,6 +285,7 @@ export class WarbookBot extends Bot {
       scoutPoints: this.scoutPoints,
       scoutObservedTick: this.lastScoutScan,
       defenseRoute: this.defenseRoute,
+      stagingRoute: this.stagingRoute,
     };
     if (this.lastObservation) {
       const before = new Set(this.lastObservation.own.map((u) => u.ref));

@@ -86,7 +86,7 @@ test("bastion keeps infantry at home and releases reinforcements as a separate b
   const gi = { ...tank("gi", 67, 41), name: "E1", type: 3, crusher: false };
   o.own.push(gi);
   c.decide(o);
-  assert.equal(c.controlPlan!.combat.kind, "defend");
+  assert.equal(c.controlPlan!.combat.kind, "assemble");
   assert(!c.controlPlan!.combat.units.includes("gi"));
   assert.deepEqual(c.controlPlan!.additionalCombat![0].units, ["gi"]);
   o.own = o.own.filter((u) => u.name !== "MTNK");
@@ -204,6 +204,43 @@ test("a scattered newly built tank does not count as part of the formed strike f
   const formed = formedUnits(units, { x: 65, y: 36 });
   assert.equal(formed.length, 5);
   assert(!formed.some((u) => u.ref === "late"));
+});
+
+test("quiet attack staging uses the scouted objective route without dragging the infantry garrison", () => {
+  const c = new Commander("bastion"),
+    o = observation();
+  o.own.push({ ...tank("gi", 67, 41), name: "E1", type: 3, crusher: false });
+  o.enemies = [
+    {
+      ref: "enemy-refinery",
+      name: "GAREFN",
+      type: 2,
+      x: 90,
+      y: 37,
+      hp: 1000,
+      maxHp: 1000,
+      weaponRange: 0,
+      observedTick: o.tick,
+    },
+  ];
+  o.defenseRoute = {
+    towards: { x: 38, y: 73 },
+    point: { x: 67, y: 42 },
+    observedTick: o.tick,
+  };
+  o.stagingRoute = {
+    towards: { x: 90, y: 37 },
+    point: { x: 77, y: 35 },
+    observedTick: o.tick,
+  };
+  c.decide(o);
+  assert.equal(c.controlPlan!.combat.kind, "assemble");
+  assert.deepEqual(c.controlPlan!.combat.destination, { x: 77, y: 35 });
+  assert.deepEqual(
+    c.controlPlan!.additionalCombat!.find((m) => m.units.includes("gi"))!
+      .destination,
+    { x: 67, y: 42 },
+  );
 });
 
 test("a scout has independent ownership and does not replace a garrison infantry target", () => {
@@ -330,7 +367,7 @@ test("bastion reforms after heavy losses without issuing the same unit to two ta
   );
   o.tick += 3;
   c.decide(o);
-  assert.equal(c.controlPlan!.combat.kind, "defend");
+  assert.equal(c.controlPlan!.combat.kind, "assemble");
   const missions = [c.controlPlan!.combat, ...c.controlPlan!.additionalCombat!];
   const refs = missions.flatMap((m) => m.units);
   assert.equal(new Set(refs).size, refs.length);
@@ -394,7 +431,7 @@ test("a wiped assault releases surviving joiners back into the reserve", () => {
   o.own = o.own.filter((u) => !u.ref.startsWith("wave-"));
   o.tick += 3;
   c.decide(o);
-  assert.equal(c.controlPlan!.combat.kind, "defend");
+  assert.equal(c.controlPlan!.combat.kind, "assemble");
   assert.equal(c.controlPlan!.combat.units.length, 4);
   assert(
     !c.controlPlan!.additionalCombat!.some((m) => m.id === "reinforcements"),

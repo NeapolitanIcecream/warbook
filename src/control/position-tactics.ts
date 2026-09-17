@@ -49,7 +49,8 @@ export class PositionTactics extends LocalCombat {
     this.prepareMission(mission);
     if (mission.kind === "scout")
       return this.scouts.control(o, mission, evidence);
-    if (mission.kind !== "defend") return super.control(o, mission, evidence);
+    if (mission.kind !== "defend" && mission.kind !== "assemble")
+      return super.control(o, mission, evidence);
     const intents: Intent[] = [];
     const owns = new Map(o.own.map((u) => [u.ref, u]));
     const issue = (

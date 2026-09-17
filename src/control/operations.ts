@@ -44,6 +44,8 @@ export class Operations {
   private known = new Map<string, Contact>();
   private pressured = false;
   private lastPressureTick = -Infinity;
+  private previousPositions = new Map<string, { point: Point; tick: number }>();
+  private observedTankSpeed = 0.8;
   active?: Operation;
   decision: Record<string, number | string | boolean> = {};
   get hasKnownBase() {
@@ -51,6 +53,20 @@ export class Operations {
   }
 
   observe(o: Observation, localThreats: readonly Contact[]) {
+    for (const u of o.own.filter((u) => ["MTNK", "HTNK"].includes(u.name))) {
+      const point = u.position ?? u,
+        previous = this.previousPositions.get(u.ref);
+      if (previous && o.tick > previous.tick && o.tick - previous.tick <= 150) {
+        const speed =
+          (distance(point, previous.point) * 15) / (o.tick - previous.tick);
+        if (speed <= 1.5)
+          this.observedTankSpeed = Math.max(this.observedTankSpeed, speed);
+      }
+      this.previousPositions.set(u.ref, {
+        point: { x: point.x, y: point.y },
+        tick: o.tick,
+      });
+    }
     const visible = new Set(o.enemies.map((e) => e.ref));
     for (const e of o.enemies) this.known.set(e.ref, { ...e });
     for (const [ref, e] of this.known) {
@@ -67,6 +83,21 @@ export class Operations {
       this.pressured = true;
       this.lastPressureTick = o.tick;
     }
+  }
+
+  stagingDirection(o: Observation, fallback: Point): Point {
+    const target =
+      this.active?.point ??
+      [...this.known.values()]
+        .filter((e) => e.type === 2 || mcv(e))
+        .sort(
+          (a, b) =>
+            Number(mcv(b) && distance2(b, o.home) < 30 ** 2) -
+              Number(mcv(a) && distance2(a, o.home) < 30 ** 2) ||
+            distance2(a, o.home) - distance2(b, o.home),
+        )[0] ??
+      fallback;
+    return { x: target.x, y: target.y };
   }
 
   consider(o: Observation, force: readonly Unit[]): Operation | undefined {
@@ -104,7 +135,8 @@ export class Operations {
         visible &&
         (mcv(target) || yard(target)) &&
         distance(target, o.home) <= 30;
-      const travelSeconds = distance(center, target) * 2; // Conservative working estimate, checked against actual trips.
+      const travelSeconds =
+        (distance(center, target) / this.observedTankSpeed) * 1.2;
       const killSeconds = target.hp / (12 * tanks.length);
       const horizon = travelSeconds + killSeconds;
       let defenders = 0;

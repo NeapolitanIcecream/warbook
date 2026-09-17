@@ -91,6 +91,22 @@ export class BastionStrategy implements StrategicController {
     this.operations.observe(o, [
       ...new Map(incursions.map((i) => [i.enemy.ref, i.enemy])).values(),
     ]);
+    const fallbackDirection =
+      o.starts
+        .filter((p) => distance2(p, o.home) > 25)
+        .sort((a, b) => distance2(a, o.home) - distance2(b, o.home))[0] ??
+      direction;
+    const stagingDirection = this.operations.stagingDirection(
+      o,
+      fallbackDirection,
+    );
+    const stagingPost =
+      o.stagingRoute &&
+      distance2(o.stagingRoute.towards, stagingDirection) <= 8 ** 2 &&
+      o.tick - o.stagingRoute.observedTick <= 450
+        ? o.stagingRoute.point
+        : post;
+    const musterPost = responding ? vehiclePost : stagingPost;
     const outsideFactory = (u: Unit) =>
       !o.own.some(
         (b) =>
@@ -125,8 +141,10 @@ export class BastionStrategy implements StrategicController {
       (u) => !this.assault.has(u.ref) && !this.joining.has(u.ref),
     );
     const ready = formedUnits(
-      reserve.filter((u) => outsideFactory(u) && distance2(u, post) <= 12 ** 2),
-      post,
+      reserve.filter(
+        (u) => outsideFactory(u) && distance2(u, musterPost) <= 12 ** 2,
+      ),
+      musterPost,
     );
     const opportunity = this.operations.consider(o, ready);
     const exploration =
@@ -165,9 +183,9 @@ export class BastionStrategy implements StrategicController {
       );
       const nextBatch = formedUnits(
         reserve.filter(
-          (u) => outsideFactory(u) && distance2(u, post) <= 12 ** 2,
+          (u) => outsideFactory(u) && distance2(u, musterPost) <= 12 ** 2,
         ),
-        post,
+        musterPost,
       );
       if (
         !this.joining.size &&
@@ -215,14 +233,19 @@ export class BastionStrategy implements StrategicController {
     };
     const operation = this.operations.target(o, assault);
     const combat = this.mission("main-force", {
-      kind: assault.length && !protectNow ? "advance" : "defend",
+      kind:
+        assault.length && !protectNow
+          ? "advance"
+          : responding || protectNow
+            ? "defend"
+            : "assemble",
       units: (protectNow ? vehicles : assault.length ? assault : reserve).map(
         (u) => u.ref,
       ),
       destination:
-        assault.length && !protectNow ? operation?.point : vehiclePost,
+        assault.length && !protectNow ? operation?.point : musterPost,
       groundDestination:
-        assault.length && !protectNow ? operation?.point : vehiclePost,
+        assault.length && !protectNow ? operation?.point : musterPost,
       objective: protectNow
         ? "protect-base"
         : assault.length
@@ -231,6 +254,7 @@ export class BastionStrategy implements StrategicController {
             ? "protect-economy"
             : "muster-counterattack",
       engagement: { allowCrush: true },
+      approach: stagingDirection,
       ...(assault.length && !protectNow && operation?.ref
         ? { target: operation.ref }
         : {}),
@@ -268,9 +292,9 @@ export class BastionStrategy implements StrategicController {
     if (assault.length && !protectNow)
       additionalCombat.push(
         this.mission("reserve-force", {
-          kind: "defend",
+          kind: responding ? "defend" : "assemble",
           units: reserve.map((u) => u.ref),
-          destination: vehiclePost,
+          destination: musterPost,
           objective: responding ? "protect-economy" : "muster-reinforcements",
           engagement: { allowCrush: true },
         }),
