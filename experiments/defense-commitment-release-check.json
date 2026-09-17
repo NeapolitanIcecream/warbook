@@ -1,0 +1,9 @@
+{
+  "purpose": "Verify 0.1.10 metadata changes preserve the evaluated supported defender, and record a current-version replay",
+  "subjects": { "release": { "ref": "f70eb3b06441134ddef64e26f6f50679f3b7ea79", "mode": "bastion" } },
+  "shadows": { "release": { "ref": "44521bfd4afc5ad04165bf93c918aaa8f7aae09b", "mode": "bastion" } },
+  "opponents": { "supalosa": { "native": "supalosa" } },
+  "maps": ["mp06t2.map"],
+  "rounds": 2,
+  "decision": { "budget": "2 full games, zero same-observation command differences required; no strength claim" }
+}

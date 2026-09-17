@@ -1,18 +1,18 @@
 # Warbook / Chrono Divide AI
 
-**当前默认：0.1.9 主动防守反击。** 守军支援受击建筑，大兵按接敌情况移动、部署和开火；预备位置参考已探索通路，坦克提供碾压支援并成批反击。四张已用地图的同一固定对手池中，新版 39/48、0.1.7 为 25/48，96 局全部正常结束。仍有城市图等短板，不代表真人竞技水平。
+**当前默认：0.1.9；新增候选：0.1.10 持续交战与分路守备。** 候选让大兵保持近处有效交战，按可见威胁组织最多两组守备，兵力不足时集中处理一路。最新四图同池候选 22/24、0.1.9 为 18/24，48 局全部正常结束。仍有步兵损耗、装甲接敌与反击时机问题，先保留为试验版。详见 [本轮结果与限制](docs/defense-commitment-cycle.md)。
 
 ## 试玩
 
 打开 **[本地玩家入口](http://127.0.0.1:8642/)**，选择「本地对战」→「开始游戏」。默认美国、美国小镇、10000 资金、零起始军队。
 
-也可以选择 **[旧版进攻 AI（0.1.7）](http://127.0.0.1:8642/challenge/)** 作对照试玩。游戏页下方显示所选 AI 的版本。0.1.8 阵地路线和旧 counter 继续保留为冻结研究对手。
+试用新版请选择 **[0.1.10 候选 AI](http://127.0.0.1:8642/challenge/)**。游戏页下方显示所选 AI 的版本。旧 0.1.7、0.1.8 阵地路线和 counter 继续保留为冻结研究对手。
 
 - 鼠标选择基地车，按 **D** 展开；在右侧建造栏生产和放置建筑。
 - **Esc → 放弃任务 → 退出** 可以结束当前局；结算后点「继续」再次开局。
 - 服务未启动时，双击 [Play Warbook.command](scripts/Play%20Warbook.command)。Agent 负责环境、版本、日志与运行维护。
 
-只想看 AI 对战，可以打开 **[0.1.9 对 Supalosa 的完整回放](http://127.0.0.1:8642/watch)**：短图，17:12，WarbookRed 获胜。约 4:30 可看步兵防守，13:19 后可看六车反击。也保留 **[历史移动原型的失败记录](http://127.0.0.1:8642/game/#/replay/http%3A%2F%2F127.0.0.1%3A8642%2Fwarbook%2Freplay-check.rpl)**：60:00 达到运行上限，双方未败北，WarbookRed 仍有 53 辆坦克；不计正常败局。可用底部按钮加速，或 Esc → 全屏展开画面。
+只想看 AI 对战，可以打开 **[0.1.10 对 Supalosa 的完整回放](http://127.0.0.1:8642/watch)**：短图，17:38，WarbookRed 获胜。约 4:30–6:00 可看早期防守，11:03 后可看六车反击。这局出生方向与之前 0.1.9 的展示局不同；先前方向的候选记录及损失也保留在研发文档中。也保留 **[历史移动原型的失败记录](http://127.0.0.1:8642/game/#/replay/http%3A%2F%2F127.0.0.1%3A8642%2Fwarbook%2Freplay-check.rpl)**：60:00 达到运行上限，双方未败北，WarbookRed 仍有 53 辆坦克；不计正常败局。可用底部按钮加速，或 Esc → 全屏展开画面。
 
 这是基础地面作战研发版。当前重点是建设、采矿、出兵、坦克对步兵作战和寻找迁移的基地；不宣称已经覆盖所有兵种、地图或真人竞技水平。
 
@@ -67,6 +67,7 @@ npm run bot:build -- --ref v0.1.9 --mode bastion
 - [policy.ts](src/policy.ts)：当前主线的控制器入口，历史 mode 经 [legacy-policy.ts](src/legacy-policy.ts) 保留。
 - [strategy.ts](src/control/strategy.ts)：战略阶段、目标、兵力就绪需求和生产目标。
 - [bastion-strategy.ts](src/control/bastion-strategy.ts)、[position-tactics.ts](src/control/position-tactics.ts)：守备、反击、增援批次及有限近距自卫。
+- [defense-assignments.ts](src/control/defense-assignments.ts)：按可见来向分配步兵，保持当前交战，并处理有限分兵与急危增援。
 - [tactics.ts](src/control/tactics.ts)、[production.ts](src/control/production.ts)：分别落实作战与生产任务。
 - [coordinator.ts](src/control/coordinator.ts)：任务修订、单位归属、结果反馈和过期命令检查。
 - [bridge.ts](src/bridge.ts)：观察白名单、局部引用、动作仲裁与提交。
