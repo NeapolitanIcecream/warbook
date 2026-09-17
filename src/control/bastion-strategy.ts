@@ -5,6 +5,7 @@ import {
   type Unit,
 } from "../model.js";
 import { OpeningStrategy } from "./strategy.js";
+import { DefenseAssignments } from "./defense-assignments.js";
 import {
   TaskRevision,
   type CombatMission,
@@ -17,6 +18,7 @@ import {
 export class BastionStrategy implements StrategicController {
   readonly id: string;
   private readonly opening = new OpeningStrategy();
+  private readonly defense = new DefenseAssignments();
   private readonly revisions = new Map<string, TaskRevision>();
   private readonly productionRevision = new TaskRevision();
   private assault = new Set<string>();
@@ -35,7 +37,7 @@ export class BastionStrategy implements StrategicController {
 
   constructor(private readonly doctrine: "bastion" | "cohort" = "bastion") {
     this.id =
-      doctrine === "bastion" ? "bastion-strategy-v7" : "cohort-strategy-v4";
+      doctrine === "bastion" ? "bastion-strategy-v8" : "cohort-strategy-v5";
   }
 
   assessmentRequest(o: Observation) {
@@ -273,17 +275,41 @@ export class BastionStrategy implements StrategicController {
             : "muster-counterattack",
       engagement: { allowCrush: true },
     });
-    const additionalCombat = [
-      this.mission("base-garrison", {
-        kind: "defend",
-        units: infantry.map((u) => u.ref),
-        destination: vehiclePost,
-        objective: "guard-base",
-        protectedAssets: assets.map((u) => u.ref).sort(),
-        approach: direction,
-        engagement: { allowCrush: false },
-      }),
-    ];
+    const guards = this.defense.assign(
+      o.tick,
+      infantry,
+      incursions,
+      this.damagedAt,
+    );
+    const additionalCombat = guards.length
+      ? guards.map((guard) =>
+          this.mission(guard.id, {
+            kind: "defend",
+            units: guard.units,
+            destination: guard.destination,
+            objective: guard.urgent
+              ? "protect-critical-building"
+              : "guard-approach",
+            threats: guard.threats,
+            protectedAssets: guard.protectedAssets,
+            approach: direction,
+            engagement: {
+              allowCrush: false,
+              ...(guard.urgent ? { interrupt: true } : {}),
+            },
+          }),
+        )
+      : [
+          this.mission("base-garrison", {
+            kind: "defend",
+            units: infantry.map((u) => u.ref),
+            destination: vehiclePost,
+            objective: "guard-base",
+            protectedAssets: assets.map((u) => u.ref).sort(),
+            approach: direction,
+            engagement: { allowCrush: false },
+          }),
+        ];
     if (assault.length && !protectNow)
       additionalCombat.push(
         this.mission("reserve-force", {

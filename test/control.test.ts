@@ -6,6 +6,7 @@ import { LegacyCommander } from "../src/legacy-policy.js";
 import { GroupedAdvance, LocalCombat } from "../src/control/tactics.js";
 import { ControlCoordinator } from "../src/control/coordinator.js";
 import { PositionTactics } from "../src/control/position-tactics.js";
+import { DefenseAssignments } from "../src/control/defense-assignments.js";
 import type {
   CombatMission,
   ControlResult,
@@ -501,6 +502,102 @@ test("a moving guard post preserves a nearby engagement, but an urgent reassignm
   o.own[0].deployed = false;
   o.own[0].y = 17;
   assert.equal(tactics.control(o, mission, []).intents[0].kind, "deploy");
+});
+
+test("two approaches keep engaged defenders, send free troops, and can reinforce a critical building", () => {
+  const allocator = new DefenseAssignments();
+  const upper = building("upper-base", "GAREFN", 23, 10);
+  const lower = building("lower-base", "GAWEAP", 23, 30);
+  const infantry = Array.from({ length: 6 }, (_, i) => ({
+    ...tank(`gi-${i}`, 20, i < 4 ? 10 : 20),
+    name: "E1",
+    type: 3,
+    hp: 125,
+    maxHp: 125,
+    deployed: i < 4,
+  }));
+  const incidents = [upper, lower].flatMap((asset) =>
+    Array.from({ length: 3 }, (_, i) => ({
+      enemy: {
+        ref: `${asset.ref}-${i}`,
+        name: "E1",
+        type: 3,
+        x: 24 + (i % 2),
+        y: asset.y,
+        hp: 125,
+        maxHp: 125,
+        observedTick: 0,
+        weaponRange: 5,
+      },
+      asset,
+      distance: 1,
+    })),
+  );
+  const first = allocator.assign(0, infantry, incidents, new Map());
+  const upperGroup = first.find((g) => g.protectedAssets.includes(upper.ref))!;
+  const lowerGroup = first.find((g) => g.protectedAssets.includes(lower.ref))!;
+  assert.equal(first.length, 2);
+  assert.deepEqual(upperGroup.units, ["gi-0", "gi-1", "gi-2", "gi-3"]);
+  assert.deepEqual(lowerGroup.units, ["gi-4", "gi-5"]);
+  const again = allocator.assign(
+    90,
+    [...infantry].reverse(),
+    [...incidents].reverse(),
+    new Map(),
+  );
+  assert.deepEqual(
+    again.find((g) => g.id === upperGroup.id)!.units,
+    upperGroup.units,
+  );
+  lower.hp = 60;
+  const emergency = allocator.assign(
+    93,
+    infantry,
+    incidents,
+    new Map([[lower.ref, 93]]),
+  );
+  const relief = emergency.find((g) => g.id === lowerGroup.id)!;
+  assert.equal(relief.urgent, true);
+  assert.equal(relief.units.length, 4);
+  assert.equal(
+    new Set(emergency.flatMap((g) => g.units)).size,
+    infantry.length,
+  );
+  const cleared = allocator.assign(
+    300,
+    infantry,
+    incidents.filter((i) => i.asset === lower),
+    new Map(),
+  );
+  assert.equal(cleared.length, 1);
+  assert.equal(cleared[0].units.length, 6);
+});
+
+test("a small guard concentrates on its current fight rather than dividing into single infantry", () => {
+  const allocator = new DefenseAssignments();
+  const infantry = [0, 1, 2].map((i) => ({
+    ...tank(`gi-${i}`, 0, i),
+    name: "E1",
+    type: 3,
+  }));
+  const incidents = [0, 25].map((y) => ({
+    enemy: {
+      ref: `enemy-${y}`,
+      name: "E1",
+      type: 3,
+      x: 3,
+      y,
+      hp: 125,
+      maxHp: 125,
+      observedTick: 0,
+    },
+    asset: building(`building-${y}`, "GAREFN", 0, y),
+    distance: 1,
+  }));
+  const groups = allocator.assign(0, infantry, incidents, new Map());
+  assert.equal(groups.length, 1);
+  assert.deepEqual(groups[0].threats, ["enemy-0"]);
+  assert.equal(groups[0].units.length, 3);
 });
 
 test("defensive armor can crush nearby infantry but first engages a closer tank", () => {
