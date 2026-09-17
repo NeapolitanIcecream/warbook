@@ -598,6 +598,56 @@ test("a small guard concentrates on its current fight rather than dividing into 
   assert.equal(groups.length, 1);
   assert.deepEqual(groups[0].threats, ["enemy-0"]);
   assert.equal(groups[0].units.length, 3);
+  // A new wave on the other approach must not restart whole-group shuttling.
+  const repeated = allocator.assign(
+    3,
+    infantry,
+    [...incidents].reverse(),
+    new Map(),
+  );
+  assert.equal(repeated[0].id, groups[0].id);
+});
+
+test("insufficient reserves do not become a solitary second squad", () => {
+  const allocator = new DefenseAssignments();
+  const infantry = Array.from({ length: 6 }, (_, i) => ({
+    ...tank(`gi-${i}`, i < 5 ? 0 : 15, 0),
+    name: "E1",
+    type: 3,
+  }));
+  const incidents = [0, 25].flatMap((y) =>
+    Array.from({ length: y === 0 ? 4 : 1 }, (_, i) => ({
+      enemy: {
+        ref: `enemy-${y}-${i}`,
+        name: "E1",
+        type: 3,
+        x: 3,
+        y,
+        hp: 125,
+        maxHp: 125,
+        observedTick: 0,
+      },
+      asset: building(`base-${y}`, "GAREFN", 0, y),
+      distance: 1,
+    })),
+  );
+  const groups = allocator.assign(0, infantry, incidents, new Map());
+  assert.equal(
+    groups.find((g) => g.threats.includes("enemy-0-0"))!.units.length,
+    6,
+  );
+  assert(!groups.some((g) => g.units.length === 1));
+  // Six visible attackers on one approach plus a diversion exceed this guard's split budget.
+  const stronger = [
+    ...incidents,
+    ...[4, 5].map((i) => ({
+      ...incidents[0],
+      enemy: { ...incidents[0].enemy, ref: `extra-${i}` },
+    })),
+  ];
+  const focused = allocator.assign(3, infantry, stronger, new Map());
+  assert.equal(focused.length, 1);
+  assert.equal(focused[0].units.length, 6);
 });
 
 test("defensive armor can crush nearby infantry but first engages a closer tank", () => {

@@ -26,6 +26,7 @@ export class DefenseAssignments {
   private fronts: Front[] = [];
   private owners = new Map<string, string>();
   private nextId = 0;
+  private focus?: string;
 
   assign(
     tick: number,
@@ -108,9 +109,19 @@ export class DefenseAssignments {
         weight(b) - weight(a) ||
         a.id.localeCompare(b.id),
     );
-    // With fewer than two pairs, concentrate on the urgent/current engagement.
-    fronts = fronts.slice(0, infantry.length >= 4 ? 2 : 1);
+    // Keep identities for every visible approach, including temporarily unstaffed ones.
     this.fronts = fronts;
+    const split =
+      fronts.length >= 2 &&
+      infantry.length >=
+        Math.max(2, weight(fronts[0])) + Math.max(2, weight(fronts[1]));
+    if (!split) {
+      const committed = fronts.find((f) => f.id === this.focus);
+      if (committed && !fronts.some((f) => f.urgent))
+        fronts = [committed, ...fronts.filter((f) => f !== committed)];
+    }
+    fronts = fronts.slice(0, split ? 2 : 1);
+    this.focus = fronts[0]?.id;
     if (!fronts.length) {
       this.owners.clear();
       return [];
@@ -174,6 +185,19 @@ export class DefenseAssignments {
           defenders.push(donors.shift()!);
       }
     }
+    // One free soldier is not a second squad. Finish the current fight before sending it alone.
+    if (fronts.length === 2)
+      for (const front of fronts) {
+        const units = assigned.get(front.id)!;
+        if (
+          units.length === 1 &&
+          !front.urgent &&
+          !canEngage(units[0], front)
+        ) {
+          const other = fronts.find((f) => f !== front)!;
+          assigned.get(other.id)!.push(units.pop()!);
+        }
+      }
     this.owners.clear();
     return fronts.map((front) => {
       const units = assigned
