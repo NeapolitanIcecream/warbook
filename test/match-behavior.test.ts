@@ -83,6 +83,56 @@ const replayUnit = (
   ...overrides,
 });
 
+test("short deployment cancellation is a replay cue, and fire on deployment entry counts", () => {
+  const behavior = new ReplayBehavior();
+  const enemy = replayUnit(9, { x: 22 });
+  for (const [tick, deployed, cooldown] of [
+    [0, false, 0],
+    [3, true, 0],
+    [6, false, 0],
+    [9, true, 30],
+    [12, false, 27],
+  ] as const) {
+    behavior.sample({
+      tick,
+      own: [replayUnit(1, { deployed, weapons: [{ name: "Para", cooldown }] })],
+      opponent: [enemy],
+      visibleEnemyIds: [9],
+    });
+  }
+  const report = behavior.finish(new JournalBehavior().finish());
+  assert.equal(report.shortInfantryDeploymentsWithoutFire.count, 1);
+  assert.deepEqual(report.shortInfantryDeploymentsWithoutFire.examples, [
+    { fromTick: 3, toTick: 6, nearbyVisibleEnemies: 1 },
+  ]);
+  assert.match(renderBehavior(report), /不能单独判定改派错误/);
+});
+
+test("armor destruction reports nearby support and does not count a vanished unit as a kill", () => {
+  const behavior = new ReplayBehavior();
+  const tanks = [0, 10, 11].map((x, id) =>
+    replayUnit(id, { name: "MTNK", infantry: false, armor: true, x, y: 0 }),
+  );
+  behavior.sample({ tick: 0, own: tanks, opponent: [], visibleEnemyIds: [] });
+  behavior.destroyed(
+    "own",
+    { id: 1, name: "MTNK", building: false, defense: false },
+    1,
+  );
+  behavior.destroyed(
+    "own",
+    { id: 2, name: "MTNK", building: false, defense: false },
+    2,
+  );
+  behavior.sample({ tick: 3, own: [], opponent: [], visibleEnemyIds: [] });
+  const report = behavior.finish(new JournalBehavior().finish());
+  assert.deepEqual(report.ownDestructionEvents, { MTNK: 2 });
+  assert.deepEqual(report.firstArmorLosses, [
+    { tick: 1, nearestFriendlyArmorDistance: 1 },
+    { tick: 2, nearestFriendlyArmorDistance: 11 },
+  ]);
+});
+
 test("an advance plan and repeated move orders do not establish progress", () => {
   const journal = new JournalBehavior();
   journal.onPlan(plan("advance"));

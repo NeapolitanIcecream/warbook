@@ -1,0 +1,11 @@
+{
+  "purpose": "Obtain the missing short-map start-1 defense case for the split candidate; the first screen's two Supalosa games both spawned the actor at 0",
+  "subjects": { "split": { "ref": "6bb6456b8241afaaa6335b58312884f621574dbd", "mode": "bastion" } },
+  "opponents": { "supalosa": { "native": "supalosa" } },
+  "maps": ["mp06t2.map"],
+  "rounds": 8,
+  "decision": {
+    "budget": "8 ordinary starts fixed before execution, keep all outcomes; inspect a start-1 game if observed",
+    "check": "Behavior coverage, not an independent win-rate estimate or paired experiment. A win without two-approach contact does not validate two-approach allocation."
+  }
+}

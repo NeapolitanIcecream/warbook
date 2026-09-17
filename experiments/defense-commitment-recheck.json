@@ -1,0 +1,17 @@
+{
+  "purpose": "Check concentrated fallback and minimum useful split against the engagement-only candidate",
+  "subjects": {
+    "engagement": { "ref": "8ace5fe", "mode": "bastion" },
+    "supported-split": { "ref": "44521bfd4afc5ad04165bf93c918aaa8f7aae09b", "mode": "bastion" }
+  },
+  "opponents": {
+    "old-main": { "ref": "8326311288ec685c3da43b1d182071dc36938fe8", "mode": "factory-exit" },
+    "supalosa": { "native": "supalosa" }
+  },
+  "maps": ["mp06t2.map", "mp03t4.map"],
+  "rounds": 2,
+  "decision": {
+    "budget": "16 starts fixed before execution; preserve all outcomes and actual actor birth",
+    "check": "A lone unengaged reserve must not be sent as another squad. When known threats exceed the infantry split budget, maintain the current engagement unless another front is urgent. Verify behavior in replays; no component improvement claim from a small uncontrolled screen."
+  }
+}

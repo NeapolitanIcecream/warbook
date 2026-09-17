@@ -1,0 +1,18 @@
+{
+  "purpose": "Compare preserved engagements and two-approach infantry allocation with 0.1.9",
+  "subjects": {
+    "published": { "ref": "c1bfcffb85e0e588ab364989d6c4f6cd8998c7c8", "mode": "bastion" },
+    "engagement": { "ref": "8ace5fe", "mode": "bastion" },
+    "split": { "ref": "6bb6456b8241afaaa6335b58312884f621574dbd", "mode": "bastion" }
+  },
+  "opponents": {
+    "old-main": { "ref": "8326311288ec685c3da43b1d182071dc36938fe8", "mode": "factory-exit" },
+    "supalosa": { "native": "supalosa" }
+  },
+  "maps": ["mp06t2.map", "mp03t4.map"],
+  "rounds": 2,
+  "decision": {
+    "budget": "24 starts fixed before execution, all outcomes retained; actual births reported",
+    "check": "Inspect sustained defense, canceled deployment, casualties, and reinforcement of a second approach. A and B versus published share the same opponent pool; uncontrolled births do not establish component causality. Production, counterattack thresholds and vehicle crushing are unchanged."
+  }
+}

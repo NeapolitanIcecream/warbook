@@ -188,6 +188,8 @@ interface DefenseWindow {
   geometricRangeMax: number;
   firingIds: Set<number>;
   peakFiringUnitsIn30Ticks: number;
+  firingSamples: number;
+  firingUnitSamples: number;
 }
 
 /** Streaming replay facts. Controller labels do not establish successful behavior. */
@@ -201,12 +203,53 @@ export class ReplayBehavior {
   private nonDefenseDestroyed = { own: 0, opponent: 0 };
   private finalOwn: ReplayUnit[] = [];
   private firstOpponentStructureDamage?: number;
+  private deployments = new Map<
+    number,
+    { fromTick: number; fireSignals: number }
+  >();
+  private shortDeployments = {
+    count: 0,
+    examples: [] as {
+      fromTick: number;
+      toTick: number;
+      nearbyVisibleEnemies: number;
+    }[],
+  };
+  private ownDestroyed: Record<string, number> = {};
+  private armorLosses: {
+    tick: number;
+    nearestFriendlyArmorDistance: number | null;
+  }[] = [];
 
   destroyed(
     side: "own" | "opponent",
-    unit: { building: boolean; defense: boolean },
+    unit: { building: boolean; defense: boolean; id?: number; name?: string },
+    tick?: number,
   ) {
     if (unit.building && !unit.defense) this.nonDefenseDestroyed[side]++;
+    if (side === "own" && unit.name) {
+      this.ownDestroyed[unit.name] = (this.ownDestroyed[unit.name] ?? 0) + 1;
+      const previous = this.previous.get(`own:${unit.id}`);
+      if (
+        isArmor(unit.name) &&
+        previous &&
+        tick !== undefined &&
+        tick - previous.tick <= 3
+      ) {
+        const distances = this.finalOwn
+          .filter((u) => u.armor && u.id !== unit.id)
+          .map((u) => distance(u, previous.unit));
+        if (this.armorLosses.length < 3)
+          this.armorLosses.push({
+            tick,
+            nearestFriendlyArmorDistance: distances.length
+              ? Math.round(Math.min(...distances) * 10) / 10
+              : null,
+          });
+      }
+      this.finalOwn = this.finalOwn.filter((u) => u.id !== unit.id);
+      if (unit.id !== undefined) this.deployments.delete(unit.id);
+    }
   }
 
   sample(frame: BehaviorFrame) {
@@ -256,6 +299,34 @@ export class ReplayBehavior {
               this.recentInfantryFire.set(unit.id, tick);
             }
           }
+          if (side === "own" && unit.infantry && unit.combat) {
+            if (unit.deployed && !previous.unit.deployed)
+              this.deployments.set(unit.id, { fromTick: tick, fireSignals: 0 });
+            const episode = this.deployments.get(unit.id);
+            if (episode && fired) episode.fireSignals++;
+            if (!unit.deployed && previous.unit.deployed) {
+              if (
+                episode &&
+                !episode.fireSignals &&
+                tick - episode.fromTick <= 150
+              ) {
+                this.shortDeployments.count++;
+                if (this.shortDeployments.examples.length < 3)
+                  this.shortDeployments.examples.push({
+                    fromTick: episode.fromTick,
+                    toTick: tick,
+                    nearbyVisibleEnemies: frame.opponent.filter(
+                      (e) =>
+                        frame.visibleEnemyIds.includes(e.id) &&
+                        e.combat &&
+                        !e.airborne &&
+                        distance(e, previous.unit) <= previous.unit.range,
+                    ).length,
+                  });
+              }
+              this.deployments.delete(unit.id);
+            }
+          }
         }
         this.previous.set(key, { tick, unit });
       }
@@ -293,6 +364,8 @@ export class ReplayBehavior {
         geometricRangeMax: 0,
         firingIds: new Set(),
         peakFiringUnitsIn30Ticks: 0,
+        firingSamples: 0,
+        firingUnitSamples: 0,
       };
     }
     const window = this.defenseWindow;
@@ -318,12 +391,15 @@ export class ReplayBehavior {
           .length,
       );
       infantryFired.forEach((id) => window.firingIds.add(id));
+      const firing = infantry.filter(
+        (u) => tick - (this.recentInfantryFire.get(u.id) ?? -Infinity) <= 30,
+      ).length;
       window.peakFiringUnitsIn30Ticks = Math.max(
         window.peakFiringUnitsIn30Ticks,
-        infantry.filter(
-          (u) => tick - (this.recentInfantryFire.get(u.id) ?? -Infinity) <= 30,
-        ).length,
+        firing,
       );
+      window.firingSamples++;
+      window.firingUnitSamples += firing;
     }
     this.finalOwn = frame.own;
   }
@@ -356,6 +432,9 @@ export class ReplayBehavior {
     const stall = journal.longestStalledMarch;
     return {
       ...journal,
+      shortInfantryDeploymentsWithoutFire: this.shortDeployments,
+      ownDestructionEvents: this.ownDestroyed,
+      firstArmorLosses: this.armorLosses,
       longestStalledMarch: stall
         ? {
             ...stall,
@@ -410,8 +489,31 @@ export function renderBehavior(b: ReturnType<ReplayBehavior["finish"]>) {
   const d = b.defenseWindow;
   lines.push(
     d
-      ? `- 防守参与：${clockTime(d.fromTick)}–${clockTime(d.toTick)}，${d.buildings.join("/")} 掉血 ${d.hpDecrease}，可见地面威胁在附近；己方战斗步兵 ${d.infantryMin}–${d.infantryMax} 名、最多 ${d.deployedMax} 名部署，${d.infantryWithFiringSignals} 名有开火信号。两秒窗内最多 ${d.peakFiringUnitsIn30Ticks} 名开火，几何射程内最多 ${d.geometricRangeMax} 名。`
+      ? `- 防守参与：${clockTime(d.fromTick)}–${clockTime(d.toTick)}，${d.buildings.join("/")} 掉血 ${d.hpDecrease}，可见地面威胁在附近；己方战斗步兵 ${d.infantryMin}–${d.infantryMax} 名，${d.infantryWithFiringSignals} 名有开火信号。两秒窗开火人数平均 ${(d.firingUnitSamples / Math.max(1, d.firingSamples)).toFixed(1)}、峰值 ${d.peakFiringUnitsIn30Ticks}；包括接敌/转场时段，几何射程内最多 ${d.geometricRangeMax} 名。`
       : "- 防守参与：未找到持续至少 10 秒、存在己方步兵及可见近处地面威胁的建筑受损窗口；不据此判定防守有效。",
+  );
+  const churn = b.shortInfantryDeploymentsWithoutFire;
+  const canceled = churn.examples
+    .map(
+      (e) =>
+        `${clockTime(e.fromTick)} 起 ${(e.toTick - e.fromTick) / 15} 秒，解除时附近可见敌军 ${e.nearbyVisibleEnemies}`,
+    )
+    .join("；");
+  lines.push(
+    `- 步兵部署后十秒内无开火信号便解除：${churn.count} 次。${canceled ? `${canceled}。这些是回看线索，不能单独判定改派错误。` : ""}`,
+  );
+  const losses = b.firstArmorLosses
+    .map(
+      (e) =>
+        `${clockTime(e.tick)} 坦克被毁时，最近友军坦克 ${e.nearestFriendlyArmorDistance === null ? "无" : `${e.nearestFriendlyArmorDistance} 格`}`,
+    )
+    .join("；");
+  lines.push(
+    `- 己方摧毁事件：${
+      Object.entries(b.ownDestructionEvents)
+        .map(([name, count]) => `${name}×${count}`)
+        .join("、") || "无"
+    }。${losses ? `${losses}。` : ""}`,
   );
   lines.push(
     `- 停止时己方：${

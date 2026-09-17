@@ -147,7 +147,13 @@ async function main() {
   const behavior = new ReplayBehavior();
   const known = new Map<
     number,
-    { owner: string; building: boolean; defense: boolean }
+    {
+      owner: string;
+      building: boolean;
+      defense: boolean;
+      id: number;
+      name: string;
+    }
   >();
   const remember = (id: number) => {
     const object = game.gameApi.getGameObjectData(id);
@@ -164,6 +170,8 @@ async function main() {
     const u = game.gameApi.getUnitData(id);
     if (u)
       known.set(id, {
+        id,
+        name: u.name,
         owner: u.owner,
         building: u.type === ObjectType.Building,
         defense: u.rules.isBaseDefense,
@@ -179,7 +187,11 @@ async function main() {
     if (event.type === ApiEventType.ObjectDestroy) {
       const u = known.get(event.target);
       if (u && [actor, opponent].includes(u.owner))
-        behavior.destroyed(u.owner === actor ? "own" : "opponent", u);
+        behavior.destroyed(
+          u.owner === actor ? "own" : "opponent",
+          u,
+          game.getCurrentTick(),
+        );
       known.delete(event.target);
     }
   });
