@@ -16,7 +16,11 @@ export class DefenseSituation {
   observe(o: Observation) {
     const threat = o.enemies
       .filter(
-        (e) => e.type !== 2 && !e.airborne && distance2(e, o.home) < 30 ** 2,
+        (e) =>
+          e.type !== 2 &&
+          !e.airborne &&
+          (e.weaponRange ?? 1) > 0 &&
+          distance2(e, o.home) < 30 ** 2,
       )
       .sort((a, b) => distance2(a, o.home) - distance2(b, o.home))[0];
     if (threat) this.approach = { x: threat.x, y: threat.y };
@@ -53,7 +57,7 @@ export class DefenseSituation {
         y: Math.max(asset.y, Math.min(enemy.y, asset.y + asset.height)),
       });
     const incursions = o.enemies
-      .filter((e) => !e.airborne && e.type !== 2)
+      .filter((e) => !e.airborne && e.type !== 2 && (e.weaponRange ?? 1) > 0)
       .flatMap((enemy) =>
         assets
           .filter((asset) => assetDistance(enemy, asset) <= 10 ** 2)

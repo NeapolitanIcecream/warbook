@@ -8,6 +8,7 @@ import { ControlCoordinator } from "../src/control/coordinator.js";
 import { PositionTactics } from "../src/control/position-tactics.js";
 import { DefenseAssignments } from "../src/control/defense-assignments.js";
 import { Reconnaissance, ScoutTactics } from "../src/control/reconnaissance.js";
+import { Operations, formedUnits } from "../src/control/operations.js";
 import type {
   CombatMission,
   ControlResult,
@@ -122,6 +123,87 @@ test("bastion keeps infantry at home and releases reinforcements as a separate b
   assert(
     !c.controlPlan!.additionalCombat!.some((m) => m.id === "reinforcements"),
   );
+});
+
+test("an exposed nearby MCV triggers a supported two-tank strike and stays active next tick", () => {
+  const c = new Commander("bastion"),
+    o = observation();
+  o.home = { x: 50, y: 50 };
+  o.tick = 4500;
+  o.own = [
+    building("factory", "GAWEAP", 40, 45),
+    tank("a", 50, 50),
+    tank("b", 51, 50),
+  ];
+  o.enemies = [
+    {
+      ref: "mcv",
+      name: "AMCV",
+      type: 7,
+      x: 55,
+      y: 50,
+      hp: 1000,
+      maxHp: 1000,
+      weaponRange: 0,
+      observedTick: o.tick,
+    },
+    {
+      ref: "enemy-factory",
+      name: "GAWEAP",
+      type: 2,
+      x: 90,
+      y: 50,
+      hp: 1000,
+      maxHp: 1000,
+      weaponRange: 0,
+      observedTick: o.tick,
+    },
+  ];
+  c.decide(o);
+  assert.equal(c.controlPlan!.combat.kind, "advance");
+  assert.equal(c.controlPlan!.combat.target, "mcv");
+  assert.equal(c.controlPlan!.combat.objective, "exposed-construction");
+  assert.equal(c.controlPlan!.production.vehicles.harvesters, 2);
+  o.tick += 3;
+  c.decide(o);
+  assert.equal(c.controlPlan!.combat.kind, "advance");
+  const planner = new Operations();
+  o.enemies.push(
+    ...[0, 1, 2].map((i) => ({
+      ref: `escort-${i}`,
+      name: "MTNK",
+      type: 7,
+      x: 54 + i,
+      y: 53,
+      hp: 300,
+      maxHp: 300,
+      weaponRange: 6,
+      observedTick: o.tick,
+    })),
+  );
+  planner.observe(o, []);
+  assert.equal(
+    planner.consider(
+      o,
+      o.own.filter((u) => u.name === "MTNK"),
+    ),
+    undefined,
+    "escorts can close the window",
+  );
+});
+
+test("a scattered newly built tank does not count as part of the formed strike force", () => {
+  const units = [
+    tank("a", 62, 37),
+    tank("b", 63, 34),
+    tank("c", 66, 36),
+    tank("d", 66, 37),
+    tank("e", 64, 34),
+    tank("late", 76, 40),
+  ];
+  const formed = formedUnits(units, { x: 65, y: 36 });
+  assert.equal(formed.length, 5);
+  assert(!formed.some((u) => u.ref === "late"));
 });
 
 test("a scout has independent ownership and does not replace a garrison infantry target", () => {

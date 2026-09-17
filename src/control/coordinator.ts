@@ -81,6 +81,7 @@ export class ControlCoordinator {
         ...combat.report,
         facts: {
           ...combat.report.facts,
+          ...plan.decision,
           objective: plan.combat.objective,
           observedArmor: assessment.observedArmor,
           armorOutsideFactories: assessment.armorOutsideFactories,

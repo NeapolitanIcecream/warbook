@@ -8,6 +8,7 @@ import { OpeningStrategy } from "./strategy.js";
 import { DefenseAssignments } from "./defense-assignments.js";
 import { DefenseSituation } from "./defense-situation.js";
 import { isScout, Reconnaissance } from "./reconnaissance.js";
+import { formedUnits, Operations } from "./operations.js";
 import {
   TaskRevision,
   type CombatMission,
@@ -24,15 +25,15 @@ export class BastionStrategy implements StrategicController {
   private readonly defense = new DefenseAssignments();
   private readonly situation = new DefenseSituation();
   private readonly recon = new Reconnaissance();
+  private readonly operations = new Operations();
   private readonly revisions = new Map<string, TaskRevision>();
   private readonly productionRevision = new TaskRevision();
   private assault = new Set<string>();
   private joining = new Set<string>();
   private nextLaunchTick = 0;
   private readonly launchSize = 6;
-  private sawArmorPressure = false;
-  private lastHeavyArmorTick = Number.NEGATIVE_INFINITY;
-  private hasLaunched = false;
+  private firstForceFunded = false;
+  private launchedArmor = 6;
 
   constructor(private readonly doctrine: "bastion" | "cohort" = "bastion") {
     this.id =
@@ -66,6 +67,8 @@ export class BastionStrategy implements StrategicController {
   ): StrategicPlan {
     const base = this.opening.plan(o, assessment);
     const { unitType: armor, factoryType: factory } = this.assessmentRequest(o);
+    if (assessment.observedArmor >= this.launchSize)
+      this.firstForceFunded = true;
     const scouts = assessment.army.filter(isScout);
     const infantry = assessment.army.filter((u) => u.type === 3 && !isScout(u));
     const vehicles = assessment.army.filter((u) => u.type !== 3);
@@ -85,10 +88,9 @@ export class BastionStrategy implements StrategicController {
       responding,
       damagedAt,
     } = this.situation.observe(o);
-    if (localArmor.length >= 2) {
-      this.sawArmorPressure = true;
-      this.lastHeavyArmorTick = o.tick;
-    }
+    this.operations.observe(o, [
+      ...new Map(incursions.map((i) => [i.enemy.ref, i.enemy])).values(),
+    ]);
     const outsideFactory = (u: Unit) =>
       !o.own.some(
         (b) =>
@@ -103,33 +105,52 @@ export class BastionStrategy implements StrategicController {
       y: Math.round(units.reduce((s, u) => s + u.y, 0) / units.length),
     });
     let assault = vehicles.filter((u) => this.assault.has(u.ref));
-    if (hadAssault && assault.filter((u) => u.name === armor).length <= 2) {
+    if (
+      hadAssault &&
+      assault.filter((u) => u.name === armor).length <
+        Math.min(3, this.launchedArmor)
+    ) {
+      this.assault.clear();
+      this.joining.clear();
+      this.operations.active = undefined;
+      assault = [];
+      this.nextLaunchTick = o.tick + 450;
+    }
+    if (assault.length && !this.operations.target(o, assault)) {
       this.assault.clear();
       this.joining.clear();
       assault = [];
-      this.nextLaunchTick = o.tick + 450;
     }
     let reserve = vehicles.filter(
       (u) => !this.assault.has(u.ref) && !this.joining.has(u.ref),
     );
-    const ready = reserve.filter(
-      (u) => outsideFactory(u) && distance2(u, post) <= 12 ** 2,
+    const ready = formedUnits(
+      reserve.filter((u) => outsideFactory(u) && distance2(u, post) <= 12 ** 2),
+      post,
     );
+    const opportunity = this.operations.consider(o, ready);
+    const exploration =
+      !this.operations.hasKnownBase &&
+      ready.filter((u) => u.name === armor).length >= this.launchSize &&
+      base.combat.destination
+        ? {
+            point: base.combat.destination,
+            reason: "formed-advance" as const,
+            defenders: 0,
+            productionArrivals: 0,
+            travelSeconds: 0,
+          }
+        : undefined;
+    const nextOperation = opportunity ?? exploration;
     if (
       !this.assault.size &&
       !protectNow &&
       o.tick >= this.nextLaunchTick &&
-      ready.filter((u) => u.name === armor).length >=
-        (o.tick >= 15000 ||
-        (this.sawArmorPressure &&
-          localArmor.length <= 1 &&
-          o.tick - this.lastHeavyArmorTick >= 90)
-          ? 4
-          : this.launchSize)
+      nextOperation
     ) {
       this.assault = new Set(ready.map((u) => u.ref));
-      this.hasLaunched = true;
-      this.sawArmorPressure = false;
+      this.launchedArmor = ready.filter((u) => u.name === armor).length;
+      this.operations.active = nextOperation;
       assault = vehicles.filter((u) => this.assault.has(u.ref));
     }
     if (assault.length) {
@@ -142,8 +163,11 @@ export class BastionStrategy implements StrategicController {
       reserve = vehicles.filter(
         (u) => !this.assault.has(u.ref) && !this.joining.has(u.ref),
       );
-      const nextBatch = reserve.filter(
-        (u) => outsideFactory(u) && distance2(u, post) <= 12 ** 2,
+      const nextBatch = formedUnits(
+        reserve.filter(
+          (u) => outsideFactory(u) && distance2(u, post) <= 12 ** 2,
+        ),
+        post,
       );
       if (
         !this.joining.size &&
@@ -158,7 +182,7 @@ export class BastionStrategy implements StrategicController {
     );
     const fort = o.side === 0 ? "GAPILL" : "NALASR";
     const refinery = o.side === 0 ? "GAREFN" : "NAREFN";
-    const mobilizing = this.doctrine === "cohort" && !this.hasLaunched;
+    const mobilizing = !this.firstForceFunded;
     const economy = {
       ...base.production,
       scouts: { product: o.side === 0 ? "ADOG" : "DOG", count: 1 },
@@ -189,25 +213,27 @@ export class BastionStrategy implements StrategicController {
       ...economy,
       revision: this.productionRevision.update(productionDescription),
     };
+    const operation = this.operations.target(o, assault);
     const combat = this.mission("main-force", {
       kind: assault.length && !protectNow ? "advance" : "defend",
       units: (protectNow ? vehicles : assault.length ? assault : reserve).map(
         (u) => u.ref,
       ),
       destination:
-        assault.length && !protectNow ? base.combat.destination : vehiclePost,
+        assault.length && !protectNow ? operation?.point : vehiclePost,
       groundDestination:
-        assault.length && !protectNow
-          ? base.combat.groundDestination
-          : vehiclePost,
+        assault.length && !protectNow ? operation?.point : vehiclePost,
       objective: protectNow
         ? "protect-base"
         : assault.length
-          ? base.combat.objective
+          ? (operation?.reason ?? "reassess-operation")
           : responding
             ? "protect-economy"
             : "muster-counterattack",
       engagement: { allowCrush: true },
+      ...(assault.length && !protectNow && operation?.ref
+        ? { target: operation.ref }
+        : {}),
     });
     const guards = this.defense.assign(o.tick, infantry, incursions, damagedAt);
     const additionalCombat = guards.length
@@ -268,6 +294,16 @@ export class BastionStrategy implements StrategicController {
         engagement: { allowCrush: false },
       }),
     );
-    return { tick: o.tick, combat, additionalCombat, production };
+    const decision =
+      operation && assault.length
+        ? {
+            operationReason: operation.reason,
+            formedTanks: assault.filter((u) => u.name === armor).length,
+            defenders: operation.defenders,
+            productionArrivals: operation.productionArrivals,
+            travelSeconds: operation.travelSeconds,
+          }
+        : this.operations.decision;
+    return { tick: o.tick, combat, additionalCombat, production, decision };
   }
 }

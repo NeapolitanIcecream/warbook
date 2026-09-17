@@ -11,6 +11,8 @@ export interface CombatMission extends TaskIdentity {
   readonly destination?: Point;
   readonly groundDestination?: Point;
   readonly objective: string;
+  /** Preferred visible objective; native attacks still require current visibility. */
+  readonly target?: string;
   /** Owned objects whose attackers may be pursued by this defense mission. */
   readonly protectedAssets?: readonly string[];
   /** A known approach direction for an explored-terrain staging request. */
@@ -52,6 +54,8 @@ export interface StrategicPlan {
   readonly combat: CombatMission;
   readonly additionalCombat?: readonly CombatMission[];
   readonly production: ProductionPlan;
+  /** Compact reasons for the current operational choice, for replay diagnosis. */
+  readonly decision?: Readonly<Record<string, number | string | boolean>>;
 }
 export interface TacticalAssessment {
   readonly army: readonly Unit[];

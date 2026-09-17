@@ -78,7 +78,16 @@ export class LocalCombat implements TacticalController {
                 ? Number(!!b.airborne) - Number(!!a.airborne)
                 : 0) || distance2(unit, a) - distance2(unit, b),
           );
-        const target = nearby[0];
+        const preferred = nearby.find((e) => e.ref === mission.target);
+        const immediateArmor = preferred
+          ? nearby.find(
+              (e) =>
+                e.type === 7 &&
+                !["AMCV", "SMCV", "CMIN", "HARV"].includes(e.name) &&
+                distance2(e, unit) <= 6 ** 2,
+            )
+          : undefined;
+        const target = immediateArmor ?? preferred ?? nearby[0];
         if (
           mission.engagement.allowCrush &&
           unit.crusher &&
