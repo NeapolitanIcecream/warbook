@@ -5,7 +5,9 @@ import {
   QueueStatus,
   type GameApi,
   type UnitData,
+  type TechnoRules,
 } from "@chronodivide/game-api";
+import { defenseRoute } from "./defense-route.js";
 import { Commander, type PolicyMode } from "./policy.js";
 import {
   rememberIntent,
@@ -44,6 +46,8 @@ export class WarbookBot extends Bot {
   private lastCombatRevision = -1;
   private lastProductionRevision = -1;
   private lastAdditionalRevisions = "";
+  private defenseRoute?: Observation["defenseRoute"];
+  private lastDefenseRouteTick = -150;
   public trace?: (event: Trace) => void;
   public autoTick = false;
   public observation?: Observation;
@@ -89,6 +93,26 @@ export class WarbookBot extends Bot {
     this.currentRefs.clear();
     const data = this.player.getPlayerData();
     const tick = this.game.getCurrentTick();
+    const towards = this.commander.controlPlan?.additionalCombat?.find(
+      (m) => m.approach,
+    )?.approach;
+    if (towards && tick - this.lastDefenseRouteTick >= 150) {
+      const home = { x: data.startLocation.x, y: data.startLocation.y };
+      const speed = (
+        this.game.rules.getObject(
+          data.country!.side === 0 ? "MTNK" : "HTNK",
+          ObjectType.Vehicle,
+        ) as TechnoRules
+      ).speedType;
+      const point =
+        speed === undefined
+          ? undefined
+          : defenseRoute(this.game.map, this.name, home, towards, speed);
+      this.defenseRoute = point
+        ? { towards, point, observedTick: tick }
+        : undefined;
+      this.lastDefenseRouteTick = tick;
+    }
     if (tick - this.lastScoutScan >= 150) {
       const size = this.game.map.getRealMapSize();
       const points: Point[] = [];
@@ -238,6 +262,7 @@ export class WarbookBot extends Bot {
       buildSites,
       scoutPoints: this.scoutPoints,
       scoutObservedTick: this.lastScoutScan,
+      defenseRoute: this.defenseRoute,
     };
     if (this.lastObservation) {
       const before = new Set(this.lastObservation.own.map((u) => u.ref));

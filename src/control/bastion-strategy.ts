@@ -87,7 +87,13 @@ export class BastionStrategy implements StrategicController {
       x: Math.round(o.home.x + (6 * dx) / length),
       y: Math.round(o.home.y + (6 * dy) / length),
     };
-    const post = requestedPost;
+    const route = o.defenseRoute;
+    const post =
+      route &&
+      distance2(route.towards, direction) === 0 &&
+      o.tick - route.observedTick <= 450
+        ? route.point
+        : requestedPost;
     const assets = o.own.filter((u) => u.type === 2 || u.harvester);
     for (const asset of assets) {
       if (asset.hp < (this.previousHp.get(asset.ref) ?? asset.hp))
@@ -273,7 +279,8 @@ export class BastionStrategy implements StrategicController {
         units: infantry.map((u) => u.ref),
         destination: vehiclePost,
         objective: "guard-base",
-        protectedAssets: assets.map((u) => u.ref),
+        protectedAssets: assets.map((u) => u.ref).sort(),
+        approach: direction,
         engagement: { allowCrush: false },
       }),
     ];

@@ -13,6 +13,8 @@ export interface CombatMission extends TaskIdentity {
   readonly objective: string;
   /** Owned objects whose attackers may be pursued by this defense mission. */
   readonly protectedAssets?: readonly string[];
+  /** A known approach direction for an explored-terrain staging request. */
+  readonly approach?: Point;
   readonly engagement: {
     /** Permission for explicit crushing orders; native incidental movement effects are separate. */
     readonly allowCrush: boolean;

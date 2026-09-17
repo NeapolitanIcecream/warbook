@@ -58,6 +58,7 @@ export interface Observation {
   starts: Point[];
   scoutPoints?: readonly Point[];
   scoutObservedTick?: number;
+  defenseRoute?: { towards: Point; point: Point; observedTick: number };
   own: Unit[];
   enemies: Contact[];
   products: Product[];
