@@ -6,6 +6,7 @@ import {
   type Point,
 } from "../model.js";
 import { LocalCombat } from "./tactics.js";
+import { StrikeTactics } from "./strike-tactics.js";
 import { ScoutTactics } from "./reconnaissance.js";
 import {
   currentEvidence,
@@ -23,6 +24,7 @@ export class PositionTactics extends LocalCombat {
   private roles = new Map<string, string>();
   private targets = new Map<string, string>();
   private readonly scouts = new ScoutTactics();
+  private readonly strike = new StrikeTactics();
 
   protected prepareMission(mission: CombatMission): void {
     const role = `${mission.id}:${mission.kind}`;
@@ -33,6 +35,7 @@ export class PositionTactics extends LocalCombat {
           mission.kind === "defend" &&
           !mission.engagement.interrupt;
         this.roles.set(ref, role);
+        this.strike.handoff(ref, mission.id);
         if (!continuingDefense) {
           this.lastPositionOrders.delete(ref);
           this.targets.delete(ref);
@@ -49,6 +52,8 @@ export class PositionTactics extends LocalCombat {
     this.prepareMission(mission);
     if (mission.kind === "scout")
       return this.scouts.control(o, mission, evidence);
+    if (mission.kind === "advance")
+      return this.strike.control(o, mission, evidence);
     if (mission.kind !== "defend" && mission.kind !== "assemble")
       return super.control(o, mission, evidence);
     const intents: Intent[] = [];

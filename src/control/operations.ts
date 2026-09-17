@@ -24,21 +24,6 @@ const yard = (c: Contact) => ["GACNST", "NACNST"].includes(c.name);
 const factory = (c: Contact) => ["GAWEAP", "NAWEAP"].includes(c.name);
 const distance = (a: Point, b: Point) => Math.sqrt(distance2(a, b));
 
-export function formedUnits(units: readonly Unit[], near: Point): Unit[] {
-  return (
-    units
-      .map((anchor) => ({
-        anchor,
-        members: units.filter((u) => distance2(u, anchor) <= 6 ** 2),
-      }))
-      .sort(
-        (a, b) =>
-          b.members.length - a.members.length ||
-          distance2(a.anchor, near) - distance2(b.anchor, near),
-      )[0]?.members ?? []
-  );
-}
-
 /** Operational estimates from observed contacts, not engine truth or a battle simulator. */
 export class Operations {
   private known = new Map<string, Contact>();

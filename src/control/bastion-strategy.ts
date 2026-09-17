@@ -8,7 +8,8 @@ import { OpeningStrategy } from "./strategy.js";
 import { DefenseAssignments } from "./defense-assignments.js";
 import { DefenseSituation } from "./defense-situation.js";
 import { isScout, Reconnaissance } from "./reconnaissance.js";
-import { formedUnits, Operations } from "./operations.js";
+import { Operations } from "./operations.js";
+import { formedUnits, rendezvous } from "./formation.js";
 import {
   TaskRevision,
   type CombatMission,
@@ -116,10 +117,7 @@ export class BastionStrategy implements StrategicController {
           u.y >= b.y &&
           u.y < b.y + b.height,
       );
-    const center = (units: readonly Unit[]): Point => ({
-      x: Math.round(units.reduce((s, u) => s + u.x, 0) / units.length),
-      y: Math.round(units.reduce((s, u) => s + u.y, 0) / units.length),
-    });
+    const center = rendezvous;
     let assault = vehicles.filter((u) => this.assault.has(u.ref));
     if (
       hadAssault &&

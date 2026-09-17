@@ -8,7 +8,9 @@ import { ControlCoordinator } from "../src/control/coordinator.js";
 import { PositionTactics } from "../src/control/position-tactics.js";
 import { DefenseAssignments } from "../src/control/defense-assignments.js";
 import { Reconnaissance, ScoutTactics } from "../src/control/reconnaissance.js";
-import { Operations, formedUnits } from "../src/control/operations.js";
+import { Operations } from "../src/control/operations.js";
+import { formedUnits } from "../src/control/formation.js";
+import { StrikeTactics } from "../src/control/strike-tactics.js";
 import type {
   CombatMission,
   ControlResult,
@@ -204,6 +206,109 @@ test("a scattered newly built tank does not count as part of the formed strike f
   const formed = formedUnits(units, { x: 65, y: 36 });
   assert.equal(formed.length, 5);
   assert(!formed.some((u) => u.ref === "late"));
+});
+
+test("an isolated tank moves back to support instead of attacking several enemies, and waiting is bounded", () => {
+  const t = new StrikeTactics(),
+    o = observation();
+  o.home = { x: 0, y: 0 };
+  o.own = [
+    tank("a", 0, 0),
+    tank("b", 1, 0),
+    tank("c", 0, 1),
+    tank("d", 1, 1),
+    tank("late", 14, 0),
+  ];
+  o.enemies = [0, 1, 2].map((i) => ({
+    ref: `enemy-${i}`,
+    name: "MTNK",
+    type: 7,
+    x: 16 + i,
+    y: 0,
+    hp: 300,
+    maxHp: 300,
+    weaponRange: 5,
+    observedTick: o.tick,
+  }));
+  const mission: CombatMission = {
+    id: "force",
+    revision: 1,
+    kind: "advance",
+    units: o.own.map((u) => u.ref),
+    destination: { x: 30, y: 0 },
+    objective: "advance",
+    engagement: { allowCrush: true },
+  };
+  const first = t.control(o, mission, []);
+  const late = first.intents.find(
+    (i) => "refs" in i && i.refs.includes("late"),
+  );
+  assert.equal(late?.kind, "move");
+  assert.equal(first.report.facts.retreating, 1);
+  assert.equal(first.report.facts.coreTanks, 4);
+  o.tick += 600;
+  o.enemies = [];
+  const later = t.control(o, mission, []);
+  assert(
+    later.intents.some((i) => i.kind === "attackMove" && i.refs.includes("a")),
+    "a stalled tail cannot freeze the core forever",
+  );
+});
+
+test("supported tanks focus the same nearby armor target", () => {
+  const t = new StrikeTactics(),
+    o = observation();
+  o.own = [
+    tank("a", 20, 20),
+    tank("b", 21, 20),
+    tank("c", 20, 21),
+    tank("d", 21, 21),
+  ];
+  o.enemies = [
+    {
+      ref: "armor",
+      name: "MTNK",
+      type: 7,
+      x: 26,
+      y: 20,
+      hp: 300,
+      maxHp: 300,
+      weaponRange: 5,
+      observedTick: o.tick,
+    },
+    {
+      ref: "base",
+      name: "GACNST",
+      type: 2,
+      x: 30,
+      y: 20,
+      hp: 1000,
+      maxHp: 1000,
+      weaponRange: 0,
+      observedTick: o.tick,
+    },
+  ];
+  const result = t.control(
+    o,
+    {
+      id: "force",
+      revision: 1,
+      kind: "advance",
+      units: o.own.map((u) => u.ref),
+      destination: { x: 30, y: 20 },
+      target: "base",
+      objective: "advance",
+      engagement: { allowCrush: true },
+    },
+    [],
+  );
+  assert.equal(result.intents.length, 1);
+  assert.deepEqual(result.intents[0], {
+    kind: "attack",
+    refs: ["a", "b", "c", "d"],
+    target: "armor",
+    task: "force",
+  });
 });
 
 test("quiet attack staging uses the scouted objective route without dragging the infantry garrison", () => {
