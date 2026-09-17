@@ -12,9 +12,9 @@ import {
   type ExecutionEvidence,
 } from "./contracts.js";
 
-/** Defenders occupy local posts; offensive missions still use the frozen local combat rules. */
+/** Defense movement and deployment serve visible engagements; native orders handle travel. */
 export class PositionTactics extends LocalCombat {
-  override readonly id: string = "position-tactics-v3";
+  override readonly id: string = "position-tactics-v4";
   private lastPositionOrders = new Map<string, { key: string; tick: number }>();
   private slots = new Map<string, number>();
   private nextSlot = 0;
@@ -57,11 +57,63 @@ export class PositionTactics extends LocalCombat {
     };
     const base = mission.destination;
     let stationed = 0,
-      deployed = 0;
+      deployed = 0,
+      engaging = 0;
     for (const ref of mission.units) {
       const unit = owns.get(ref);
       if (!unit || !base) continue;
-      if (unit.type !== 3) {
+      if (unit.type === 3) {
+        const range =
+          unit.name === "E1"
+            ? (unit.deployedWeaponRange ?? 5)
+            : (unit.weaponRange ?? 4);
+        const targets = o.enemies.filter(
+          (e) => (!e.airborne || unit.antiAir) && distance2(e, base) <= 12 ** 2,
+        );
+        const target = targets.sort(
+          (a, b) =>
+            Number(distance2(b, unit) <= range ** 2) -
+              Number(distance2(a, unit) <= range ** 2) ||
+            distance2(a, unit) - distance2(b, unit),
+        )[0];
+        if (target) {
+          engaging++;
+          const distance = Math.sqrt(distance2(unit, target));
+          if (unit.name === "E1" && unit.deployed && distance > range + 0.25) {
+            issue(
+              ref,
+              "undeploy",
+              { kind: "deploy", refs: [ref], task: mission.id },
+              180,
+            );
+          } else if (
+            unit.name === "E1" &&
+            !unit.deployed &&
+            distance < range - 0.25
+          ) {
+            issue(
+              ref,
+              "deploy",
+              { kind: "deploy", refs: [ref], task: mission.id },
+              180,
+            );
+          } else {
+            if (unit.deployed) deployed++;
+            issue(
+              ref,
+              `attack:${target.ref}`,
+              {
+                kind: "attack",
+                refs: [ref],
+                target: target.ref,
+                task: mission.id,
+              },
+              180,
+            );
+          }
+          continue;
+        }
+      } else {
         const close = o.enemies.filter(
           (e) =>
             (!e.airborne || unit.antiAir) &&
@@ -99,6 +151,7 @@ export class PositionTactics extends LocalCombat {
             distance2(a, unit) - distance2(b, unit),
         )[0];
         if (target) {
+          engaging++;
           issue(
             ref,
             `attack:${target.ref}`,
@@ -161,22 +214,13 @@ export class PositionTactics extends LocalCombat {
           );
       } else {
         stationed++;
-        if (unit.name === "E1") {
-          if (unit.deployed) deployed++;
-          else
-            issue(
-              ref,
-              "deploy",
-              { kind: "deploy", refs: [ref], task: mission.id },
-              180,
-            );
-        } else
-          issue(
-            ref,
-            "hold",
-            { kind: "stop", refs: [ref], task: mission.id },
-            Number.POSITIVE_INFINITY,
-          );
+        if (unit.deployed) deployed++;
+        issue(
+          ref,
+          "hold",
+          { kind: "stop", refs: [ref], task: mission.id },
+          Number.POSITIVE_INFINITY,
+        );
       }
     }
     for (const ref of this.slots.keys())
@@ -196,12 +240,13 @@ export class PositionTactics extends LocalCombat {
       report: {
         task: { id: mission.id, revision: mission.revision },
         status: mission.units.length ? "active" : "idle",
-        reason: "occupy-defensive-post",
+        reason: engaging ? "engage-visible-threat" : "cover-approach",
         proposedIntents: intents.length,
         facts: {
           assignedUnits: mission.units.length,
           stationed,
           deployed,
+          engaging,
           phase: mission.kind,
         },
         executionEvidence: currentEvidence(mission, evidence),

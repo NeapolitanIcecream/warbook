@@ -22,7 +22,8 @@ export class BastionStrategy implements StrategicController {
   private assault = new Set<string>();
   private joining = new Set<string>();
   private approach?: Point;
-  private miningApproach?: Point;
+  private previousHp = new Map<string, number>();
+  private damagedAt = new Map<string, number>();
   private nextLaunchTick = 0;
   private readonly launchSize = 6;
   private responsePost?: Point;
@@ -34,7 +35,7 @@ export class BastionStrategy implements StrategicController {
 
   constructor(private readonly doctrine: "bastion" | "cohort" = "bastion") {
     this.id =
-      doctrine === "bastion" ? "bastion-strategy-v5" : "cohort-strategy-v2";
+      doctrine === "bastion" ? "bastion-strategy-v6" : "cohort-strategy-v3";
   }
 
   assessmentRequest(o: Observation) {
@@ -71,15 +72,8 @@ export class BastionStrategy implements StrategicController {
         (e) => e.type !== 2 && !e.airborne && distance2(e, o.home) < 30 ** 2,
       )
       .sort((a, b) => distance2(a, o.home) - distance2(b, o.home))[0];
-    if (!this.approach && threat) this.approach = { x: threat.x, y: threat.y };
-    if (!this.miningApproach) {
-      const miner = o.own
-        .filter((u) => u.harvester && distance2(u, o.home) > 8 ** 2)
-        .sort((a, b) => distance2(b, o.home) - distance2(a, o.home))[0];
-      if (miner) this.miningApproach = { x: miner.x, y: miner.y };
-    }
-    const direction = this.miningApproach ??
-      this.approach ??
+    if (threat) this.approach = { x: threat.x, y: threat.y };
+    const direction = this.approach ??
       o.starts
         .filter((p) => distance2(p, o.home) > 25)
         .sort((a, b) => distance2(a, o.home) - distance2(b, o.home))[0] ?? {
@@ -93,44 +87,56 @@ export class BastionStrategy implements StrategicController {
       x: Math.round(o.home.x + (6 * dx) / length),
       y: Math.round(o.home.y + (6 * dy) / length),
     };
-    const fortName = o.side === 0 ? "GAPILL" : "NALASR";
-    const existingFort = o.own.find((u) => u.name === fortName);
-    const post = existingFort
-      ? {
-          x: Math.round(
-            existingFort.x + existingFort.width / 2 + (2 * dx) / length,
-          ),
-          y: Math.round(
-            existingFort.y + existingFort.height / 2 + (2 * dy) / length,
-          ),
-        }
-      : requestedPost;
-    const assets = o.own.filter((u) => u.harvester || u.refinery || u.yard);
+    const post = requestedPost;
+    const assets = o.own.filter((u) => u.type === 2 || u.harvester);
+    for (const asset of assets) {
+      if (asset.hp < (this.previousHp.get(asset.ref) ?? asset.hp))
+        this.damagedAt.set(asset.ref, o.tick);
+      this.previousHp.set(asset.ref, asset.hp);
+    }
+    const assetDistance = (enemy: Point, asset: Unit) =>
+      distance2(enemy, {
+        x: Math.max(asset.x, Math.min(enemy.x, asset.x + asset.width)),
+        y: Math.max(asset.y, Math.min(enemy.y, asset.y + asset.height)),
+      });
     const incursions = o.enemies
       .filter((e) => !e.airborne && e.type !== 2)
       .flatMap((enemy) =>
         assets
-          .filter((asset) => distance2(enemy, asset) <= 10 ** 2)
+          .filter((asset) => assetDistance(enemy, asset) <= 10 ** 2)
           .map((asset) => ({
             enemy,
             asset,
-            distance: distance2(enemy, asset),
+            distance: assetDistance(enemy, asset),
           })),
       )
-      .sort((a, b) => a.distance - b.distance);
+      .sort(
+        (a, b) =>
+          Number(
+            o.tick - (this.damagedAt.get(b.asset.ref) ?? -Infinity) < 150,
+          ) -
+            Number(
+              o.tick - (this.damagedAt.get(a.asset.ref) ?? -Infinity) < 150,
+            ) || a.distance - b.distance,
+      );
     if (incursions.length) {
       this.lastThreatTick = o.tick;
       if (o.tick - this.lastResponseTick >= 90) {
         const { enemy, asset } = incursions[0];
         this.responsePost = {
-          x: Math.round((enemy.x + asset.x) / 2),
-          y: Math.round((enemy.y + asset.y) / 2),
+          x: Math.round((enemy.x + asset.x + asset.width / 2) / 2),
+          y: Math.round((enemy.y + asset.y + asset.height / 2) / 2),
         };
         this.lastResponseTick = o.tick;
       }
     } else if (o.tick - this.lastThreatTick > 300)
       this.responsePost = undefined;
     const vehiclePost = this.responsePost ?? post;
+    const protectNow = incursions.some(
+      ({ asset }) =>
+        asset.type === 2 &&
+        o.tick - (this.damagedAt.get(asset.ref) ?? -Infinity) < 150,
+    );
     const localArmor = o.enemies.filter(
       (e) =>
         e.type === 7 &&
@@ -170,6 +176,7 @@ export class BastionStrategy implements StrategicController {
     );
     if (
       !this.assault.size &&
+      !protectNow &&
       o.tick >= this.nextLaunchTick &&
       ready.filter((u) => u.name === armor).length >=
         (o.tick >= 15000 ||
@@ -241,29 +248,35 @@ export class BastionStrategy implements StrategicController {
       revision: this.productionRevision.update(productionDescription),
     };
     const combat = this.mission("main-force", {
-      kind: assault.length ? "advance" : "defend",
-      units: (assault.length ? assault : reserve).map((u) => u.ref),
-      destination: assault.length ? base.combat.destination : vehiclePost,
-      groundDestination: assault.length
-        ? base.combat.groundDestination
-        : vehiclePost,
-      objective: assault.length
-        ? base.combat.objective
-        : this.responsePost
-          ? "protect-economy"
-          : "muster-counterattack",
+      kind: assault.length && !protectNow ? "advance" : "defend",
+      units: (protectNow ? vehicles : assault.length ? assault : reserve).map(
+        (u) => u.ref,
+      ),
+      destination:
+        assault.length && !protectNow ? base.combat.destination : vehiclePost,
+      groundDestination:
+        assault.length && !protectNow
+          ? base.combat.groundDestination
+          : vehiclePost,
+      objective: protectNow
+        ? "protect-base"
+        : assault.length
+          ? base.combat.objective
+          : this.responsePost
+            ? "protect-economy"
+            : "muster-counterattack",
       engagement: { allowCrush: true },
     });
     const additionalCombat = [
       this.mission("base-garrison", {
         kind: "defend",
         units: infantry.map((u) => u.ref),
-        destination: post,
+        destination: vehiclePost,
         objective: "guard-base",
         engagement: { allowCrush: false },
       }),
     ];
-    if (assault.length)
+    if (assault.length && !protectNow)
       additionalCombat.push(
         this.mission("reserve-force", {
           kind: "defend",
@@ -275,7 +288,7 @@ export class BastionStrategy implements StrategicController {
           engagement: { allowCrush: true },
         }),
       );
-    if (joiners.length)
+    if (joiners.length && !protectNow)
       additionalCombat.push(
         this.mission("reinforcements", {
           kind: "advance",

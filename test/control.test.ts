@@ -297,6 +297,105 @@ test("a defensive handoff cancels an offensive order even when the old hold key 
   );
 });
 
+test("GI defense packs up out of range, approaches, deploys and actually attacks", () => {
+  const tactics = new PositionTactics(),
+    o = observation();
+  const gi = {
+    ...tank("gi", 36, 78),
+    name: "E1",
+    type: 3,
+    crusher: false,
+    deployed: true,
+    weaponRange: 4,
+    deployedWeaponRange: 5,
+  };
+  o.own = [gi];
+  o.enemies = [
+    {
+      ref: "enemy",
+      name: "E1",
+      type: 3,
+      x: 37,
+      y: 68,
+      hp: 125,
+      maxHp: 125,
+      observedTick: o.tick,
+    },
+  ];
+  const mission: CombatMission = {
+    id: "garrison",
+    revision: 1,
+    kind: "defend",
+    units: ["gi"],
+    destination: { x: 37, y: 70 },
+    objective: "protect-base",
+    engagement: { allowCrush: false },
+  };
+  assert.equal(tactics.control(o, mission, []).intents[0].kind, "deploy");
+  o.tick += 60;
+  gi.deployed = false;
+  assert.equal(tactics.control(o, mission, []).intents[0].kind, "attack");
+  o.tick += 60;
+  gi.x = 37;
+  gi.y = 72;
+  assert.equal(tactics.control(o, mission, []).intents[0].kind, "deploy");
+  o.tick += 60;
+  gi.deployed = true;
+  assert.equal(tactics.control(o, mission, []).intents[0].kind, "attack");
+});
+
+test("a damaged factory redirects the assault and infantry without conflicting unit ownership", () => {
+  const c = new Commander("bastion"),
+    o = observation();
+  o.own = o.own.filter((u) => u.name !== "MTNK");
+  o.own.push(
+    ...Array.from({ length: 6 }, (_, i) =>
+      tank(`force-${i}`, 68 + (i % 3), 42),
+    ),
+  );
+  o.own.push({
+    ...tank("gi", 67, 43),
+    name: "E1",
+    type: 3,
+    deployed: true,
+    crusher: false,
+  });
+  c.decide(o);
+  assert.equal(c.controlPlan!.combat.kind, "advance");
+  o.tick += 90;
+  o.own.find((u) => u.ref === "factory")!.hp -= 50;
+  o.enemies = [
+    {
+      ref: "enemy",
+      name: "E1",
+      type: 3,
+      x: 80,
+      y: 38,
+      hp: 125,
+      maxHp: 125,
+      observedTick: o.tick,
+    },
+  ];
+  c.decide(o);
+  const plan = c.controlPlan!;
+  assert.equal(plan.combat.objective, "protect-base");
+  assert.equal(plan.combat.kind, "defend");
+  assert.equal(plan.combat.units.length, 6);
+  assert.deepEqual(
+    plan.additionalCombat![0].destination,
+    plan.combat.destination,
+  );
+  const refs = [plan.combat, ...plan.additionalCombat!].flatMap((m) => m.units);
+  assert.equal(new Set(refs).size, refs.length);
+  o.tick += 450;
+  o.enemies = [];
+  c.decide(o);
+  assert.ok(
+    c.controlPlan!.additionalCombat![0].destination!.x > o.home.x,
+    "after contact is lost, the garrison still faces the observed approach",
+  );
+});
+
 test("layered opening preserves the published sequence through exit casualties and air contacts", () => {
   const old = new LegacyCommander("factory-exit"),
     current = new Commander("factory-exit", { tactics: new LocalCombat() });

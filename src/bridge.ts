@@ -127,6 +127,8 @@ export class WarbookBot extends Bot {
           u.primaryWeapon?.projectileRules.isAntiAir ||
           u.secondaryWeapon?.projectileRules.isAntiAir
         ),
+        weaponRange: u.primaryWeapon?.maxRange,
+        deployedWeaponRange: u.secondaryWeapon?.maxRange,
       }),
     );
     const enemies = this.sorted(this.player.getVisibleUnits("enemy")).map(
