@@ -96,7 +96,7 @@ export class Reconnaissance {
 }
 
 export class ScoutTactics {
-  private safe = new Map<string, Point>();
+  private safe = new Map<string, Point[]>();
   private retreat = new Map<string, { point: Point; until: number }>();
   private orders = new Map<string, { goal: string; tick: number }>();
   control(
@@ -115,16 +115,34 @@ export class ScoutTactics {
           distance2(unit, e) <= ((e.weaponRange ?? 5) + 3) ** 2,
       );
       let retreat = this.retreat.get(ref);
-      if (threats.length && !retreat) {
-        retreat = { point: this.safe.get(ref) ?? o.home, until: o.tick + 150 };
+      if (
+        threats.length &&
+        (!retreat ||
+          threats.some(
+            (e) =>
+              distance2(e, retreat!.point) <= ((e.weaponRange ?? 5) + 4) ** 2,
+          ))
+      ) {
+        const trail = this.safe.get(ref) ?? [];
+        const point = [...trail]
+          .reverse()
+          .find((p) =>
+            threats.every(
+              (e) => distance2(e, p) >= ((e.weaponRange ?? 5) + 5) ** 2,
+            ),
+          );
+        retreat = { point: point ?? o.home, until: o.tick + 150 };
         this.retreat.set(ref, retreat);
       }
       if (retreat && !threats.length && o.tick >= retreat.until) {
         this.retreat.delete(ref);
         retreat = undefined;
       }
-      if (!retreat) this.safe.set(ref, { x: unit.x, y: unit.y });
-      else avoiding++;
+      if (!retreat) {
+        const trail = this.safe.get(ref) ?? [];
+        if (!trail.length || distance2(trail[trail.length - 1], unit) >= 4 ** 2)
+          this.safe.set(ref, [...trail.slice(-7), { x: unit.x, y: unit.y }]);
+      } else avoiding++;
       const goal = retreat?.point ?? mission.destination;
       if (!goal) continue;
       const previous = this.orders.get(ref),

@@ -16,6 +16,8 @@ const harvesterRefineries = new Set(["GAREFN", "NAREFN"]);
 export class QueueProduction implements ProductionController {
   readonly id = "queue-production-v2";
   private lastDeploy = new Map<string, number>();
+  private lastScoutPresent = -Infinity;
+  private lastScoutRequested = -Infinity;
   control(
     o: Observation,
     plan: ProductionPlan,
@@ -108,13 +110,24 @@ export class QueueProduction implements ProductionController {
     const infantry = o.own.filter((u) =>
       plan.scouts ? u.name === plan.infantry.product : u.type === 3 && u.combat,
     ).length;
+    if (plan.scouts && count(plan.scouts.product))
+      this.lastScoutPresent = o.tick;
     if (
       plan.scouts &&
       infantry >= 2 &&
       count(plan.scouts.product) < plan.scouts.count &&
+      o.tick - Math.max(this.lastScoutPresent, this.lastScoutRequested) >=
+        150 &&
       o.credits > plan.spending.infantryAbove
-    )
+    ) {
       queue(plan.scouts.product);
+      if (
+        intents.some(
+          (i) => i.kind === "queue" && i.product.name === plan.scouts!.product,
+        )
+      )
+        this.lastScoutRequested = o.tick;
+    }
     if (
       infantry < plan.infantry.count &&
       o.credits > plan.spending.infantryAbove

@@ -151,6 +151,17 @@ test("a scout has independent ownership and does not replace a garrison infantry
     1,
   );
   assert(intents.some((i) => i.kind === "move" && i.refs.includes("dog")));
+  o.tick += 3;
+  o.own = o.own.filter((u) => u.ref !== "dog");
+  assert(
+    !c.decide(o).some((i) => i.kind === "queue" && i.product.name === "ADOG"),
+    "temporary unspawn does not immediately order a replacement",
+  );
+  o.tick += 150;
+  assert(
+    c.decide(o).some((i) => i.kind === "queue" && i.product.name === "ADOG"),
+    "a persistently unavailable scout can be replaced",
+  );
 });
 
 test("scouts retreat from visible weapons without turning scouting into an attack", () => {

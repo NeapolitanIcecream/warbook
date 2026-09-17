@@ -1,0 +1,17 @@
+{
+  "purpose": "Check independent scouting supplies early enemy information without stealing garrison infantry",
+  "subjects": {
+    "published": { "ref": "f70eb3b06441134ddef64e26f6f50679f3b7ea79", "mode": "bastion" },
+    "scout": { "ref": "ff19dd8646c4b708ee7a04becec2fce8a192f3bc", "mode": "bastion" }
+  },
+  "opponents": {
+    "old-main": { "ref": "8326311288ec685c3da43b1d182071dc36938fe8", "mode": "factory-exit" },
+    "supalosa": { "native": "supalosa" }
+  },
+  "maps": ["mp06t2.map", "mp03t4.map"],
+  "rounds": 2,
+  "decision": {
+    "budget": "16 ordinary starts, all stops retained",
+    "check": "First useful enemy building/approach contact, dog survival/replacement, scouting during main-force defense, garrison production, and whole-game failures. Not an opportunity-attack or independent strength claim."
+  }
+}
