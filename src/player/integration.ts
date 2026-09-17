@@ -1,5 +1,6 @@
 import { WarbookBot, OBSERVATION_PROTOCOL } from "../bridge.js";
 import { POLICY_VERSION, type PolicyMode } from "../policy.js";
+import { installReplayControls } from "./replay-controls.js";
 declare const __WARBOOK_POLICY__: PolicyMode;
 
 declare global {
@@ -16,6 +17,7 @@ declare global {
 }
 
 export async function install(): Promise<void> {
+  if (location.hash.startsWith("#/replay/")) await installReplayControls();
   const [
     { BotFactory },
     { GameFactory },
