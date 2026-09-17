@@ -24,6 +24,19 @@ export class JournalBehavior {
   firstAdvanceOutsideHome?: number;
   advanceMoveOrders = 0;
   advanceCombatOrders = 0;
+  firstEnemyBuilding?: number;
+  firstEnemyMcv?: number;
+  firstScoutOrder?: number;
+  private contactEvents = false;
+  private waiting?: {
+    fromTick: number;
+    toTick: number;
+    minArmor: number;
+    maxArmor: number;
+    reason: string;
+  };
+  private longestWait?: NonNullable<JournalBehavior["waiting"]>;
+  private decisionReason?: string;
   private plan?: StrategicPlan;
   private segment?: StalledMarch & {
     key: string;
@@ -50,6 +63,8 @@ export class JournalBehavior {
 
   onOrder(tick: number, intent: Intent, originId?: string) {
     const owner = originId ?? intent.task;
+    if (owner?.startsWith("recon") && intent.kind === "move")
+      this.firstScoutOrder ??= tick;
     for (const name of new Set(
       [originId, intent.task].filter((s): s is string => !!s),
     )) {
@@ -73,6 +88,33 @@ export class JournalBehavior {
     }
   }
 
+  onDecision(facts: Readonly<Record<string, unknown>>) {
+    this.decisionReason = String(
+      facts.operationReason ?? facts.objective ?? "unknown",
+    );
+    if (this.waiting) this.waiting.reason = this.decisionReason;
+  }
+
+  onContact(tick: number, contacts: readonly { type: number; name: string }[]) {
+    this.contactEvents = true;
+    if (contacts.some((e) => e.type === 2)) this.firstEnemyBuilding ??= tick;
+    if (contacts.some((e) => ["AMCV", "SMCV"].includes(e.name)))
+      this.firstEnemyMcv ??= tick;
+  }
+
+  private finishWait() {
+    const wait = this.waiting;
+    if (
+      wait &&
+      wait.toTick - wait.fromTick >= 900 &&
+      (!this.longestWait ||
+        wait.toTick - wait.fromTick >
+          this.longestWait.toTick - this.longestWait.fromTick)
+    )
+      this.longestWait = { ...wait };
+    this.waiting = undefined;
+  }
+
   private finishSegment() {
     const s = this.segment;
     if (s && s.toTick - s.fromTick >= 900) {
@@ -87,6 +129,38 @@ export class JournalBehavior {
 
   onObservation(o: Observation) {
     const mission = this.plan?.combat;
+    if (o.enemies.some((u) => u.type === 2)) this.firstEnemyBuilding ??= o.tick;
+    if (o.enemies.some((u) => ["AMCV", "SMCV"].includes(u.name)))
+      this.firstEnemyMcv ??= o.tick;
+    const armor = o.own.filter((u) => isArmor(u.name)).length;
+    const nearbyThreat = o.enemies.some(
+      (e) =>
+        ((e.weaponRange ?? 1) > 0 || e.canThreatenBuildings) &&
+        o.own.some(
+          (u) =>
+            (u.type === 2 || u.harvester) &&
+            (u.type === 2
+              ? e.canThreatenBuildings !== false
+              : e.canThreatenVehicles !== false) &&
+            distance(e, {
+              x: Math.max(u.x, Math.min(e.x, u.x + u.width)),
+              y: Math.max(u.y, Math.min(e.y, u.y + u.height)),
+            }) <= 10,
+        ),
+    );
+    if (mission && mission.kind !== "advance" && armor >= 4 && !nearbyThreat) {
+      if (this.waiting && o.tick - this.waiting.toTick > 300) this.finishWait();
+      this.waiting ??= {
+        fromTick: o.tick,
+        toTick: o.tick,
+        minArmor: armor,
+        maxArmor: armor,
+        reason: this.decisionReason ?? mission.objective,
+      };
+      this.waiting.toTick = o.tick;
+      this.waiting.minArmor = Math.min(this.waiting.minArmor, armor);
+      this.waiting.maxArmor = Math.max(this.waiting.maxArmor, armor);
+    } else this.finishWait();
     const target = mission?.groundDestination ?? mission?.destination;
     const force = o.own.filter(
       (u) => isArmor(u.name) && mission?.units.includes(u.ref),
@@ -140,7 +214,23 @@ export class JournalBehavior {
 
   finish() {
     this.finishSegment();
+    this.finishWait();
     return {
+      firstEnemyBuilding: this.firstEnemyBuilding,
+      firstEnemyMcv: this.firstEnemyMcv,
+      firstScoutOrder: this.firstScoutOrder,
+      contactTiming: this.contactEvents ? "contact-events" : "periodic-samples",
+      longestQuietWait: this.longestWait
+        ? {
+            ...this.longestWait,
+            scoutMoveOrders: this.moveTicks.filter(
+              (m) =>
+                m.task.startsWith("recon") &&
+                m.tick >= this.longestWait!.fromTick &&
+                m.tick <= this.longestWait!.toTick,
+            ).length,
+          }
+        : undefined,
       plansRecorded: this.planCount,
       firstAdvance: this.firstAdvance,
       advanceMoveOrders: this.advanceMoveOrders,
@@ -467,6 +557,9 @@ export class ReplayBehavior {
 export function renderBehavior(b: ReturnType<ReplayBehavior["finish"]>) {
   const lines: string[] = [];
   lines.push(
+    `- 情报：${b.firstScoutOrder === undefined ? "未记录独立侦察移动" : `首次侦察移动指令 ${clockTime(b.firstScoutOrder)}`}；首次记录敌建筑 ${b.firstEnemyBuilding === undefined ? "未记录" : clockTime(b.firstEnemyBuilding)}，基地车 ${b.firstEnemyMcv === undefined ? "未记录" : clockTime(b.firstEnemyMcv)}。接触时间来源：${b.contactTiming === "contact-events" ? "合法观察接触事件" : "周期采样（可能晚于实际发现）"}；不作侦察单位归因。`,
+  );
+  lines.push(
     b.firstAdvance
       ? `- 进攻计划：${clockTime(b.firstAdvance.tick)}，${b.firstAdvance.units} 个单位；该阶段提交 ${b.advanceCombatOrders} 条主力作战命令，其中移动 ${b.advanceMoveOrders} 条。`
       : b.plansRecorded
@@ -476,6 +569,11 @@ export function renderBehavior(b: ReturnType<ReplayBehavior["finish"]>) {
   if (b.firstAdvanceOutsideHome !== undefined)
     lines.push(
       `- 实际位移：${clockTime(b.firstAdvanceOutsideHome)} 已采样到进攻主力坦克离开基地 12 格范围；这不等于已攻击敌方基地。`,
+    );
+  const waiting = b.longestQuietWait;
+  if (waiting)
+    lines.push(
+      `- 未推进时段：${clockTime(waiting.fromTick)}–${clockTime(waiting.toTick)}，持有 ${waiting.minArmor}–${waiting.maxArmor} 辆坦克，未记录近处建筑/矿车威胁；侦察移动指令 ${waiting.scoutMoveOrders} 条，最近决策理由 ${waiting.reason}。需检查集结、情报与风险，不能单凭等待判错。`,
     );
   const s = b.longestStalledMarch;
   if (s)

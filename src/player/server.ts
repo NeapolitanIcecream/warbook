@@ -256,7 +256,7 @@ app.get("/client/:version/config.ini", localConfig);
 app.get("/warbook/servers.ini", (c) => c.text("[Servers]\n"));
 const gamePage = (isChallenger: boolean) => async (c: Context) => {
   if (isChallenger && !challengerRelease) return c.notFound();
-  const botUrl = isChallenger ? "/warbook/challenger.js" : "/warbook/bot.js";
+  const botUrl = `${isChallenger ? "/warbook/challenger.js" : "/warbook/bot.js"}?v=${(isChallenger ? challengerRelease : release).sha256}`;
   const telemetryUrl = isChallenger
     ? "/warbook/challenger/telemetry"
     : "/warbook/telemetry";

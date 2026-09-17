@@ -285,6 +285,21 @@ export class WarbookBot extends Bot {
       stagingRoute: this.stagingRoute,
     };
     if (this.lastObservation) {
+      const previousContacts = new Set(
+        this.lastObservation.enemies.map((e) => e.ref),
+      );
+      const baseContacts = enemies.filter(
+        (e) =>
+          (e.type === 2 || ["AMCV", "SMCV"].includes(e.name)) &&
+          !previousContacts.has(e.ref),
+      );
+      if (baseContacts.length)
+        this.trace?.({
+          tick,
+          actor: this.name,
+          kind: "base_contact",
+          contacts: baseContacts,
+        });
       const before = new Set(this.lastObservation.own.map((u) => u.ref));
       const appeared = own.filter((u) => !before.has(u.ref));
       if (appeared.length)

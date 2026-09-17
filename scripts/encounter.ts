@@ -100,6 +100,10 @@ async function main() {
     }
     if (event.actor !== actor) continue;
     if (event.kind === "strategic_plan") journal.onPlan(event.plan);
+    if (event.kind === "base_contact")
+      journal.onContact(event.tick, event.contacts);
+    if (event.kind === "control_report")
+      journal.onDecision(event.report.combat.facts);
     if (event.kind === "submitted")
       journal.onOrder(event.tick, event.intent, event.origin?.id);
     if (event.kind === "observation") journal.onObservation(event.observation);

@@ -133,6 +133,41 @@ test("armor destruction reports nearby support and does not count a vanished uni
   ]);
 });
 
+test("quiet waiting and independent scouting are visible without declaring the wait a mistake", () => {
+  const journal = new JournalBehavior();
+  journal.onPlan(plan("defend"));
+  journal.onDecision({ operationReason: "defenders-or-production-risk" });
+  for (let tick = 0; tick <= 1200; tick += 150) {
+    const o = observation(tick);
+    o.own.push(armor("c", 22, 20), armor("d", 23, 20));
+    o.enemies = [
+      {
+        ref: "base",
+        name: "GACNST",
+        type: 2,
+        x: 80,
+        y: 80,
+        hp: 1000,
+        maxHp: 1000,
+        weaponRange: 0,
+        observedTick: tick,
+      },
+    ];
+    journal.onOrder(
+      tick,
+      { kind: "move", refs: ["dog"], x: 60, y: 60 },
+      "recon",
+    );
+    journal.onObservation(o);
+  }
+  const result = journal.finish();
+  assert.equal(result.firstEnemyBuilding, 0);
+  assert.equal(result.firstScoutOrder, 0);
+  assert.equal(result.longestQuietWait?.toTick, 1200);
+  assert.equal(result.longestQuietWait?.scoutMoveOrders, 9);
+  assert.equal(result.longestQuietWait?.reason, "defenders-or-production-risk");
+});
+
 test("an advance plan and repeated move orders do not establish progress", () => {
   const journal = new JournalBehavior();
   journal.onPlan(plan("advance"));
