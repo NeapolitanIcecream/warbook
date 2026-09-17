@@ -1,0 +1,38 @@
+{
+  "purpose": "Compare active defense 0.1.9 with the maintained 0.1.7 mainline on the same fixed opponent pool",
+  "subjects": {
+    "published": {
+      "ref": "8326311288ec685c3da43b1d182071dc36938fe8",
+      "mode": "factory-exit"
+    },
+    "active-defense": {
+      "ref": "c1bfcffb85e0e588ab364989d6c4f6cd8998c7c8",
+      "mode": "bastion"
+    }
+  },
+  "opponents": {
+    "old-defense": {
+      "ref": "b3a1f7ce69ed140fbafb82799f6d2b14d487c052",
+      "mode": "bastion"
+    },
+    "counter": {
+      "ref": "a64a79e32b7333c26b1d4bfdb43405464c51173a",
+      "mode": "counter"
+    },
+    "supalosa": {
+      "native": "supalosa"
+    }
+  },
+  "maps": [
+    "mp03t4.map",
+    "mp06t2.map",
+    "mp29u2.map",
+    "mp08t2.map"
+  ],
+  "rounds": 4,
+  "decision": {
+    "budget": "96 starts fixed before running, four exposed maps, all outcomes and start locations retained",
+    "check": "Defensive participation, GI redeployment, successful outward attacks, infantry crushing support, full outcomes and map/opponent regressions",
+    "scope": "Development comparison and release selection; no held-out or human-skill claim"
+  }
+}

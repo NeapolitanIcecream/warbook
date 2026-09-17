@@ -1,0 +1,28 @@
+{
+  "purpose": "Verify release-label changes preserve the evaluated active defender",
+  "subjects": {
+    "release": {
+      "ref": "c1bfcffb85e0e588ab364989d6c4f6cd8998c7c8",
+      "mode": "bastion"
+    }
+  },
+  "shadows": {
+    "release": {
+      "ref": "bdc5d13",
+      "mode": "bastion"
+    }
+  },
+  "opponents": {
+    "supalosa": {
+      "native": "supalosa"
+    }
+  },
+  "maps": [
+    "mp03t4.map",
+    "mp06t2.map"
+  ],
+  "rounds": 1,
+  "decision": {
+    "budget": "2 full games; identical observed decisions required for release metadata check"
+  }
+}
