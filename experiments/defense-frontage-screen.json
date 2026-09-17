@@ -1,0 +1,32 @@
+{
+  "purpose": "Compare focused protection and frontage with the first active-defense candidate; keep economy fixed",
+  "subjects": {
+    "active-defense": {
+      "ref": "c91728d",
+      "mode": "bastion"
+    },
+    "focused-defense": {
+      "ref": "f85f2dfe13b13c5c761063548a0c7b687995d2dd",
+      "mode": "bastion"
+    }
+  },
+  "opponents": {
+    "published": {
+      "ref": "8326311288ec685c3da43b1d182071dc36938fe8",
+      "mode": "factory-exit"
+    },
+    "supalosa": {
+      "native": "supalosa"
+    }
+  },
+  "maps": [
+    "mp03t4.map",
+    "mp06t2.map"
+  ],
+  "rounds": 2,
+  "decision": {
+    "budget": "16 starts fixed before running; initial behavior screen, all stops retained; report actual starting locations rather than assume slot swaps control spawns",
+    "check": "Defenders move into contact, GI deploy/undeploy follows range, damaged production buildings receive support, attack resumes and ends the match",
+    "scope": "Development behavior and regression screen on exposed maps; no automatic strength promotion"
+  }
+}
