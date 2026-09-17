@@ -1,0 +1,18 @@
+{
+  "purpose": "Check whether dynamic infantry deployment and shared emergency defense fix the observed unattended-building failure, with production unchanged",
+  "subjects": {
+    "old-defense": {"ref": "b3a1f7ce69ed140fbafb82799f6d2b14d487c052", "mode": "bastion"},
+    "active-defense": {"ref": "c91728d", "mode": "bastion"}
+  },
+  "opponents": {
+    "published": {"ref": "8326311288ec685c3da43b1d182071dc36938fe8", "mode": "factory-exit"},
+    "supalosa": {"native": "supalosa"}
+  },
+  "maps": ["mp03t4.map", "mp06t2.map"],
+  "rounds": 2,
+  "decision": {
+    "budget": "16 starts fixed before running; initial behavior screen, all stops retained; report actual starting locations rather than assume slot swaps control spawns",
+    "check": "Defenders move into contact, GI deploy/undeploy follows range, damaged production buildings receive support, attack resumes and ends the match",
+    "scope": "Development behavior and regression screen on exposed maps; no automatic strength promotion"
+  }
+}
