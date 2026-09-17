@@ -1,0 +1,18 @@
+{
+  "purpose": "Compare supported defense allocation with 0.1.9 on the same exposed four-map opponent pool",
+  "subjects": {
+    "published": { "ref": "c1bfcffb85e0e588ab364989d6c4f6cd8998c7c8", "mode": "bastion" },
+    "supported-split": { "ref": "44521bfd4afc5ad04165bf93c918aaa8f7aae09b", "mode": "bastion" }
+  },
+  "opponents": {
+    "old-defense": { "ref": "b3a1f7ce69ed140fbafb82799f6d2b14d487c052", "mode": "bastion" },
+    "counter": { "ref": "a64a79e32b7333c26b1d4bfdb43405464c51173a", "mode": "counter" },
+    "supalosa": { "native": "supalosa" }
+  },
+  "maps": ["mp03t4.map", "mp06t2.map", "mp29u2.map", "mp08t2.map"],
+  "rounds": 2,
+  "decision": {
+    "budget": "48 starts fixed before running, all stops and actor births retained",
+    "check": "Inspect defense continuity and coordination in addition to normal outcomes; keep the prior old-main defeat visible. Four known development maps, uncontrolled ordinary resets, no held-out or human-skill claim."
+  }
+}
