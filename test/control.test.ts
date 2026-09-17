@@ -7,6 +7,7 @@ import { GroupedAdvance, LocalCombat } from "../src/control/tactics.js";
 import { ControlCoordinator } from "../src/control/coordinator.js";
 import { PositionTactics } from "../src/control/position-tactics.js";
 import { DefenseAssignments } from "../src/control/defense-assignments.js";
+import { Reconnaissance, ScoutTactics } from "../src/control/reconnaissance.js";
 import type {
   CombatMission,
   ControlResult,
@@ -121,6 +122,105 @@ test("bastion keeps infantry at home and releases reinforcements as a separate b
   assert(
     !c.controlPlan!.additionalCombat!.some((m) => m.id === "reinforcements"),
   );
+});
+
+test("a scout has independent ownership and does not replace a garrison infantry target", () => {
+  const c = new Commander("bastion"),
+    o = observation();
+  o.own.push(
+    { ...tank("dog", 70, 34), name: "ADOG", type: 3, crusher: false },
+    ...[0, 1].map((i) => ({
+      ...tank(`gi-${i}`, 70, 35),
+      name: "E1",
+      type: 3,
+      crusher: false,
+    })),
+  );
+  o.products.push({ name: "ADOG", cost: 200, type: 3, queue: 2 });
+  const intents = c.decide(o),
+    plan = c.controlPlan!;
+  const scout = plan.additionalCombat!.find((m) => m.id === "recon")!;
+  assert.deepEqual(scout.units, ["dog"]);
+  assert.equal(scout.kind, "scout");
+  assert.equal(plan.production.infantry.count, 6);
+  assert(intents.some((i) => i.kind === "queue" && i.product.name === "E1"));
+  assert.equal(
+    [plan.combat, ...plan.additionalCombat!]
+      .flatMap((m) => m.units)
+      .filter((u) => u === "dog").length,
+    1,
+  );
+  assert(intents.some((i) => i.kind === "move" && i.refs.includes("dog")));
+});
+
+test("scouts retreat from visible weapons without turning scouting into an attack", () => {
+  const tactics = new ScoutTactics(),
+    o = observation();
+  const dog = { ...tank("dog", 20, 20), name: "ADOG", type: 3, crusher: false };
+  o.own = [dog];
+  const mission: CombatMission = {
+    id: "recon",
+    revision: 1,
+    kind: "scout",
+    units: [dog.ref],
+    destination: { x: 60, y: 20 },
+    objective: "reveal",
+    engagement: { allowCrush: false },
+  };
+  assert.equal(tactics.control(o, mission, []).intents[0].kind, "move");
+  o.tick += 60;
+  dog.x = 24;
+  o.enemies = [
+    {
+      ref: "enemy",
+      name: "E1",
+      type: 3,
+      x: 30,
+      y: 20,
+      hp: 125,
+      maxHp: 125,
+      observedTick: o.tick,
+      weaponRange: 5,
+    },
+  ];
+  const result = tactics.control(o, mission, []);
+  assert.equal(result.report.reason, "avoid-visible-threat");
+  assert.deepEqual(result.intents[0], {
+    kind: "move",
+    refs: ["dog"],
+    x: 20,
+    y: 20,
+    task: "recon",
+  });
+  o.tick += 180;
+  dog.x = 20;
+  o.enemies = [];
+  assert.equal(
+    tactics.control(o, mission, []).report.reason,
+    "reveal-and-revisit",
+  );
+});
+
+test("a retreat postpones only the attempted scouting route, then allows another route", () => {
+  const recon = new Reconnaissance(),
+    o = observation();
+  const dog = { ...tank("dog", 0, 0), name: "ADOG", type: 3 };
+  o.home = { x: 0, y: 0 };
+  o.own = [dog];
+  o.starts = [o.home, { x: 40, y: 0 }];
+  o.scoutPoints = [{ x: 20, y: 20 }];
+  assert.deepEqual(recon.destination(o, [dog]), { x: 40, y: 0 });
+  const feedback = {
+    additionalCombat: [
+      { task: { id: "recon" }, reason: "avoid-visible-threat" },
+    ],
+  } as any;
+  o.tick += 3;
+  assert.equal(recon.destination(o, [dog], feedback), undefined);
+  o.tick += 3;
+  assert.equal(recon.destination(o, [dog], feedback), undefined);
+  o.tick += 180;
+  assert.deepEqual(recon.destination(o, [dog]), { x: 20, y: 20 });
 });
 
 test("bastion reforms after heavy losses without issuing the same unit to two tasks", () => {

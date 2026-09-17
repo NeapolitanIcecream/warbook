@@ -105,9 +105,18 @@ export class QueueProduction implements ProductionController {
           ? v.harvester
           : v.armor,
     );
+    const infantry = o.own.filter((u) =>
+      plan.scouts ? u.name === plan.infantry.product : u.type === 3 && u.combat,
+    ).length;
     if (
-      o.own.filter((u) => u.type === 3 && u.combat).length <
-        plan.infantry.count &&
+      plan.scouts &&
+      infantry >= 2 &&
+      count(plan.scouts.product) < plan.scouts.count &&
+      o.credits > plan.spending.infantryAbove
+    )
+      queue(plan.scouts.product);
+    if (
+      infantry < plan.infantry.count &&
       o.credits > plan.spending.infantryAbove
     )
       queue(plan.infantry.product);

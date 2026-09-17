@@ -5,7 +5,7 @@ export interface TaskIdentity {
   readonly revision: number;
 }
 export interface CombatMission extends TaskIdentity {
-  readonly kind: "assemble" | "advance" | "defend";
+  readonly kind: "assemble" | "advance" | "defend" | "scout";
   readonly units: readonly string[];
   /** Undefined means preserve existing orders; it does not send Stop. */
   readonly destination?: Point;
@@ -40,6 +40,7 @@ export interface ProductionPlan extends TaskIdentity {
     readonly mobileAntiAir: number;
   };
   readonly infantry: { readonly product: string; readonly count: number };
+  readonly scouts?: { readonly product: string; readonly count: number };
   /** Preserve the existing pay-as-you-build start gates; not a full reservation ledger. */
   readonly spending: {
     readonly queueStartFloor: number;

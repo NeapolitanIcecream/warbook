@@ -5,6 +5,7 @@ import {
   type Point,
 } from "../model.js";
 import { LocalCombat } from "./tactics.js";
+import { ScoutTactics } from "./reconnaissance.js";
 import {
   currentEvidence,
   type CombatMission,
@@ -20,6 +21,7 @@ export class PositionTactics extends LocalCombat {
   private nextSlot = 0;
   private roles = new Map<string, string>();
   private targets = new Map<string, string>();
+  private readonly scouts = new ScoutTactics();
 
   protected prepareMission(mission: CombatMission): void {
     const role = `${mission.id}:${mission.kind}`;
@@ -44,6 +46,8 @@ export class PositionTactics extends LocalCombat {
     evidence: readonly ExecutionEvidence[],
   ): ControlResult {
     this.prepareMission(mission);
+    if (mission.kind === "scout")
+      return this.scouts.control(o, mission, evidence);
     if (mission.kind !== "defend") return super.control(o, mission, evidence);
     const intents: Intent[] = [];
     const owns = new Map(o.own.map((u) => [u.ref, u]));

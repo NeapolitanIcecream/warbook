@@ -6,12 +6,14 @@ import {
 } from "../model.js";
 import { OpeningStrategy } from "./strategy.js";
 import { DefenseAssignments } from "./defense-assignments.js";
+import { isScout, Reconnaissance } from "./reconnaissance.js";
 import {
   TaskRevision,
   type CombatMission,
   type StrategicController,
   type StrategicPlan,
   type TacticalAssessment,
+  type ControlReport,
 } from "./contracts.js";
 
 /** A local defender with persistent counterattack membership and a separate garrison. */
@@ -19,6 +21,7 @@ export class BastionStrategy implements StrategicController {
   readonly id: string;
   private readonly opening = new OpeningStrategy();
   private readonly defense = new DefenseAssignments();
+  private readonly recon = new Reconnaissance();
   private readonly revisions = new Map<string, TaskRevision>();
   private readonly productionRevision = new TaskRevision();
   private assault = new Set<string>();
@@ -60,10 +63,15 @@ export class BastionStrategy implements StrategicController {
     };
   }
 
-  plan(o: Observation, assessment: TacticalAssessment): StrategicPlan {
+  plan(
+    o: Observation,
+    assessment: TacticalAssessment,
+    feedback?: ControlReport,
+  ): StrategicPlan {
     const base = this.opening.plan(o, assessment);
     const { unitType: armor, factoryType: factory } = this.assessmentRequest(o);
-    const infantry = assessment.army.filter((u) => u.type === 3);
+    const scouts = assessment.army.filter(isScout);
+    const infantry = assessment.army.filter((u) => u.type === 3 && !isScout(u));
     const vehicles = assessment.army.filter((u) => u.type !== 3);
     const alive = new Set(vehicles.map((u) => u.ref));
     const hadAssault = this.assault.size > 0;
@@ -228,6 +236,7 @@ export class BastionStrategy implements StrategicController {
     const mobilizing = this.doctrine === "cohort" && !this.hasLaunched;
     const economy = {
       ...base.production,
+      scouts: { product: o.side === 0 ? "ADOG" : "DOG", count: 1 },
       ...(mobilizing
         ? {
             structures: base.production.structures.map((g) => ({
@@ -332,6 +341,15 @@ export class BastionStrategy implements StrategicController {
           engagement: { allowCrush: false },
         }),
       );
+    additionalCombat.push(
+      this.mission("recon", {
+        kind: "scout",
+        units: scouts.map((u) => u.ref),
+        destination: this.recon.destination(o, scouts, feedback),
+        objective: "reveal-approaches-and-enemy-base",
+        engagement: { allowCrush: false },
+      }),
+    );
     return { tick: o.tick, combat, additionalCombat, production };
   }
 }
