@@ -1,0 +1,11 @@
+{
+  "purpose": "Obtain missing short-map start-1 coverage for actual GI range correction",
+  "subjects": { "world-range": { "ref": "cf1b6efb5544502936a06f5a5b8cd1395a4e551d", "mode": "bastion" } },
+  "opponents": {
+    "old-main": { "ref": "8326311288ec685c3da43b1d182071dc36938fe8", "mode": "factory-exit" },
+    "supalosa": { "native": "supalosa" }
+  },
+  "maps": ["mp06t2.map"],
+  "rounds": 4,
+  "decision": { "budget": "8 complete ordinary games fixed before execution; all births and outcomes retained; inspect start-1 defense if observed, not a separate strength claim" }
+}
