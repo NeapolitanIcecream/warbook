@@ -8,6 +8,17 @@
 
 新版文件为 `defense-4x.mp4`、`counterattack-4x.mp4`、`preview-4x.gif`。短片页只保留版本、片段名称、速度、时长和下载控件。新文件名使浏览器不会继续显示上一次的带字素材。原来的 MP4/GIF 下载路径也已同步为新版。两段均实测 12.5 秒、1280×720、30 fps，文件分别为 2,251,818 / 2,244,744 字节；GIF 为 8 秒、2,610,411 字节。已检查成片无添加文字、无黑帧，并核对 HTTP 文件哈希；浏览器中两段均正常播完 12.5 秒。
 
+## 远端呈现方案（已核对，未部署）
+
+按用户“研究如何在远端呈现”的要求，选择 **GitHub Pages 展示 + Release 素材归档**。已通过仓库 API 核对：`NeapolitanIcecream/warbook` 为公开仓库，Actions 可用，Pages 尚未启用，也尚无 GitHub Release；已有 Git 标签不等同于已创建 Release。
+
+- 本地页面及其引用一共七份精选文件：HTML、两份 MP4、两张封面、GIF、完整 `.rpl`，合计 **8,062,633 字节**。全部引用为相对路径，不依赖 localhost、游戏客户端、Node 服务或游戏素材。
+- 已在忽略目录准备 `work/showcase-publish/warbook-showcase-0.1.11-4x.zip`，**7,978,534 字节**，SHA-256 `5df7f58f88dc836675a97728b3f7a61fa8d476c3223cfb49eccca7256150469e`。包内为版本目录、入口、`.nojekyll` 和校验清单；逐项校验解压内容与原文件哈希一致。未纳入原始 WebM、运行日志、capture.json、本地配置和游戏资源；MP4 标签中也没有本地路径。
+- 拟将这个精选包作为对应 Release 的附件，Actions 下载并核对哈希后，把包内的静态内容作为 Pages artifact 发布。媒体不进入源码 Git 历史。保留版本路径，README 链接到公开短片页；页面继续使用 4×、无添加文字的素材。
+- GitHub 官方当前提供公开仓库的 Pages；站点上限 1 GB，月带宽软上限 100 GB，当前材料规模适合阶段展示。来源：[Pages 限额](https://docs.github.com/en/pages/getting-started-with-github-pages/github-pages-limits)、[Actions 发布流程](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages)。
+
+本次只检查条件、准备发布包和确定方案，没有创建远端站点、Release 或部署工作流。公开 HTTPS 下的视频播放、Range 拖动和外部网络可达性需在实际部署后验证，不能将本地播放验收当作远端验收。
+
 ## 首版样片（历史，已替换）
 
 来源：`runs/closure-release-pool/mp06t2.map/supalosa/0-closure-candidate`，0.1.11 对 Supalosa 的 16:54 胜局；原回放 SHA-256 `714f627444033ca32dcc1a47ffaca4eadb65560692a724162a18f0187b07a6a8`。该原回放已有 102 份快照和终局核对。
