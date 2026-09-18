@@ -1,0 +1,27 @@
+{
+  "purpose": "Verify that final 0.1.11 packaging preserves the evaluated candidate decisions and produces a compatible full replay",
+  "subjects": {
+    "release": {
+      "ref": "fe445ac",
+      "mode": "bastion"
+    }
+  },
+  "shadows": {
+    "release": {
+      "ref": "a9b91b7",
+      "mode": "bastion"
+    }
+  },
+  "opponents": {
+    "supalosa": {
+      "native": "supalosa"
+    }
+  },
+  "maps": [
+    "mp06t2.map"
+  ],
+  "rounds": 2,
+  "decision": {
+    "budget": "Two full games with each creation slot; decision-only shadow checks exact intention equivalence. These are packaging checks, not new strength estimates."
+  }
+}

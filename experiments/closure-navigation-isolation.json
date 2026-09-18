@@ -1,0 +1,32 @@
+{
+  "purpose": "Verify independent local planning graphs preserve raw replay reproducibility and remain playable across four development maps",
+  "subjects": {
+    "live-query": {
+      "ref": "fe445ac",
+      "mode": "bastion"
+    },
+    "local-graph": {
+      "ref": "a507f15",
+      "mode": "bastion"
+    }
+  },
+  "opponents": {
+    "old-defense": {
+      "ref": "b3a1f7c",
+      "mode": "bastion"
+    },
+    "supalosa": {
+      "native": "supalosa"
+    }
+  },
+  "maps": [
+    "mp06t2.map",
+    "mp03t4.map",
+    "mp29u2.map",
+    "mp08t2.map"
+  ],
+  "rounds": 1,
+  "decision": {
+    "budget": "16 complete runs; replay-validate every new-graph result. Local planning intentionally stays on explored ground and delegates complete movement to the native engine. Check loss/timeout behavior and actual query overhead; no strength or speed claim before measurement."
+  }
+}
