@@ -9,7 +9,7 @@ import type {
   ExecutionEvidence,
 } from "./control/contracts.js";
 
-export const POLICY_VERSION = "warbook-0.1.12";
+export const POLICY_VERSION = "warbook-0.1.13-pressure.1";
 export type PolicyMode =
   | "baseline"
   | "cohesive"
