@@ -7,5 +7,6 @@ This repository's code uses the existing Apache-2.0 license. Upstream components
 - Original Red Alert 2 MIX files: supplied locally by the user. These files are not redistributed.
 - Supalosa's npm bot and the official client bot are evaluation opponents. Their code is not copied into the repository. They retain their upstream terms and are tested with their native information access.
 - Hono, esbuild, tsx, Three.js, TypeScript, Playwright and other npm dependencies retain their respective licenses. Three.js 0.94.0 is deliberately pinned to the version used by the reference engine.
+- Local planning uses [ngraph.graph](https://github.com/anvaka/ngraph.graph) 20.1.2 (BSD-3-Clause), [ngraph.path](https://github.com/anvaka/ngraph.path) 1.6.1 (MIT), and ngraph.events 1.4.0 (MIT). Their license texts are retained in `third-party/`; these libraries are bundled into frozen bot artifacts. Planning never calls the SDK's mutable path cache.
 
 The source URL and SHA-256 of each downloaded client resource are stored in local cache metadata. Large replays, downloaded software, game files, browser profiles and run records stay outside Git.

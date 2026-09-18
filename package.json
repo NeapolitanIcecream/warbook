@@ -25,6 +25,8 @@
     "@chronodivide/game-api": "0.79.0",
     "@hono/node-server": "2.1.1",
     "hono": "4.13.7",
+    "ngraph.graph": "20.1.2",
+    "ngraph.path": "1.6.1",
     "three": "0.94.0"
   },
   "devDependencies": {

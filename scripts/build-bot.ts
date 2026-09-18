@@ -56,7 +56,7 @@ export async function buildBot(ref: string, mode = "combined") {
       platform: "node",
       format: "esm",
       target: "node22",
-      packages: "external",
+      external: ["@chronodivide/game-api"],
       metafile: true,
       write: false,
     });

@@ -9,6 +9,7 @@ import {
 } from "@chronodivide/game-api";
 import { defenseRoute } from "./defense-route.js";
 import { refinerySite } from "./refinery-site.js";
+import { LocalGroundMap } from "./local-ground-map.js";
 import { combatCapabilities } from "./unit-capabilities.js";
 import { Commander, type PolicyMode } from "./policy.js";
 import {
@@ -109,15 +110,33 @@ export class WarbookBot extends Bot {
           ObjectType.Vehicle,
         ) as TechnoRules
       ).speedType;
+      const navigation =
+        speed === undefined
+          ? undefined
+          : new LocalGroundMap(this.game.map, this.name, home, speed, 22);
       const point =
         speed === undefined || !towards
           ? undefined
-          : defenseRoute(this.game.map, this.name, home, towards, speed);
+          : defenseRoute(
+              this.game.map,
+              this.name,
+              home,
+              towards,
+              speed,
+              navigation,
+            );
       this.defenseRoute =
         point && towards ? { towards, point, observedTick: tick } : undefined;
       const stagePoint =
         staging && speed !== undefined
-          ? defenseRoute(this.game.map, this.name, home, staging, speed)
+          ? defenseRoute(
+              this.game.map,
+              this.name,
+              home,
+              staging,
+              speed,
+              navigation,
+            )
           : undefined;
       this.stagingRoute =
         stagePoint && staging

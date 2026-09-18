@@ -1,5 +1,6 @@
-import type { MapApi, SpeedType, PathNode } from "@chronodivide/game-api";
+import type { MapApi, SpeedType } from "@chronodivide/game-api";
 import { distance2, type Point } from "./model.js";
+import { LocalGroundMap } from "./local-ground-map.js";
 
 /** Score the known outbound driving path; a Chrono Miner's teleport return is not a walk. */
 export function refinerySite(
@@ -47,6 +48,7 @@ export function refinerySite(
     if (legal.length === 12) break;
   }
   let best: { point: Point; pathTiles: number; ore: Point } | undefined;
+  const navigation = new LocalGroundMap(map, owner, home, speed, 35);
   for (const p of legal) {
     // Pinned ReturnOreTask.findRefineryDockingTile: rightmost column, middle row.
     const dock = {
@@ -57,37 +59,19 @@ export function refinerySite(
     if (!tile || !map.isVisibleTile(tile, owner) || map.hasBridgeOnTile(tile))
       continue;
     for (const target of targets) {
-      const destination = map.getTile(target.x, target.y)!;
-      const allowed = (node: PathNode) =>
-        map.isVisibleTile(node.tile, owner) &&
-        (!(
-          node.tile.rx >= p.x &&
-          node.tile.rx < p.x + foundation.width &&
-          node.tile.ry >= p.y &&
-          node.tile.ry < p.y + foundation.height
-        ) ||
-          (node.tile.rx === dock.x && node.tile.ry === dock.y));
-      const path = map.findPath(
-        speed,
-        false,
-        { tile, onBridge: false },
-        { tile: destination, onBridge: false },
-        {
-          bestEffort: false,
-          maxExpandedNodes: 2048,
-          excludeNodes: (n) => !allowed(n),
-        },
-      );
-      if (!path.length || !path.every(allowed)) continue;
+      const excluded = (node: Point) =>
+        node.x >= p.x &&
+        node.x < p.x + foundation.width &&
+        node.y >= p.y &&
+        node.y < p.y + foundation.height &&
+        !(node.x === dock.x && node.y === dock.y);
+      const path = navigation.path(dock, target, excluded);
+      if (!path.length) continue;
       const pathTiles = path
         .slice(1)
         .reduce(
           (sum, node, i) =>
-            sum +
-            Math.hypot(
-              node.tile.rx - path[i].tile.rx,
-              node.tile.ry - path[i].tile.ry,
-            ),
+            sum + Math.hypot(node.x - path[i].x, node.y - path[i].y),
           0,
         );
       if (!best || pathTiles < best.pathTiles)
