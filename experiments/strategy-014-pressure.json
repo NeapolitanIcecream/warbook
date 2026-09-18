@@ -24,10 +24,7 @@
       "mode": "bastion"
     }
   },
-  "maps": [
-    "mp06t2.map",
-    "mp29u2.map"
-  ],
+  "maps": ["mp06t2.map", "mp29u2.map"],
   "rounds": 1,
   "decision": {
     "budget": "12 complete games. Require actual concurrent infantry pressure or preservation of force; wins alone do not establish mechanism."

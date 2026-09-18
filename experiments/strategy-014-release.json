@@ -1,0 +1,26 @@
+{
+  "purpose": "Verify final release identity and non-air decision equivalence after target-coverage cleanup and the anti-air priority correction",
+  "subjects": {
+    "release-014": {
+      "ref": "b469a1b",
+      "mode": "bastion"
+    }
+  },
+  "shadows": {
+    "release-014": {
+      "ref": "9daf621",
+      "mode": "bastion"
+    }
+  },
+  "opponents": {
+    "old-defense": {
+      "ref": "b3a1f7c",
+      "mode": "bastion"
+    }
+  },
+  "maps": ["mp29u2.map", "mp06t2.map"],
+  "rounds": 1,
+  "decision": {
+    "budget": "Two complete games; this is release compatibility validation, not a replacement strength pool."
+  }
+}

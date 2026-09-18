@@ -27,10 +27,7 @@
       "native": "supalosa"
     }
   },
-  "maps": [
-    "mp29u2.map",
-    "mp06t2.map"
-  ],
+  "maps": ["mp29u2.map", "mp06t2.map"],
   "rounds": 1,
   "decision": {
     "budget": "18 complete ordinary games, six per subject; all starts and caps retained, with no default promotion from this screen alone."

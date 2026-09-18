@@ -16,10 +16,7 @@
       "mode": "bastion"
     }
   },
-  "maps": [
-    "mp29u2.map",
-    "mp06t2.map"
-  ],
+  "maps": ["mp29u2.map", "mp06t2.map"],
   "rounds": 2,
   "decision": {
     "budget": "Eight full games with two execution slots; inspect whether changing support estimates still pull defenders away."

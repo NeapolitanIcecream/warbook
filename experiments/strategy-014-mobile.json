@@ -16,10 +16,7 @@
       "mode": "bastion"
     }
   },
-  "maps": [
-    "mp29u2.map",
-    "mp06t2.map"
-  ],
+  "maps": ["mp29u2.map", "mp06t2.map"],
   "rounds": 2,
   "decision": {
     "budget": "Eight ordinary full games across two maps and execution slots; inspect mineral income and actual combined engagements."
