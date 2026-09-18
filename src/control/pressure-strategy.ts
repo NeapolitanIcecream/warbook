@@ -125,6 +125,9 @@ export class PressureStrategy implements StrategicController {
     const updated = {
       ...production,
       infantry: { ...production.infantry, count: 10 },
+      // The route depends on replacing raiders after the opening. The base's
+      // 800-credit infantry gate lets continuous armor production starve them.
+      spending: { ...production.spending, infantryAbove: 250 },
     };
     return {
       ...plan,

@@ -153,6 +153,7 @@ test("pressure assigns distinct economic targets and preserves a home guard", ()
   const refs = [plan.combat, ...plan.additionalCombat!].flatMap((m) => m.units);
   assert.equal(new Set(refs).size, refs.length);
   assert.equal(plan.production.infantry.count, 10);
+  assert.equal(plan.production.spending.infantryAbove, 250);
   o.tick += 3;
   o.enemies.push({
     ref: "miner",
