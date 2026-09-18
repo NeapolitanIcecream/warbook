@@ -1,0 +1,27 @@
+{
+  "purpose": "Move the reachable infantry screen forward enough to share a firing line; inspect real fire, not geometric occupancy",
+  "subjects": {
+    "home-fight": {
+      "ref": "4110974",
+      "mode": "bastion"
+    },
+    "forward-screen": {
+      "ref": "6bb971f9bfcc5e395b99b1105033922e7b8386f0",
+      "mode": "bastion"
+    }
+  },
+  "opponents": {
+    "old-defense": {
+      "ref": "b3a1f7ce69ed140fbafb82799f6d2b14d487c052",
+      "mode": "bastion"
+    }
+  },
+  "maps": [
+    "mp29u2.map",
+    "mp06t2.map"
+  ],
+  "rounds": 2,
+  "decision": {
+    "budget": "Eight full games with two execution slots; inspect whether changing support estimates still pull defenders away."
+  }
+}

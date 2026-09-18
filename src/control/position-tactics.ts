@@ -103,6 +103,17 @@ export class PositionTactics extends LocalCombat {
           unit.name === "E1"
             ? (unit.deployedWeaponRange ?? 5)
             : (unit.weaponRange ?? 4);
+        const supportingFight = (enemy: Observation["enemies"][number]) =>
+          mission.kind === "defend" &&
+          o.own.some(
+            (ally) =>
+              ally.type === 7 &&
+              ally.combat &&
+              !ally.harvester &&
+              this.roles.get(ally.ref)?.endsWith(":defend") &&
+              distance2(ally, unit) <= 8 ** 2 &&
+              weaponDistance2(ally, enemy) <= (ally.weaponRange ?? 5) ** 2,
+          );
         const targets = o.enemies.filter(
           (e) =>
             (!e.airborne || unit.antiAir) &&
@@ -112,6 +123,7 @@ export class PositionTactics extends LocalCombat {
                 ? mission.threats.includes(e.ref)
                 : distance2(e, base) <= 12 ** 2) &&
                 (weaponDistance2(e, unit) <= range ** 2 ||
+                  supportingFight(e) ||
                   (mission.protectedAssets
                     ? mission.protectedAssets.some((ref) => {
                         const asset = owns.get(ref);

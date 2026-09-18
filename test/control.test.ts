@@ -1189,6 +1189,58 @@ test("defending infantry do not chase a distant visitor away from the protected 
   assert.equal(tactics.control(o, mission, []).intents[0].kind, "deploy");
 });
 
+test("guards move into range to support a nearby defending tank, then deploy", () => {
+  const tactics = new PositionTactics(),
+    o = observation();
+  o.own = [
+    { ...tank("gi", 0, 5), name: "E1", type: 3, crusher: false },
+    { ...tank("armor", 0, 9), weaponRange: 5 },
+    building("yard", "GACNST", 0, 0),
+  ];
+  o.enemies = [
+    {
+      ref: "enemy",
+      name: "MTNK",
+      type: 7,
+      x: 0,
+      y: 13,
+      hp: 300,
+      maxHp: 300,
+      weaponRange: 5,
+      observedTick: o.tick,
+    },
+  ];
+  const guard: CombatMission = {
+    id: "guard",
+    revision: 1,
+    kind: "defend",
+    units: ["gi"],
+    destination: { x: 0, y: 5 },
+    protectedAssets: ["yard"],
+    threats: ["enemy"],
+    objective: "guard-base",
+    engagement: { allowCrush: false },
+  };
+  const armor: CombatMission = { ...guard, id: "armor", units: ["armor"] };
+  tactics.control(o, armor, []);
+  assert.equal(tactics.control(o, guard, []).intents[0].kind, "attack");
+  o.tick += 30;
+  o.own[0].y = 8;
+  assert.equal(tactics.control(o, guard, []).intents[0].kind, "deploy");
+  const detached = new PositionTactics();
+  o.own[0].y = 5;
+  detached.control(
+    o,
+    { ...armor, kind: "advance", destination: { x: 0, y: 40 } },
+    [],
+  );
+  assert.equal(
+    detached.control(o, guard, []).intents[0].kind,
+    "stop",
+    "an expedition must not drag the home guard after it",
+  );
+});
+
 test("a moving guard post preserves a nearby engagement, but an urgent reassignment can interrupt it", () => {
   const tactics = new PositionTactics(),
     o = observation();
