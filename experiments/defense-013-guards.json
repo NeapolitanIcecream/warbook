@@ -1,0 +1,34 @@
+{
+  "purpose": "Anticipatory guard assignments against a renewed pressure challenger and fixed anchors",
+  "subjects": {
+    "published-0112": {
+      "ref": "f8f491e",
+      "mode": "bastion"
+    },
+    "guard-f1": {
+      "ref": "0cbc01e",
+      "mode": "bastion"
+    }
+  },
+  "opponents": {
+    "pressure-p0": {
+      "ref": "f42a0de",
+      "mode": "pressure"
+    },
+    "old-defense": {
+      "ref": "b3a1f7ce69ed140fbafb82799f6d2b14d487c052",
+      "mode": "bastion"
+    },
+    "supalosa": {
+      "native": "supalosa"
+    }
+  },
+  "maps": [
+    "mp06t2.map",
+    "mp03t4.map"
+  ],
+  "rounds": 2,
+  "decision": {
+    "budget": "24 ordinary complete games. Inspect actual defense damage, fire participation, distinct posts and scout progress, not deployment counts or orders alone. Same pool for both subjects; retain all caps and losses, starts not controlled."
+  }
+}

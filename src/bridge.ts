@@ -9,6 +9,7 @@ import {
 } from "@chronodivide/game-api";
 import { baseRally, defenseRoute, guardPost } from "./defense-route.js";
 import { refinerySite } from "./refinery-site.js";
+import { defenseSite } from "./defense-placement.js";
 import { LocalGroundMap } from "./local-ground-map.js";
 import { combatCapabilities } from "./unit-capabilities.js";
 import { Commander, type PolicyMode } from "./policy.js";
@@ -347,6 +348,42 @@ export class WarbookBot extends Bot {
         const tile = this.game.map.getTile(p.x, p.y);
         return !!tile && this.player.canPlaceBuilding(name, tile);
       };
+      const buildingRules = this.game.rules.getBuilding(name);
+      if (buildingRules.isBaseDefense && buildingRules.primary) {
+        const foot = this.game.rules.getObject(
+          data.country!.side === 0 ? "E1" : "E2",
+          ObjectType.Infantry,
+        ) as TechnoRules;
+        if (foot.speedType !== undefined) {
+          const navigation = new LocalGroundMap(
+            this.game.map,
+            this.name,
+            home,
+            foot.speedType,
+            22,
+            true,
+          );
+          const site = defenseSite(
+            home,
+            own,
+            enemies,
+            navigation.points,
+            [...candidates.values()].filter(legal),
+            foundation,
+            this.game.rules.getWeapon(buildingRules.primary).range,
+          );
+          if (site) {
+            buildSites.push({ name, ...site.point });
+            this.trace?.({
+              tick,
+              actor: this.name,
+              kind: "defense_site",
+              ...site,
+            });
+            continue;
+          }
+        }
+      }
       if (["GAREFN", "NAREFN"].includes(name)) {
         const miner = name === "GAREFN" ? "CMIN" : "HARV";
         const speed = (
