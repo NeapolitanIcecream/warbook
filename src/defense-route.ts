@@ -2,7 +2,7 @@ import type { MapApi, SpeedType } from "@chronodivide/game-api";
 import { distance2, type Point } from "./model.js";
 import { LocalGroundMap } from "./local-ground-map.js";
 
-type Footprint = Point & { width: number; height: number };
+type Footprint = Point & { width: number; height: number; defense?: boolean };
 function availableGround(
   navigation: LocalGroundMap,
   home: Point,
@@ -36,6 +36,41 @@ export function baseRally(
     (a, b) => distance2(a, home) - distance2(b, home),
   )[0];
   return p ? { x: p.x, y: p.y } : undefined;
+}
+
+/** Infantry cover an exposed building from nearby ground, rather than a distant point toward the enemy. */
+export function guardPost(
+  navigation: LocalGroundMap,
+  home: Point,
+  towards: Point,
+  occupied: readonly Footprint[],
+): Point | undefined {
+  const center = (b: Footprint) => ({
+    x: b.x + b.width / 2,
+    y: b.y + b.height / 2,
+  });
+  const assets = occupied
+    .filter((b) => !b.defense)
+    .sort(
+      (a, b) => distance2(center(a), towards) - distance2(center(b), towards),
+    );
+  const available = availableGround(navigation, home, occupied);
+  for (const asset of assets) {
+    const c = center(asset),
+      dx = towards.x - c.x,
+      dy = towards.y - c.y;
+    const p = available
+      .filter(
+        (p) =>
+          distance2(p, {
+            x: Math.max(asset.x, Math.min(p.x, asset.x + asset.width - 1)),
+            y: Math.max(asset.y, Math.min(p.y, asset.y + asset.height - 1)),
+          }) <=
+            2 ** 2 && (p.x - c.x) * dx + (p.y - c.y) * dy > 0,
+      )
+      .sort((a, b) => distance2(a, towards) - distance2(b, towards))[0];
+    if (p) return { x: p.x, y: p.y };
+  }
 }
 
 /** A reachable forward post, not the first turning point on a route around our own buildings. */

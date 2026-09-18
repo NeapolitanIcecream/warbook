@@ -19,6 +19,7 @@ export class LocalGroundMap {
     home: Point,
     speed: SpeedType,
     radius: number,
+    subCell = false,
   ) {
     for (let x = home.x - radius; x <= home.x + radius; x++)
       for (let y = home.y - radius; y <= home.y + radius; y++) {
@@ -29,7 +30,7 @@ export class LocalGroundMap {
         // including bridges; no unseen terrain enters this graph.
         if (
           map.hasBridgeOnTile(tile) ||
-          !map.isPassableTile(tile, speed, false, false)
+          !map.isPassableTile(tile, speed, false, subCell)
         )
           continue;
         const point = { x, y, z: tile.z };

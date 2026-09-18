@@ -19,8 +19,6 @@ import {
 export class PositionTactics extends LocalCombat {
   override readonly id: string = "position-tactics-v6";
   private lastPositionOrders = new Map<string, { key: string; tick: number }>();
-  private slots = new Map<string, number>();
-  private nextSlot = 0;
   private roles = new Map<string, string>();
   private targets = new Map<string, string>();
   private readonly scouts = new ScoutTactics();
@@ -233,8 +231,6 @@ export class PositionTactics extends LocalCombat {
           continue;
         }
       }
-      let slot = this.slots.get(ref);
-      if (slot === undefined) this.slots.set(ref, (slot = this.nextSlot++));
       const offsets: Point[] = [
         { x: -2, y: 0 },
         { x: 0, y: -2 },
@@ -247,14 +243,6 @@ export class PositionTactics extends LocalCombat {
       ];
       // Ground posts are validated; arbitrary vehicle offsets can land in a cliff.
       const desired = { x: base.x, y: base.y };
-      if (unit.type === 3) {
-        const dx = base.x - o.home.x,
-          dy = base.y - o.home.y;
-        const length = Math.hypot(dx, dy) || 1;
-        const side = [0, -1, 1, -2, 2, -3, 3][slot % 7];
-        desired.x = Math.round(base.x - (dy / length) * side);
-        desired.y = Math.round(base.y + (dx / length) * side);
-      }
       // Only own, already observed footprints influence the fallback post.
       const free = (p: Point) =>
         !o.own.some(
@@ -267,10 +255,12 @@ export class PositionTactics extends LocalCombat {
         );
       const point = free(desired)
         ? desired
-        : (offsets
-            .map((p) => ({ x: desired.x + 2 * p.x, y: desired.y + 2 * p.y }))
-            .find(free) ?? desired);
-      if (distance2(unit, point) > 2 ** 2) {
+        : free(unit) && distance2(unit, base) <= 4 ** 2
+          ? { x: unit.x, y: unit.y }
+          : (offsets
+              .map((p) => ({ x: desired.x + 2 * p.x, y: desired.y + 2 * p.y }))
+              .find(free) ?? desired);
+      if (distance2(unit, point) > (unit.type === 3 ? 1 : 2) ** 2) {
         if (unit.deployed)
           issue(
             ref,
@@ -296,9 +286,8 @@ export class PositionTactics extends LocalCombat {
         );
       }
     }
-    for (const ref of this.slots.keys())
+    for (const ref of this.roles.keys())
       if (!owns.has(ref)) {
-        this.slots.delete(ref);
         this.lastPositionOrders.delete(ref);
         this.roles.delete(ref);
         this.lastOrders.delete(ref);

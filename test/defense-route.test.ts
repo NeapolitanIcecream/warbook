@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { MapApi } from "@chronodivide/game-api";
-import { baseRally, defenseRoute } from "../src/defense-route.js";
+import { baseRally, defenseRoute, guardPost } from "../src/defense-route.js";
 import { LocalGroundMap } from "../src/local-ground-map.js";
 
 function mapFixture(hiddenDetour = false) {
@@ -87,4 +87,32 @@ test("hypothetical refinery footprints block only the independent query, without
   assert(detour.length > initial.length);
   assert(detour.every((p) => !blocked(p)));
   assert.deepEqual(nav.path(from, to), initial);
+});
+
+test("guards remain near the protected building instead of following their own forward fort", () => {
+  const home = { x: 0, y: 0 },
+    nav = new LocalGroundMap(mapFixture(), "actor", home, 5, 22, true);
+  const barracks = { x: 2, y: 2, width: 3, height: 2 };
+  const fort = { x: 10, y: -2, width: 1, height: 1, defense: true };
+  const p = guardPost(nav, home, { x: 30, y: -30 }, [barracks, fort]);
+  assert(p);
+  const dx = Math.max(2 - p.x, 0, p.x - 4),
+    dy = Math.max(2 - p.y, 0, p.y - 3);
+  assert(dx * dx + dy * dy <= 4);
+});
+
+test("infantry planning cannot use a vehicle-only factory passage", () => {
+  const map = mapFixture();
+  map.isPassableTile = (tile, _speed, _bridge, subCell = false) =>
+    !(subCell && tile.rx === 4);
+  const home = { x: 0, y: 0 },
+    goal = { x: 8, y: 0 };
+  assert(
+    new LocalGroundMap(map, "actor", home, 5, 15, false).path(home, goal)
+      .length,
+  );
+  assert.equal(
+    new LocalGroundMap(map, "actor", home, 5, 15, true).path(home, goal).length,
+    0,
+  );
 });

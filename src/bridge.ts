@@ -7,7 +7,7 @@ import {
   type UnitData,
   type TechnoRules,
 } from "@chronodivide/game-api";
-import { baseRally, defenseRoute } from "./defense-route.js";
+import { baseRally, defenseRoute, guardPost } from "./defense-route.js";
 import { refinerySite } from "./refinery-site.js";
 import { LocalGroundMap } from "./local-ground-map.js";
 import { combatCapabilities } from "./unit-capabilities.js";
@@ -122,22 +122,32 @@ export class WarbookBot extends Bot {
           y: u.tile.ry,
           width: u.foundation.width,
           height: u.foundation.height,
+          defense: u.rules.isBaseDefense,
         }));
       this.baseRally = navigation
         ? baseRally(navigation, home, occupied)
         : undefined;
-      const point =
-        speed === undefined || !towards
+      const footSpeed = (
+        this.game.rules.getObject(
+          data.country!.side === 0 ? "E1" : "E2",
+          ObjectType.Infantry,
+        ) as TechnoRules
+      ).speedType;
+      const infantryNavigation =
+        footSpeed === undefined
           ? undefined
-          : defenseRoute(
+          : new LocalGroundMap(
               this.game.map,
               this.name,
               home,
-              towards,
-              speed,
-              navigation,
-              occupied,
+              footSpeed,
+              22,
+              true,
             );
+      const point =
+        towards && infantryNavigation
+          ? guardPost(infantryNavigation, home, towards, occupied)
+          : undefined;
       this.defenseRoute =
         point && towards ? { towards, point, observedTick: tick } : undefined;
       const stagePoint =
