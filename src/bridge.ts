@@ -268,16 +268,10 @@ export class WarbookBot extends Bot {
       if (!name) continue;
       const { foundation } = this.game.getBuildingPlacementData(name);
       const candidates = new Map<string, { x: number; y: number }>();
-      for (const b of own.filter((u) => u.type === ObjectType.Building)) {
+      const buildings = own.filter((u) => u.type === ObjectType.Building);
+      for (const b of buildings) {
         for (let x = b.x - 7; x <= b.x + b.width + 7; x++)
           for (let y = b.y - 7; y <= b.y + b.height + 7; y++) {
-            if (
-              x < b.x + b.width + 1 &&
-              x + foundation.width > b.x - 1 &&
-              y < b.y + b.height + 1 &&
-              y + foundation.height > b.y - 1
-            )
-              continue;
             candidates.set(`${x},${y}`, { x, y });
           }
       }
@@ -295,6 +289,18 @@ export class WarbookBot extends Bot {
         ? (plannedAnchor ?? enemy ?? home)
         : home;
       const legal = (p: Point) => {
+        // The union of candidates from several parents must retain clearance
+        // from every building, not just the parent that generated this point.
+        if (
+          buildings.some(
+            (b) =>
+              p.x < b.x + b.width + 1 &&
+              p.x + foundation.width > b.x - 1 &&
+              p.y < b.y + b.height + 1 &&
+              p.y + foundation.height > b.y - 1,
+          )
+        )
+          return false;
         for (let x = p.x; x < p.x + foundation.width; x++)
           for (let y = p.y; y < p.y + foundation.height; y++) {
             const tile = this.game.map.getTile(x, y);
