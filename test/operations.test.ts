@@ -95,3 +95,37 @@ test("a lead tank crossing the home boundary does not hide its supporting group"
     "a genuinely isolated remaining attacker still permits a counterattack",
   );
 });
+
+test("newly revealed defenders invalidate an ongoing attack before the force is lost", () => {
+  const target = contact("target", "GAREFN", 30, 2);
+  const o = observation([target, contact("factory", "GAWEAP", 100, 2)]);
+  const planner = new Operations();
+  planner.observe(o, []);
+  planner.active = planner.consider(o, o.own);
+  assert(planner.active);
+  o.tick += 150;
+  o.own = o.own.map((u) => ({ ...u, x: u.x + 24 }));
+  o.enemies.push(
+    ...Array.from({ length: 5 }, (_, i) =>
+      contact(`guard-${i}`, "MTNK", 31 + i),
+    ),
+  );
+  planner.observe(o, []);
+  assert.equal(planner.target(o, o.own), undefined);
+
+  target.hp = 20;
+  planner.active = {
+    point: target,
+    ref: target.ref,
+    reason: "attack-opportunity",
+    defenders: 0,
+    productionArrivals: 0,
+    travelSeconds: 0,
+  };
+  planner.observe(o, []);
+  assert.equal(
+    planner.target(o, o.own)?.ref,
+    target.ref,
+    "finish a nearly destroyed objective already in range rather than discarding the result",
+  );
+});

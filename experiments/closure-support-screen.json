@@ -1,0 +1,30 @@
+{
+  "purpose": "Test shared target support estimates, last-seen factories and a labeled unknown production prior against the previous supported strike policy",
+  "subjects": {
+    "previous": {
+      "ref": "cf29b9264a124ecd906db0bd8a09b2a8521bb445",
+      "mode": "bastion"
+    },
+    "support-aware": {
+      "ref": "927ec7a13ad390c455328f796cc65c370e278f62",
+      "mode": "bastion"
+    }
+  },
+  "opponents": {
+    "old-defense": {
+      "ref": "b3a1f7ce69ed140fbafb82799f6d2b14d487c052",
+      "mode": "bastion"
+    },
+    "supalosa": {
+      "native": "supalosa"
+    }
+  },
+  "maps": [
+    "mp06t2.map",
+    "mp03t4.map"
+  ],
+  "rounds": 2,
+  "decision": {
+    "budget": "16 ordinary full games; inspect both losses and waiting, retain spawn coverage. Confirm local counters no longer count only the lead tank and exposed MCV opportunities remain possible. No scoring changes."
+  }
+}

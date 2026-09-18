@@ -253,9 +253,38 @@ export class Operations {
   target(o: Observation, force: readonly Unit[]): Operation | undefined {
     if (!this.active) return;
     const visible = o.enemies.find((e) => e.ref === this.active!.ref);
-    if (visible)
-      this.active = { ...this.active, point: { x: visible.x, y: visible.y } };
-    else if (force.some((u) => distance2(u, this.active!.point) <= 8 ** 2))
+    const remembered = this.active.ref
+      ? this.known.get(this.active.ref)
+      : undefined;
+    const target = visible ?? remembered;
+    const tanks = force.filter((u) => ["MTNK", "HTNK"].includes(u.name));
+    if (target && tanks.length) {
+      const center = {
+        x: tanks.reduce((s, u) => s + u.x, 0) / tanks.length,
+        y: tanks.reduce((s, u) => s + u.y, 0) / tanks.length,
+      };
+      const estimate = this.opposition(o, target, center, tanks.length);
+      const power = tanks.reduce((s, u) => s + Math.sqrt(u.hp / u.maxHp), 0);
+      const finishNow =
+        visible &&
+        target.hp <= tanks.length * 45 &&
+        tanks.some((u) => distance2(u, target) <= 8 ** 2);
+      // Re-evaluate during travel and combat. A small commitment margin avoids
+      // cancelling a viable fight at exactly the stricter launch threshold.
+      if (
+        !finishNow &&
+        power < (estimate.defenders + estimate.productionArrivals) * 1.05
+      ) {
+        this.active = this.consider(o, force);
+        if (!this.active)
+          this.decision.operationReason = "operation-no-longer-supported";
+      } else
+        this.active = {
+          ...this.active,
+          point: { x: target.x, y: target.y },
+          ...estimate,
+        };
+    } else if (force.some((u) => distance2(u, this.active!.point) <= 8 ** 2))
       this.active = this.consider(o, force);
     return this.active
       ? {
