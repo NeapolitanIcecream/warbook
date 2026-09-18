@@ -507,6 +507,9 @@ export class WarbookBot extends Bot {
           case "stop":
             this.player.actions.orderUnits(ids, OrderType.Stop);
             break;
+          case "scatter":
+            this.player.actions.orderUnits(ids, OrderType.Scatter);
+            break;
           case "deploy":
             this.player.actions.orderUnits(ids, OrderType.DeploySelected);
             break;

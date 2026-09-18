@@ -70,7 +70,7 @@ export function observedEffect(
     )
       return "deployment_state_changed";
   }
-  if (i.kind === "move" || i.kind === "attackMove") {
+  if (i.kind === "move" || i.kind === "attackMove" || i.kind === "scatter") {
     if (
       p.units.some((before) =>
         o.own.some((u) => u.ref === before.ref && distance2(u, before) >= 1),

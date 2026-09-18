@@ -713,10 +713,12 @@ test("a cancelled attack keeps withdrawing until arrival, without renewed crushi
     })),
   );
   const initial = c.decide(o);
-  assert.equal(c.controlPlan!.combat.kind, "withdraw");
+  const recovery = () =>
+    c.controlPlan!.additionalCombat!.find((m) => m.id === "recover-force");
+  assert.equal(recovery()!.kind, "withdraw");
   assert(initial.some((i) => i.kind === "move"));
   assert(!initial.some((i) => i.kind === "crush" || i.kind === "attack"));
-  const destination = c.controlPlan!.combat.destination!;
+  const destination = recovery()!.destination!;
   o.tick += 900;
   o.enemies = [
     {
@@ -733,19 +735,106 @@ test("a cancelled attack keeps withdrawing until arrival, without renewed crushi
   ];
   const later = c.decide(o);
   assert.equal(
-    c.controlPlan!.combat.kind,
+    recovery()!.kind,
     "withdraw",
     "elapsed time alone does not end a withdrawal",
   );
   assert(!later.some((i) => i.kind === "crush" || i.kind === "attack"));
+  o.own.push(
+    ...Array.from({ length: 6 }, (_, i) =>
+      tank(`fresh-${i}`, 71 + (i % 3), 37 + Math.floor(i / 3)),
+    ),
+  );
+  o.tick += 3;
+  c.decide(o);
+  assert.equal(
+    c.controlPlan!.combat.kind,
+    "advance",
+    "a recovering group cannot hold a fresh formed force hostage",
+  );
+  assert(c.controlPlan!.combat.units.every((ref) => ref.startsWith("fresh-")));
+  assert.equal(recovery()!.units.length, 6);
+  const outpost = building("outpost", "GAPOWR", 88, 43);
+  o.own.push(outpost);
+  o.tick += 3;
+  c.decide(o);
+  outpost.hp -= 50;
+  o.tick += 3;
+  c.decide(o);
+  assert.equal(
+    recovery()!.units.length,
+    6,
+    "ordinary relief does not interrupt units still recovering",
+  );
+  assert(
+    c
+      .controlPlan!.additionalCombat!.find((m) => m.id === "base-relief")!
+      .units.every((ref) => ref.startsWith("fresh-")),
+  );
   o.own = o.own.map((u, i) => ({
     ...u,
-    x: destination.x + (i % 2),
-    y: destination.y,
+    x: u.ref.startsWith("force-") ? destination.x + (i % 2) : u.x,
+    y: u.ref.startsWith("force-") ? destination.y : u.y,
   }));
   o.tick += 3;
   c.decide(o);
-  assert.notEqual(c.controlPlan!.combat.kind, "withdraw");
+  assert.equal(recovery(), undefined);
+});
+
+test("a stuck reserve yields to adjacent withdrawing tanks, then resumes its own movement", () => {
+  const tactics = new PositionTactics(),
+    o = observation();
+  o.tick = 0;
+  o.own = [tank("reserve", 0, 0), tank("returning", 1, 0)];
+  o.enemies = [];
+  const recovery: CombatMission = {
+    id: "recover-force",
+    revision: 1,
+    kind: "withdraw",
+    units: ["returning"],
+    destination: { x: -8, y: 0 },
+    objective: "recover",
+    engagement: { allowCrush: false },
+  };
+  const reserve: CombatMission = {
+    id: "main",
+    revision: 1,
+    kind: "assemble",
+    units: ["reserve"],
+    destination: { x: 10, y: 0 },
+    objective: "assemble",
+    engagement: { allowCrush: true },
+  };
+  tactics.control(o, recovery, []);
+  assert.equal(tactics.control(o, reserve, []).intents[0].kind, "move");
+  o.tick = 120;
+  tactics.control(o, recovery, []);
+  const yielded = tactics.control(o, reserve, []);
+  assert.equal(yielded.intents[0].kind, "scatter");
+  assert.equal(yielded.report.facts.givingWay, 1);
+  o.tick = 150;
+  assert.equal(tactics.control(o, reserve, []).intents.length, 0);
+  o.tick = 213;
+  assert.equal(tactics.control(o, reserve, []).intents[0].kind, "move");
+  o.tick = 330;
+  o.enemies = [
+    {
+      ref: "attacker",
+      name: "MTNK",
+      type: 7,
+      x: 4,
+      y: 0,
+      hp: 300,
+      maxHp: 300,
+      weaponRange: 5,
+      observedTick: o.tick,
+    },
+  ];
+  assert.equal(
+    tactics.control(o, reserve, []).intents[0].kind,
+    "attack",
+    "combat takes priority over yielding",
+  );
 });
 
 test("a moving enemy does not replace a known ground post with an unchecked straight-line point", () => {

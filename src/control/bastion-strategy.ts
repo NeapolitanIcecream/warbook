@@ -93,7 +93,7 @@ export class BastionStrategy implements StrategicController {
     } = this.situation.observe(o);
     const relief = this.relief.assign(
       o,
-      allVehicles,
+      allVehicles.filter((u) => !this.withdrawing.has(u.ref)),
       infantry,
       [...new Map(incursions.map((i) => [i.enemy.ref, i.enemy])).values()],
       vehiclePost,
@@ -216,7 +216,6 @@ export class BastionStrategy implements StrategicController {
     const nextOperation = opportunity ?? exploration;
     if (
       !this.assault.size &&
-      !this.withdrawing.size &&
       !protectNow &&
       o.tick >= this.nextLaunchTick &&
       nextOperation
@@ -288,39 +287,23 @@ export class BastionStrategy implements StrategicController {
     };
     const operation = this.operations.target(o, assault);
     const combat = this.mission("main-force", {
-      kind: withdrawing.length
-        ? "withdraw"
-        : assault.length
-          ? "advance"
-          : responding || protectNow
-            ? "defend"
-            : "assemble",
-      units: (withdrawing.length
-        ? withdrawing
-        : assault.length
-          ? assault
-          : reserve
-      ).map((u) => u.ref),
-      destination: withdrawing.length
-        ? this.withdrawalPoint
-        : assault.length
-          ? operation?.point
-          : musterPost,
-      groundDestination: withdrawing.length
-        ? this.withdrawalPoint
-        : assault.length
-          ? operation?.point
-          : musterPost,
-      objective: withdrawing.length
-        ? "regroup-after-unfavorable-contact"
-        : protectNow && !assault.length
+      kind: assault.length
+        ? "advance"
+        : responding || protectNow
+          ? "defend"
+          : "assemble",
+      units: (assault.length ? assault : reserve).map((u) => u.ref),
+      destination: assault.length ? operation?.point : musterPost,
+      groundDestination: assault.length ? operation?.point : musterPost,
+      objective:
+        protectNow && !assault.length
           ? "protect-base"
           : assault.length
             ? (operation?.reason ?? "reassess-operation")
             : responding
               ? "protect-economy"
               : "muster-counterattack",
-      engagement: { allowCrush: !withdrawing.length },
+      engagement: { allowCrush: true },
       approach: stagingDirection,
       ...(assault.length && operation?.ref ? { target: operation.ref } : {}),
     });
@@ -365,7 +348,17 @@ export class BastionStrategy implements StrategicController {
           engagement: { allowCrush: true },
         }),
       );
-    if (assault.length || withdrawing.length)
+    if (withdrawing.length)
+      additionalCombat.push(
+        this.mission("recover-force", {
+          kind: "withdraw",
+          units: withdrawing.map((u) => u.ref),
+          destination: this.withdrawalPoint,
+          objective: "regroup-after-unfavorable-contact",
+          engagement: { allowCrush: false },
+        }),
+      );
+    if (assault.length)
       additionalCombat.push(
         this.mission("reserve-force", {
           kind: responding ? "defend" : "assemble",

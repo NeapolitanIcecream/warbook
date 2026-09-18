@@ -21,6 +21,8 @@ export class PositionTactics extends LocalCombat {
   private lastPositionOrders = new Map<string, { key: string; tick: number }>();
   private roles = new Map<string, string>();
   private targets = new Map<string, string>();
+  private motion = new Map<string, { point: Point; since: number }>();
+  private yieldingUntil = new Map<string, number>();
   private readonly scouts = new ScoutTactics();
   private readonly strike = new StrikeTactics();
 
@@ -33,6 +35,8 @@ export class PositionTactics extends LocalCombat {
           mission.kind === "defend" &&
           !mission.engagement.interrupt;
         this.roles.set(ref, role);
+        this.motion.delete(ref);
+        this.yieldingUntil.delete(ref);
         this.strike.handoff(ref, mission.id);
         if (!continuingDefense) {
           this.lastPositionOrders.delete(ref);
@@ -82,7 +86,8 @@ export class PositionTactics extends LocalCombat {
     const base = mission.destination;
     let stationed = 0,
       deployed = 0,
-      engaging = 0;
+      engaging = 0,
+      givingWay = 0;
     for (const ref of mission.units) {
       const unit = owns.get(ref);
       if (!unit || !base) continue;
@@ -179,6 +184,10 @@ export class PositionTactics extends LocalCombat {
             distance2(e, base) <= 12 ** 2 &&
             distance2(e, unit) <= 6 ** 2,
         );
+        if (close.length && this.yieldingUntil.has(ref)) {
+          this.yieldingUntil.delete(ref);
+          this.lastPositionOrders.delete(ref);
+        }
         const infantry =
           unit.crusher && mission.engagement.allowCrush
             ? close
@@ -228,6 +237,51 @@ export class PositionTactics extends LocalCombat {
             },
             180,
           );
+          continue;
+        }
+      }
+      if (unit.type === 7 && mission.kind !== "withdraw") {
+        const position = unit.position ?? unit;
+        let motion = this.motion.get(ref);
+        if (
+          !motion ||
+          distance2(position, motion.point) >= 0.25 ** 2 ||
+          !this.lastPositionOrders.get(ref)?.key.startsWith("post:")
+        ) {
+          motion = { point: { x: position.x, y: position.y }, since: o.tick };
+          this.motion.set(ref, motion);
+        }
+        const until = this.yieldingUntil.get(ref);
+        if (until !== undefined && o.tick < until) {
+          givingWay++;
+          continue;
+        }
+        if (until !== undefined) this.yieldingUntil.delete(ref);
+        const danger = o.enemies.some(
+          (e) =>
+            e.canThreatenVehicles !== false &&
+            (e.weaponRange ?? 0) > 0 &&
+            weaponDistance2(unit, e) <= ((e.weaponRange ?? 5) + 2) ** 2,
+        );
+        if (
+          o.tick - motion.since >= 90 &&
+          distance2(unit, base) > 2 ** 2 &&
+          !danger &&
+          o.own.some(
+            (other) =>
+              other.ref !== ref &&
+              distance2(unit, other) <= 2 ** 2 &&
+              this.roles.get(other.ref)?.endsWith(":withdraw"),
+          )
+        ) {
+          issue(
+            ref,
+            "give-way",
+            { kind: "scatter", refs: [ref], task: mission.id },
+            90,
+          );
+          this.yieldingUntil.set(ref, o.tick + 90);
+          givingWay++;
           continue;
         }
       }
@@ -292,6 +346,8 @@ export class PositionTactics extends LocalCombat {
         this.roles.delete(ref);
         this.lastOrders.delete(ref);
         this.targets.delete(ref);
+        this.motion.delete(ref);
+        this.yieldingUntil.delete(ref);
       }
     return {
       origin: {
@@ -303,8 +359,9 @@ export class PositionTactics extends LocalCombat {
       report: {
         task: { id: mission.id, revision: mission.revision },
         status: mission.units.length ? "active" : "idle",
-        reason:
-          mission.kind === "withdraw"
+        reason: givingWay
+          ? "give-way-to-withdrawal"
+          : mission.kind === "withdraw"
             ? "withdraw-to-support"
             : engaging
               ? "engage-visible-threat"
@@ -315,6 +372,7 @@ export class PositionTactics extends LocalCombat {
           stationed,
           deployed,
           engaging,
+          givingWay,
           phase: mission.kind,
         },
         executionEvidence: currentEvidence(mission, evidence),
