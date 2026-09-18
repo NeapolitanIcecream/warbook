@@ -15,7 +15,7 @@ import {
 
 /** Independent pressure route: two infantry groups attack separate economic targets. */
 export class PressureStrategy implements StrategicController {
-  readonly id = "two-front-pressure-v1";
+  readonly id = "two-front-pressure-v2";
   private readonly base = new BastionStrategy("cohort");
   private readonly revisions = new Map<string, TaskRevision>();
   private readonly productionRevision = new TaskRevision();
@@ -58,14 +58,15 @@ export class PressureStrategy implements StrategicController {
     const engaged = (u: Unit) =>
       o.enemies.some((e) => distance2(u, e) <= 6 ** 2);
     const idle = gi.filter((u) => !raiders().has(u.ref) && !engaged(u));
-    // Leave two defenders and launch complete three-person groups, not a stream of singles.
+    // The first wave needs both fronts ready. Replacements are whole cohorts;
+    // a casualty at the front must not send one new recruit across the map alone.
     let spare = Math.max(0, idle.length - 2);
-    for (const group of this.groups) {
-      const needed = 3 - group.size;
-      if (needed <= 0 || spare < needed) continue;
-      for (let i = 0; i < needed; i++) group.add(idle.shift()!.ref);
-      spare -= needed;
-    }
+    if (this.groups.some((g) => g.size) || spare >= 6)
+      for (const group of this.groups) {
+        if (group.size || spare < 3) continue;
+        for (let i = 0; i < 3; i++) group.add(idle.shift()!.ref);
+        spare -= 3;
+      }
     const allocated = raiders();
     const structures = [...this.known.values()].filter(
       (e) => !(e.weaponRange ?? 0),

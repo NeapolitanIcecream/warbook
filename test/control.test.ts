@@ -153,6 +153,29 @@ test("pressure assigns distinct economic targets and preserves a home guard", ()
   const refs = [plan.combat, ...plan.additionalCombat!].flatMap((m) => m.units);
   assert.equal(new Set(refs).size, refs.length);
   assert.equal(plan.production.infantry.count, 10);
+  o.tick += 30;
+  const victim = pressure[0].units[0];
+  o.own = o.own.filter((u) => u.ref !== victim);
+  o.own.push({ ...tank("replacement", 67, 40), name: "E1", type: 3 });
+  c.decide(o);
+  assert.equal(
+    c.controlPlan!.additionalCombat!.find((m) => m.id === "pressure-0")!.units
+      .length,
+    2,
+    "one casualty does not produce a lone replacement on a long march",
+  );
+  const fresh = new Commander("pressure");
+  o.own = o.own.filter(
+    (u) =>
+      u.type !== 3 || ["gi-1", "gi-2", "gi-3", "gi-4", "gi-5"].includes(u.ref),
+  );
+  fresh.decide(o);
+  assert(
+    !fresh.controlPlan!.additionalCombat!.some((m) =>
+      m.id.startsWith("pressure-"),
+    ),
+    "the first group waits for the second front to be ready",
+  );
 });
 
 test("bastion keeps infantry at home and releases reinforcements as a separate batch", () => {
