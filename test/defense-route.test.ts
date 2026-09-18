@@ -103,7 +103,7 @@ test("guards remain near the protected building instead of following their own f
   assert(p);
   const dx = Math.max(2 - p.x, 0, p.x - 4),
     dy = Math.max(2 - p.y, 0, p.y - 3);
-  assert(dx * dx + dy * dy <= 4);
+  assert(dx * dx + dy * dy <= 16);
 });
 
 test("infantry planning cannot use a vehicle-only factory passage", () => {
@@ -131,8 +131,20 @@ test("each approach gets a reachable post next to its own protected asset", () =
   ];
   const p = guardPost(nav, home, { x: -20, y: -20 }, assets, ["south"]);
   assert(p);
-  assert(p.y >= 6, "the other exposed building cannot steal this group's post");
+  assert(p.y >= 4, "the other exposed building cannot steal this group's post");
   assert(nav.path(home, p).length);
+});
+
+test("the guard screens far enough forward to overlap a tank engagement", () => {
+  const home = { x: 0, y: 0 },
+    nav = new LocalGroundMap(mapFixture(), "actor", home, 5, 22, true);
+  const approaching = { x: 0, y: -8 };
+  const p = guardPost(nav, home, approaching, [
+    { x: 0, y: 0, width: 2, height: 2 },
+  ]);
+  assert(p);
+  assert(Math.hypot(p.x - approaching.x, p.y - approaching.y) <= 5);
+  assert(nav.path({ x: -1, y: 0 }, p).length);
 });
 
 test("armor support stays beside the guard on its own reachable ground", () => {

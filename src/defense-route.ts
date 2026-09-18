@@ -58,7 +58,7 @@ export function supportedPost(
   return p ? { x: p.x, y: p.y } : undefined;
 }
 
-/** Infantry cover an exposed building from nearby ground, rather than a distant point toward the enemy. */
+/** Leave room for the guard's shorter range to overlap an approaching tank fight. */
 export function guardPost(
   navigation: LocalGroundMap,
   home: Point,
@@ -92,7 +92,7 @@ export function guardPost(
             x: Math.max(asset.x, Math.min(p.x, asset.x + asset.width - 1)),
             y: Math.max(asset.y, Math.min(p.y, asset.y + asset.height - 1)),
           }) <=
-            2 ** 2 && (p.x - c.x) * dx + (p.y - c.y) * dy > 0,
+            4 ** 2 && (p.x - c.x) * dx + (p.y - c.y) * dy > 0,
       )
       .sort((a, b) => distance2(a, towards) - distance2(b, towards))[0];
     if (p) return { x: p.x, y: p.y };

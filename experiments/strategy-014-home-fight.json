@@ -1,0 +1,27 @@
+{
+  "purpose": "Separate local defensive engagement from expedition withdrawal; two-map eight-game screen",
+  "subjects": {
+    "support-line": {
+      "ref": "a564e21",
+      "mode": "bastion"
+    },
+    "home-fight": {
+      "ref": "4110974e4766ab604f6f7f03baf2a882737391e5",
+      "mode": "bastion"
+    }
+  },
+  "opponents": {
+    "old-defense": {
+      "ref": "b3a1f7ce69ed140fbafb82799f6d2b14d487c052",
+      "mode": "bastion"
+    }
+  },
+  "maps": [
+    "mp29u2.map",
+    "mp06t2.map"
+  ],
+  "rounds": 2,
+  "decision": {
+    "budget": "Eight full games with two execution slots; inspect whether changing support estimates still pull defenders away."
+  }
+}
