@@ -105,7 +105,10 @@ export class Operations {
         continue;
       const speed = e.type === 2 ? 0 : e.type === 3 ? 0.45 : 0.8;
       const age = Math.min(30, (o.tick - e.observedTick) / 15);
-      if (distance(e, target) > 7 + speed * (horizon + age)) continue;
+      const reach = 7 + speed * (horizon + age);
+      // An enemy can meet us on the way; it need not return to the objective
+      // before our estimated arrival to take part in the battle.
+      if (distance(e, target) > reach && distance(e, center) > reach) continue;
       const value =
         e.type === 2 ? 0.45 : e.type === 3 ? 0.12 : e.name === "FV" ? 0.6 : 1;
       defenders += value * Math.sqrt(e.hp / e.maxHp);

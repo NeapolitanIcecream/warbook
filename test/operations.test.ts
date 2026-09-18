@@ -152,3 +152,45 @@ test("a supported three-tank opportunity can finish a weak base without waiting 
     "the force still waits when its actual opposition is stronger",
   );
 });
+
+test("a field army can intercept an attack without reaching its own distant base", () => {
+  const o = observation([
+    contact("refinery", "GAREFN", 24, 2),
+    contact("factory", "GAWEAP", 32, 2),
+    ...Array.from({ length: 3 }, (_, i) =>
+      contact(`guard-${i}`, "MTNK", 33 + i),
+    ),
+    ...Array.from({ length: 10 }, (_, i) => ({
+      ...contact(`field-${i}`, "MTNK", 101 + i),
+      y: 44,
+    })),
+  ]);
+  o.enemies = o.enemies.map((e) =>
+    e.ref.startsWith("field-") ? e : { ...e, y: 89 },
+  );
+  o.home = { x: 141, y: 81 };
+  o.own = force(12).map((u, i) => ({
+    ...u,
+    x: 132 + (i % 3),
+    y: 79 + Math.floor(i / 3),
+    position: {
+      x: 132 + (i % 3) + 0.05,
+      y: 79 + Math.floor(i / 3) + 0.5,
+      z: 0,
+    },
+  }));
+  const planner = new Operations();
+  planner.observe(o, []);
+  o.tick += 15;
+  o.own = o.own.map((u) => ({
+    ...u,
+    x: u.x + 1,
+    position: { ...u.position!, x: u.position!.x + 1.45 },
+  }));
+  planner.observe(o, []);
+  assert.equal(planner.consider(o, o.own), undefined);
+  assert(
+    Number(planner.decision.defenders) >= 13,
+    "the field army is not omitted just because its own base is far away",
+  );
+});
