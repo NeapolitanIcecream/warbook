@@ -1,6 +1,6 @@
 {
   "name": "warbook-ai",
-  "version": "0.1.13",
+  "version": "0.1.13-preview.1",
   "private": true,
   "type": "module",
   "engines": {

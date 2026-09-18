@@ -61,12 +61,12 @@ function optionalRelease(hash: string | undefined) {
   return selected;
 }
 const challengerRelease = optionalRelease(process.env.PLAYER_CHALLENGER);
-const referenceRelease = optionalRelease(process.env.PLAYER_REFERENCE);
+const specialistRelease = optionalRelease(process.env.PLAYER_SPECIALIST);
 const challengerBotPath = challengerRelease
   ? `dist/player/${challengerRelease.sha256}/bot.js`
   : undefined;
-const referenceBotPath = referenceRelease
-  ? `dist/player/${referenceRelease.sha256}/bot.js`
+const specialistBotPath = specialistRelease
+  ? `dist/player/${specialistRelease.sha256}/bot.js`
   : undefined;
 const policyName = (mode: string) =>
   mode === "pressure"
@@ -93,7 +93,7 @@ if (
       watchResult.replay.sha256)
 )
   throw new Error(
-    "WATCH_MATCH must reference a verified, compatible full game",
+    "WATCH_MATCH must specialist a verified, compatible full game",
   );
 
 const clipPlan: ReplayClipPlan | undefined = process.env.REPLAY_CLIP_PLAN
@@ -224,7 +224,7 @@ app.get("/warbook/gpu/:file", async (c) => {
 });
 app.get("/", (c) =>
   c.html(
-    `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Warbook · 本地对战</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b1119;color:#e5ebf0;font:17px/1.65 system-ui}main{max-width:680px;padding:48px}small{color:#8cabb8;letter-spacing:3px}h1{font-size:52px;margin:12px 0}p{color:#adbac7}.start{display:inline-block;padding:14px 28px;background:#c9aa65;color:#111820;text-decoration:none;font-weight:700;border-radius:5px;margin:20px 12px 20px 0}.watch{background:transparent;color:#c9aa65;border:1px solid #c9aa65}li{margin:6px 0}footer{margin-top:40px;font-size:13px;color:#758793}</style><main><small>WARBOOK / LOCAL PLAY</small><h1>指挥你的下一场战役。</h1><p>在红色警戒 2 的完整战场上，与 Warbook AI 对战。</p><p>当前默认 AI：${policyName(release.mode)} ${release.version.replace("warbook-", "")}。</p><a class="start" href="/game/">开始本地对战 →</a>${challengerRelease ? `<a class="start watch" href="/challenge/">${policyName(challengerRelease.mode)} ${challengerRelease.version.replace("warbook-", "")}→</a>` : ""}${referenceRelease ? `<a class="start watch" href="/reference/">旧版对照 ${referenceRelease.version.replace("warbook-", "")} →</a>` : ""}${watchReplay ? '<a class="start watch" href="/watch">观看 AI 对局回放 →</a>' : ""}${existsSync("runs/showcase/index.html") ? '<a class="start watch" href="/showcase/">观看阶段短片 →</a>' : ""}<ol><li>选择「本地对战」，点击「开始游戏」。</li><li>选择美国，展开基地车，建设基地并作战。</li><li>按 Esc 退出；回到菜单即可再次开局。</li></ol><p>首次打开会自动导入本机游戏资源，稍候即可。</p><footer>研发试玩版 · 客户端 ${CLIENT_VERSION} · AI 使用已探索区域的 API 观察。<br>支持基本建设、采矿、补兵和地面战斗；仍在持续改进。</footer></main></html>`,
+    `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Warbook · 本地对战</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b1119;color:#e5ebf0;font:17px/1.65 system-ui}main{max-width:680px;padding:48px}small{color:#8cabb8;letter-spacing:3px}h1{font-size:52px;margin:12px 0}p{color:#adbac7}.start{display:inline-block;padding:14px 28px;background:#c9aa65;color:#111820;text-decoration:none;font-weight:700;border-radius:5px;margin:20px 12px 20px 0}.watch{background:transparent;color:#c9aa65;border:1px solid #c9aa65}li{margin:6px 0}footer{margin-top:40px;font-size:13px;color:#758793}</style><main><small>WARBOOK / LOCAL PLAY</small><h1>指挥你的下一场战役。</h1><p>在红色警戒 2 的完整战场上，与 Warbook AI 对战。</p><p>当前默认 AI：${policyName(release.mode)} ${release.version.replace("warbook-", "")}。</p><a class="start" href="/game/">开始本地对战 →</a>${challengerRelease ? `<a class="start watch" href="/challenge/">${policyName(challengerRelease.mode)} ${challengerRelease.version.replace("warbook-", "")}→</a>` : ""}${specialistRelease ? `<a class="start watch" href="/specialist/">${policyName(specialistRelease.mode)} ${specialistRelease.version.replace("warbook-", "")} →</a>` : ""}${watchReplay ? '<a class="start watch" href="/watch">观看 AI 对局回放 →</a>' : ""}${existsSync("runs/showcase/index.html") ? '<a class="start watch" href="/showcase/">观看阶段短片 →</a>' : ""}<ol><li>选择「本地对战」，点击「开始游戏」。</li><li>选择美国，展开基地车，建设基地并作战。</li><li>按 Esc 退出；回到菜单即可再次开局。</li></ol><p>首次打开会自动导入本机游戏资源，稍候即可。</p><footer>研发试玩版 · 客户端 ${CLIENT_VERSION} · AI 使用已探索区域的 API 观察。<br>支持基本建设、采矿、补兵和地面战斗；仍在持续改进。</footer></main></html>`,
   ),
 );
 app.get("/watch", (c) =>
@@ -301,14 +301,14 @@ app.get("/warbook/health", (c) =>
     watchAvailable: Boolean(watchReplay),
     release,
     challengerRelease,
-    referenceRelease,
+    specialistRelease,
   }),
 );
 app.get("/warbook/bot.js", serveStatic({ path: botPath }));
 if (challengerBotPath)
   app.get("/warbook/challenger.js", serveStatic({ path: challengerBotPath }));
-if (referenceBotPath)
-  app.get("/warbook/reference.js", serveStatic({ path: referenceBotPath }));
+if (specialistBotPath)
+  app.get("/warbook/specialist.js", serveStatic({ path: specialistBotPath }));
 app.get(
   "/warbook/ra2-local.zip",
   serveStatic({ path: "assets/ra2-local.zip" }),
@@ -332,31 +332,34 @@ if (challengerRelease)
     "/warbook/challenger/telemetry",
     receiveTelemetry(challengerRelease),
   );
-if (referenceRelease)
-  app.post("/warbook/reference/telemetry", receiveTelemetry(referenceRelease));
+if (specialistRelease)
+  app.post(
+    "/warbook/specialist/telemetry",
+    receiveTelemetry(specialistRelease),
+  );
 const localConfig = (c: Context) =>
   c.text(
     `[General]\nreplaysUrlWhitelist=127.0.0.1\nbotsEnabled=yes\nquickMatchEnabled=no\nunrankedQueueEnabled=no\nlegacyRegistrationEnabled=no\nviewport.width=1280\nviewport.height=800\ndefaultLanguage=zh-TW\ngameResArchiveUrl=${localOrigin}/warbook/ra2-local.zip\nserversUrl=${localOrigin}/warbook/servers.ini\nmapsBaseUrl=${localOrigin}/game/maps/\nmodsBaseUrl=${localOrigin}/game/mods/\n`,
   );
 app.get("/game/config.ini", localConfig);
 app.get("/challenge/config.ini", localConfig);
-app.get("/reference/config.ini", localConfig);
+app.get("/specialist/config.ini", localConfig);
 app.get("/client/:version/config.ini", localConfig);
 app.get("/warbook/servers.ini", (c) => c.text("[Servers]\n"));
 const gamePage =
-  (slot: "main" | "challenge" | "reference") => async (c: Context) => {
+  (slot: "main" | "challenge" | "specialist") => async (c: Context) => {
     const selected =
       slot === "challenge"
         ? challengerRelease
-        : slot === "reference"
-          ? referenceRelease
+        : slot === "specialist"
+          ? specialistRelease
           : release;
     if (!selected) return c.notFound();
     const name =
       slot === "challenge"
         ? "challenger"
-        : slot === "reference"
-          ? "reference"
+        : slot === "specialist"
+          ? "specialist"
           : "bot";
     const botUrl = `/warbook/${name}.js?v=${selected.sha256}`;
     const telemetryUrl =
@@ -413,8 +416,8 @@ const gamePage =
 app.get("/game/", gamePage("main"));
 app.get("/challenge", (c) => c.redirect("/challenge/"));
 app.get("/challenge/", gamePage("challenge"));
-app.get("/reference", (c) => c.redirect("/reference/"));
-app.get("/reference/", gamePage("reference"));
+app.get("/specialist", (c) => c.redirect("/specialist/"));
+app.get("/specialist/", gamePage("specialist"));
 const clientAsset = async (c: Context) => {
   const url = new URL(c.req.url);
   const requestedVersion = c.req.param("version");
