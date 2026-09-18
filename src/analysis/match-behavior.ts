@@ -306,6 +306,7 @@ export class ReplayBehavior {
     }[],
   };
   private ownDestroyed: Record<string, number> = {};
+  private buildingLossWindows = new Set<number>();
   private armorLosses: {
     tick: number;
     nearestFriendlyArmorDistance: number | null;
@@ -319,6 +320,8 @@ export class ReplayBehavior {
     if (unit.building && !unit.defense) this.nonDefenseDestroyed[side]++;
     if (side === "own" && unit.name) {
       this.ownDestroyed[unit.name] = (this.ownDestroyed[unit.name] ?? 0) + 1;
+      if (unit.building && tick !== undefined)
+        this.buildingLossWindows.add(Math.floor(tick / 450));
       const previous = this.previous.get(`own:${unit.id}`);
       if (
         isArmor(unit.name) &&
@@ -510,7 +513,8 @@ export class ReplayBehavior {
         w.infantryMin > 0 &&
         w.firstDamageTick !== undefined &&
         w.lastDamageTick !== undefined &&
-        w.lastDamageTick - w.firstDamageTick >= 150,
+        (w.lastDamageTick - w.firstDamageTick >= 150 ||
+          this.buildingLossWindows.has(Math.floor(w.fromTick / 450))),
     );
     const noFire = (w: DefenseWindow) =>
       !w.firingIds.size && !w.peakFiringUnitsIn30Ticks;
@@ -588,7 +592,7 @@ export function renderBehavior(b: ReturnType<ReplayBehavior["finish"]>) {
   lines.push(
     d
       ? `- 防守参与：${clockTime(d.fromTick)}–${clockTime(d.toTick)}，${d.buildings.join("/")} 掉血 ${d.hpDecrease}，可见地面威胁在附近；己方战斗步兵 ${d.infantryMin}–${d.infantryMax} 名，${d.infantryWithFiringSignals} 名有开火信号。两秒窗开火人数平均 ${(d.firingUnitSamples / Math.max(1, d.firingSamples)).toFixed(1)}、峰值 ${d.peakFiringUnitsIn30Ticks}；包括接敌/转场时段，几何射程内最多 ${d.geometricRangeMax} 名。`
-      : "- 防守参与：未找到持续至少 10 秒、存在己方步兵及可见近处地面威胁的建筑受损窗口；不据此判定防守有效。",
+      : "- 防守参与：未找到存在己方步兵及近处可见地面威胁的持续受损或建筑损失窗口；不据此判定防守有效。",
   );
   const churn = b.shortInfantryDeploymentsWithoutFire;
   const canceled = churn.examples

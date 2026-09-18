@@ -83,6 +83,43 @@ const replayUnit = (
   ...overrides,
 });
 
+test("a rapid building loss is not hidden by the ten-second damage-span filter", () => {
+  for (const lost of [false, true]) {
+    const b = new ReplayBehavior(),
+      power = replayUnit(1, {
+        name: "GAPOWR",
+        building: true,
+        infantry: false,
+        combat: false,
+        hp: 750,
+        x: 0,
+        y: 0,
+      });
+    const gi = replayUnit(2, { x: 10, y: 0 }),
+      enemy = replayUnit(3, { x: 2, y: 0 });
+    for (let tick = 0; tick <= 90; tick += 3)
+      b.sample({
+        tick,
+        own: [{ ...power, hp: 750 - tick * 5 }, gi],
+        opponent: [enemy],
+        visibleEnemyIds: [3],
+      });
+    if (lost)
+      b.destroyed(
+        "own",
+        { id: 1, name: "GAPOWR", building: true, defense: false },
+        93,
+      );
+    const result = b.finish(new JournalBehavior().finish());
+    assert.equal(
+      !!result.defenseWindow,
+      lost,
+      "a short surviving hit keeps the old filter; a destroyed building warrants review",
+    );
+    if (lost) assert.equal(result.defenseWindow!.infantryWithFiringSignals, 0);
+  }
+});
+
 test("short deployment cancellation is a replay cue, and fire on deployment entry counts", () => {
   const behavior = new ReplayBehavior();
   const enemy = replayUnit(9, { x: 22 });

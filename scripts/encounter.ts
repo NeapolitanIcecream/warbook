@@ -318,6 +318,7 @@ async function main() {
         journalMaximumSampleGap: 300,
         homeRadius: 12,
         defenseMinimumDamageSpanTicks: 150,
+        defenseIncludesShortBuildingLosses: true,
         defenseWindowTicks: 450,
         firingWindowTicks: 30,
         fire: "Same-weapon cooldown increases; signals consistent with firing, not exact shot/hit attribution. Both primary and secondary weapons are checked.",
