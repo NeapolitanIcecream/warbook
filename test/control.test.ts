@@ -648,7 +648,7 @@ test("bastion reforms after heavy losses without issuing the same unit to two ta
   assert.equal(new Set(refs).size, refs.length);
 });
 
-test("a local counterattack window can release four ready tanks after observed armor pressure subsides", () => {
+test("a favorable home engagement stays in defense when attacker support changes", () => {
   const c = new Commander("bastion"),
     o = observation();
   o.own = o.own.filter((u) => u.name !== "MTNK");
@@ -666,7 +666,7 @@ test("a local counterattack window can release four ready tanks after observed a
     weaponRange: 5,
     observedTick: o.tick,
   }));
-  c.decide(o);
+  const firstIntents = c.decide(o);
   assert.equal(c.controlPlan!.combat.kind, "defend");
   o.tick += 90;
   o.enemies = o.enemies.map((e, i) => ({
@@ -674,9 +674,24 @@ test("a local counterattack window can release four ready tanks after observed a
     ...(i ? { x: 130 + i, y: 120 } : {}),
     observedTick: o.tick,
   }));
-  c.decide(o);
-  assert.equal(c.controlPlan!.combat.kind, "advance");
+  const intents = c.decide(o);
+  assert.equal(c.controlPlan!.combat.kind, "defend");
   assert.equal(c.controlPlan!.combat.units.length, 4);
+  assert(
+    [...firstIntents, ...intents].some(
+      (i) => i.kind === "attack" && i.target === "enemy-0",
+    ),
+  );
+  o.tick += 3;
+  o.enemies = o.enemies.map((e, i) => ({
+    ...e,
+    x: 70 + (i % 3),
+    y: 45 + Math.floor(i / 3),
+    observedTick: o.tick,
+  }));
+  c.decide(o);
+  assert.equal(c.controlPlan!.combat.units.length, 4);
+  assert(!c.controlPlan!.additionalCombat!.some((m) => m.kind === "withdraw"));
 });
 
 test("a wiped assault releases surviving joiners back into the reserve", () => {

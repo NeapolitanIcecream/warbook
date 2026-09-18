@@ -1,0 +1,31 @@
+{
+  "purpose": "Test whether home armor fights within reach of infantry support, preserving preview reconnaissance, split defense and fort placement",
+  "subjects": {
+    "preview-013": {
+      "ref": "6ec57d7",
+      "mode": "bastion"
+    },
+    "support-line": {
+      "ref": "a564e21",
+      "mode": "bastion"
+    }
+  },
+  "opponents": {
+    "pressure-specialist": {
+      "ref": "36a7f72",
+      "mode": "pressure"
+    },
+    "old-defense": {
+      "ref": "b3a1f7ce69ed140fbafb82799f6d2b14d487c052",
+      "mode": "bastion"
+    }
+  },
+  "maps": [
+    "mp29u2.map",
+    "mp06t2.map"
+  ],
+  "rounds": 2,
+  "decision": {
+    "budget": "16 complete games; inspect defensive engagements and losses before extending the comparison. Ordinary starts and alternating execution slots, not seed-paired games."
+  }
+}

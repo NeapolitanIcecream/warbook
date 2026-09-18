@@ -217,7 +217,13 @@ export class BastionStrategy implements StrategicController {
             travelSeconds: 0,
           }
         : undefined;
-    const nextOperation = opportunity ?? exploration;
+    // A favorable fight at home belongs to defense tactics. Promoting it to
+    // an expedition can immediately trigger a full withdrawal as another
+    // attacker becomes visible, taking the tanks away from their own guard.
+    const nextOperation =
+      opportunity?.reason === "local-counterattack"
+        ? undefined
+        : (opportunity ?? exploration);
     if (
       !this.assault.size &&
       !protectNow &&
