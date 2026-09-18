@@ -77,10 +77,13 @@ const vehicleOrder = (result: ReturnType<QueueProduction["control"]>) =>
   result.intents.find((i) => i.kind === "queue" && i.product.queue === 3);
 
 test("one surviving scout does not prevent building or replacing a second scout", () => {
-  const { o, plan } = fixture();
+  const { o, plan: basePlan } = fixture();
   const controller = new QueueProduction();
-  plan.scouts = { product: "ADOG", count: 2 };
-  plan.infantry = { product: "E1", count: 6 };
+  const plan = {
+    ...basePlan,
+    scouts: { product: "ADOG", count: 2 },
+    infantry: { product: "E1", count: 6 },
+  };
   o.products.push({ name: "ADOG", cost: 200, type: 3, queue: 2 });
   o.own.push(unit("E1", "gi-1"), unit("E1", "gi-2"), unit("ADOG", "dog-1"));
   const requestsDog = () =>
