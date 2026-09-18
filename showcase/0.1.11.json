@@ -2,11 +2,10 @@
   "version": "0.1.11",
   "sourceRun": "runs/closure-release-pool/mp06t2.map/supalosa/0-closure-candidate",
   "replaySha256": "714f627444033ca32dcc1a47ffaca4eadb65560692a724162a18f0187b07a6a8",
-  "matchLabel": "黄色 Warbook 0.1.11 · 红色 Supalosa · 本局 16:54 获胜",
   "clips": [
     {
       "id": "defense",
-      "title": "步兵接敌与车辆支援",
+      "title": "防守",
       "startTick": 5625,
       "endTick": 6375,
       "camera": [
@@ -15,29 +14,11 @@
           "x": 38,
           "y": 70
         }
-      ],
-      "captions": [
-        {
-          "tick": 5625,
-          "text": "红方步兵从北侧接近电厂，黄色守军开始支援。"
-        },
-        {
-          "tick": 5850,
-          "text": "黄色步兵和坦克正在靠拢，红方大兵已在电厂附近部署。"
-        },
-        {
-          "tick": 6045,
-          "text": "电厂被毁。守军参与了战斗，但没能保住建筑。"
-        },
-        {
-          "tick": 6300,
-          "text": "来袭压力消退，幸存部队重新集结。"
-        }
       ]
     },
     {
       "id": "counterattack",
-      "title": "成组反击与建筑打击",
+      "title": "反击",
       "startTick": 7725,
       "endTick": 8475,
       "camera": [
@@ -61,25 +42,8 @@
           "x": 83,
           "y": 47
         }
-      ],
-      "captions": [
-        {
-          "tick": 7725,
-          "text": "四辆黄色坦克进入敌基地附近，红方坦克前来拦截。"
-        },
-        {
-          "tick": 7995,
-          "text": "一辆黄色坦克被击毁，剩下三辆继续战斗。"
-        },
-        {
-          "tick": 8055,
-          "text": "黄色坦克开始攻击红方建筑。"
-        },
-        {
-          "tick": 8325,
-          "text": "三辆坦克接近建造场，继续攻击这一高价值目标。"
-        }
       ]
     }
-  ]
+  ],
+  "playbackRate": 4
 }

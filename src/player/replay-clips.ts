@@ -4,14 +4,13 @@ export interface ReplayClip {
   startTick: number;
   endTick: number;
   camera: { tick: number; x: number; y: number }[];
-  captions: { tick: number; text: string }[];
 }
 
 export interface ReplayClipPlan {
   version: string;
   sourceRun: string;
   replaySha256: string;
-  matchLabel: string;
+  playbackRate: number;
   clips: ReplayClip[];
 }
 
@@ -101,29 +100,6 @@ export async function loadReplayClipControls(): Promise<(screen: any) => void> {
 
     const draw = () => {
       ctx.drawImage(source, 0, 0, 1280, 720);
-      ctx.fillStyle = "#0b1119ed";
-      ctx.fillRect(0, 0, 1110, 76);
-      ctx.fillRect(0, 650, 1280, 70);
-      ctx.fillStyle = "#dfc27e";
-      ctx.font = '600 25px system-ui, "PingFang SC", sans-serif';
-      ctx.fillText(`WARBOOK ${plan.version}  /  ${clip!.title}`, 24, 31);
-      ctx.fillStyle = "#d6dfe8";
-      ctx.font = '17px system-ui, "PingFang SC", sans-serif';
-      ctx.fillText(plan.matchLabel, 24, 59);
-      const tick = screen.game.currentTick;
-      const caption =
-        clip!.captions.filter((entry) => entry.tick <= tick).at(-1)?.text ?? "";
-      ctx.fillStyle = "#f3f6fa";
-      ctx.font = '21px system-ui, "PingFang SC", sans-serif';
-      ctx.fillText(caption, 24, 681);
-      ctx.fillStyle = "#a8bacb";
-      ctx.font = '14px system-ui, "PingFang SC", sans-serif';
-      ctx.fillText("真实完整对局节选 · 游戏时钟 1× · 无声", 24, 708);
-      ctx.textAlign = "right";
-      ctx.fillStyle = "#dfc27e";
-      ctx.font = "600 23px ui-monospace, monospace";
-      ctx.fillText(clock(tick), 1254, 693);
-      ctx.textAlign = "left";
     };
 
     const begin = () => {
@@ -163,6 +139,8 @@ export async function loadReplayClipControls(): Promise<(screen: any) => void> {
             wallSeconds: (performance.now() - started) / 1000,
             sourceSize,
             outputSize: { width: 1280, height: 720 },
+            overlayText: false,
+            gameTicksPerSecond: 15,
             mimeType,
             framesDrawn: frames,
             maxFrameGapMillis,

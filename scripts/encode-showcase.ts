@@ -14,6 +14,8 @@ import type { ReplayClipPlan } from "../src/player/replay-clips.js";
 const planFile = process.argv[2];
 if (!planFile) throw new Error("Usage: encode-showcase.ts <clip plan.json>");
 const plan: ReplayClipPlan = JSON.parse(readFileSync(planFile, "utf8"));
+if (!Number.isFinite(plan.playbackRate) || plan.playbackRate < 4)
+  throw new Error("Showcase playback must be at least 4x");
 const directory = resolve(`runs/showcase/${plan.version}`);
 mkdirSync(directory, { recursive: true });
 const hash = (path: string) =>
@@ -42,17 +44,25 @@ for (const clip of plan.clips) {
   );
   if (
     capture.replaySha256 !== plan.replaySha256 ||
+    capture.overlayText !== false ||
+    capture.gameTicksPerSecond !== 15 ||
     !isDeepStrictEqual(capture.plan, clip) ||
     hash(input) !== capture.sha256
   )
     throw new Error(`Capture provenance mismatch: ${clip.id}`);
-  const output = `${directory}/${clip.id}.mp4`;
+  const fileName = `${clip.id}-${plan.playbackRate}x.mp4`;
+  const posterName = `${clip.id}-${plan.playbackRate}x.jpg`;
+  const output = `${directory}/${fileName}`;
+  const expectedSeconds =
+    (clip.endTick - clip.startTick) / 15 / plan.playbackRate;
   ffmpeg([
     "-i",
     input,
     "-an",
     "-vf",
-    "fps=30",
+    `setpts=(PTS-STARTPTS)/${plan.playbackRate},fps=30`,
+    "-t",
+    String(expectedSeconds),
     "-c:v",
     "libx264",
     "-threads",
@@ -86,11 +96,10 @@ for (const clip of plan.clips) {
       { encoding: "utf8" },
     ),
   );
-  const expectedSeconds = (clip.endTick - clip.startTick) / 15;
   const duration = Number(probe.format.duration);
   const video = probe.streams[0];
   if (
-    Math.abs(duration - expectedSeconds) > 1 ||
+    Math.abs(duration - expectedSeconds) > 0.15 ||
     video.codec_name !== "h264" ||
     video.width !== 1280 ||
     video.height !== 720 ||
@@ -101,21 +110,25 @@ for (const clip of plan.clips) {
     );
   ffmpeg([
     "-ss",
-    "15",
+    String(duration / 3),
     "-i",
     output,
     "-frames:v",
     "1",
     "-q:v",
     "2",
-    `${directory}/${clip.id}.jpg`,
+    `${directory}/${posterName}`,
   ]);
   clips.push({
     id: clip.id,
+    fileName,
+    posterName,
     title: clip.title,
     startTick: capture.startTick,
     endTick: capture.endTick,
     seconds: duration,
+    playbackRate: plan.playbackRate,
+    overlayText: false,
     bytes: statSync(output).size,
     sha256: hash(output),
     video,
@@ -123,21 +136,21 @@ for (const clip of plan.clips) {
   console.log(JSON.stringify(clips.at(-1)));
 }
 
-const preview = plan.clips[0].id;
+const previewFile = `preview-${plan.playbackRate}x.gif`;
 ffmpeg([
   "-ss",
-  "18",
+  String(Math.max(0, Math.min(18 / plan.playbackRate, clips[0].seconds - 8))),
   "-t",
   "8",
   "-i",
-  `${directory}/${preview}.mp4`,
+  `${directory}/${clips[0].fileName}`,
   "-filter_complex",
   "[0:v]fps=10,scale=640:-2:flags=lanczos,split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=3[v]",
   "-map",
   "[v]",
   "-loop",
   "0",
-  `${directory}/preview.gif`,
+  `${directory}/${previewFile}`,
 ]);
 const match = JSON.parse(readFileSync(`${plan.sourceRun}/result.json`, "utf8"));
 if (hash(match.replay.file) !== plan.replaySha256)
@@ -151,11 +164,12 @@ writeFileSync(
       replaySha256: plan.replaySha256,
       clips,
       preview: {
-        bytes: statSync(`${directory}/preview.gif`).size,
-        sha256: hash(`${directory}/preview.gif`),
+        fileName: previewFile,
+        playbackRate: plan.playbackRate,
+        bytes: statSync(`${directory}/${previewFile}`).size,
+        sha256: hash(`${directory}/${previewFile}`),
       },
-      recording:
-        "Scripted camera; 15 simulation ticks per video second; silent; original replay commands unchanged",
+      recording: `Original game canvas; no added text; ${plan.playbackRate}x playback; silent; original replay commands unchanged`,
       validation:
         "Encoded format, duration and size verified here; visual review recorded separately",
     },
@@ -164,7 +178,7 @@ writeFileSync(
   ) + "\n",
 );
 
-const html = `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Warbook ${escape(plan.version)} · 对局短片</title><style>body{margin:0;background:#0b1119;color:#e9eff5;font:17px/1.7 system-ui}main{max-width:1040px;margin:auto;padding:38px 22px 72px}h1{font-size:38px;line-height:1.2}h2{font-size:23px;margin:0 0 8px}p{color:#afbdca}article{margin:32px 0;padding:22px;background:#131e2b;border:1px solid #28384c;border-radius:12px}video{display:block;width:100%;margin:16px 0;background:#000;border-radius:6px}a{color:#dfc27e}small{color:#91a4b5}.tag{color:#dfc27e;letter-spacing:2px}</style><main><div class="tag">WARBOOK / ${escape(plan.version)}</div><h1>两段真实对局，看看 AI 如何作战。</h1><p>${escape(plan.matchLabel)}。样片保留了电厂与坦克损失。视频无声，可直接播放，无需游戏客户端。</p>${clips.map((clip) => `<article><h2>${escape(clip.title)}</h2><small>游戏时间 ${time(clip.startTick)}–${time(clip.endTick)} · ${clip.seconds.toFixed(0)} 秒 · ${(clip.bytes / 1_000_000).toFixed(1)} MB</small><video controls playsinline preload="metadata" poster="${clip.id}.jpg" src="${clip.id}.mp4"></video><a href="${clip.id}.mp4" download>下载 MP4</a></article>`).join("")}<p>这是单局行为展示；最终开发池新旧版本同为 20/24 胜，不能据此宣称整体实力提升。</p><p><a href="match.rpl" download>下载完整回放</a>（重演需兼容的 0.83.3 客户端与游戏资源） · <a href="preview.gif" download>下载 8 秒动图</a></p></main></html>`;
+const html = `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Warbook ${escape(plan.version)}</title><style>body{margin:0;background:#0b1119;color:#e9eff5;font:17px/1.7 system-ui}main{max-width:1040px;margin:auto;padding:32px 22px 60px}h1{font-size:30px;margin-bottom:4px}h2{font-size:22px;margin:0}article{margin:26px 0;padding:20px;background:#131e2b;border:1px solid #28384c;border-radius:10px}video{display:block;width:100%;margin:14px 0;background:#000;border-radius:5px}a{color:#dfc27e}small{color:#91a4b5}</style><main><h1>Warbook ${escape(plan.version)}</h1><small>${plan.playbackRate}× · 720p · 无声</small>${clips.map((clip) => `<article><h2>${escape(clip.title)}</h2><small>${time(clip.startTick)}–${time(clip.endTick)} · ${clip.seconds.toFixed(1)} 秒 · ${(clip.bytes / 1_000_000).toFixed(1)} MB</small><video controls playsinline preload="metadata" poster="${clip.posterName}?v=${clip.sha256.slice(0, 12)}" src="${clip.fileName}?v=${clip.sha256.slice(0, 12)}"></video><a href="${clip.fileName}" download>下载 MP4</a></article>`).join("")}<a href="${previewFile}" download>GIF</a> · <a href="match.rpl" download>完整回放</a></main></html>`;
 writeFileSync(`${directory}/index.html`, html);
 writeFileSync(
   resolve("runs/showcase/index.html"),
