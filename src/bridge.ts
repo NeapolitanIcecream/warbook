@@ -8,6 +8,7 @@ import {
   type TechnoRules,
 } from "@chronodivide/game-api";
 import { defenseRoute } from "./defense-route.js";
+import { refinerySite } from "./refinery-site.js";
 import { combatCapabilities } from "./unit-capabilities.js";
 import { Commander, type PolicyMode } from "./policy.js";
 import {
@@ -250,20 +251,49 @@ export class WarbookBot extends Bot {
       const anchor = this.game.rules.getBuilding(name).isBaseDefense
         ? (plannedAnchor ?? enemy ?? home)
         : home;
-      for (const p of [...candidates.values()].sort(
-        (a, b) =>
-          distance2(a, anchor) - distance2(b, anchor) || a.x - b.x || a.y - b.y,
-      )) {
-        let visible = true;
+      const legal = (p: Point) => {
         for (let x = p.x; x < p.x + foundation.width; x++)
           for (let y = p.y; y < p.y + foundation.height; y++) {
             const tile = this.game.map.getTile(x, y);
             if (!tile || !this.game.map.isVisibleTile(tile, this.name))
-              visible = false;
+              return false;
           }
-        if (!visible) continue;
-        const tile = this.game.map.getTile(p.x, p.y)!;
-        if (this.player.canPlaceBuilding(name, tile)) {
+        const tile = this.game.map.getTile(p.x, p.y);
+        return !!tile && this.player.canPlaceBuilding(name, tile);
+      };
+      if (["GAREFN", "NAREFN"].includes(name)) {
+        const miner = name === "GAREFN" ? "CMIN" : "HARV";
+        const speed = (
+          this.game.rules.getObject(miner, ObjectType.Vehicle) as TechnoRules
+        ).speedType;
+        const site =
+          speed === undefined
+            ? undefined
+            : refinerySite(
+                this.game.map,
+                this.name,
+                home,
+                [...candidates.values()],
+                foundation,
+                speed,
+                legal,
+              );
+        if (site) {
+          buildSites.push({ name, ...site.point });
+          this.trace?.({
+            tick,
+            actor: this.name,
+            kind: "refinery_site",
+            ...site,
+          });
+          continue;
+        }
+      }
+      for (const p of [...candidates.values()].sort(
+        (a, b) =>
+          distance2(a, anchor) - distance2(b, anchor) || a.x - b.x || a.y - b.y,
+      )) {
+        if (legal(p)) {
           buildSites.push({ name, ...p });
           break;
         }
