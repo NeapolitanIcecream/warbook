@@ -40,8 +40,9 @@ export class DefenseSituation {
         : (o.baseRally ?? o.home);
     // Mobile miners need vehicle relief. Forward forts are supporting fire,
     // not new anchors that may drag the whole garrison out of the base.
-    const assets = o.own.filter(
-      (u) => u.harvester || (u.type === 2 && !(u.weaponRange ?? 0)),
+    const assets = o.own.filter((u) => u.harvester || u.type === 2);
+    const guardAssets = assets.filter(
+      (u) => u.type === 2 && !(u.weaponRange ?? 0),
     );
     for (const asset of assets) {
       if (asset.hp < (this.previousHp.get(asset.ref) ?? asset.hp))
@@ -85,7 +86,9 @@ export class DefenseSituation {
             ) || a.distance - b.distance,
       );
     const incursions = contacts.filter((i) => i.distance <= 10 ** 2);
-    const guardIncursions = contacts.filter((i) => i.asset.type === 2);
+    const guardIncursions = contacts.filter((i) =>
+      guardAssets.includes(i.asset),
+    );
     if (incursions.length) {
       this.lastThreatTick = o.tick;
       if (o.tick - this.lastResponseTick >= 90) {
@@ -108,6 +111,7 @@ export class DefenseSituation {
       direction,
       post,
       assets,
+      guardAssets,
       incursions,
       guardIncursions,
       vehiclePost,

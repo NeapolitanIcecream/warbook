@@ -1,0 +1,40 @@
+{
+  "purpose": "Confirm the corrected infantry/vehicle protection boundary after the rejected F3 release check",
+  "subjects": {
+    "published-0112": {
+      "ref": "f8f491e",
+      "mode": "bastion"
+    },
+    "release-0113": {
+      "ref": "fa0b2b2",
+      "mode": "bastion"
+    }
+  },
+  "opponents": {
+    "pressure-specialist": {
+      "ref": "36a7f72",
+      "mode": "pressure"
+    },
+    "old-defense": {
+      "ref": "b3a1f7ce69ed140fbafb82799f6d2b14d487c052",
+      "mode": "bastion"
+    },
+    "old-main": {
+      "ref": "8326311288ec685c3da43b1d182071dc36938fe8",
+      "mode": "factory-exit"
+    },
+    "supalosa": {
+      "native": "supalosa"
+    }
+  },
+  "maps": [
+    "mp29u2.map",
+    "mp08t2.map",
+    "mp06t2.map",
+    "mp03t4.map"
+  ],
+  "rounds": 2,
+  "decision": {
+    "budget": "64 ordinary full games, same four opponents and maps as the rejected release check, 32 per policy. Baseline 0.1.12 reruns under the identical conditions. All starts, caps and failures retained. Verify remote miners and forward forts no longer command infantry deployments; inspect all candidate losses/caps. No scoring changes or pooled earlier screens."
+  }
+}

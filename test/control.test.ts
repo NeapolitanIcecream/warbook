@@ -1471,6 +1471,10 @@ test("remote miners and forward forts cannot pull the infantry garrison away fro
   ];
   const situation = new DefenseSituation().observe(o);
   assert(situation.incursions.some((i) => i.asset.ref === "miner"));
+  assert(
+    situation.incursions.some((i) => i.asset.ref === "forward-fort"),
+    "vehicles still support a threatened fort",
+  );
   assert.equal(situation.guardIncursions.length, 0);
   c.decide(o);
   const guard = c.controlPlan!.additionalCombat!.find(

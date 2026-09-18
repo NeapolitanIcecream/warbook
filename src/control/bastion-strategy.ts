@@ -85,6 +85,7 @@ export class BastionStrategy implements StrategicController {
       direction,
       post,
       assets,
+      guardAssets,
       incursions,
       guardIncursions,
       vehiclePost,
@@ -342,10 +343,7 @@ export class BastionStrategy implements StrategicController {
             units: infantry.map((u) => u.ref),
             destination: post,
             objective: "guard-base",
-            protectedAssets: assets
-              .filter((u) => u.type === 2)
-              .map((u) => u.ref)
-              .sort(),
+            protectedAssets: guardAssets.map((u) => u.ref).sort(),
             approach: direction,
             engagement: { allowCrush: false },
           }),
