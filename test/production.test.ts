@@ -86,11 +86,15 @@ test("one surviving scout does not prevent building or replacing a second scout"
   };
   o.products.push({ name: "ADOG", cost: 200, type: 3, queue: 2 });
   o.own.push(unit("E1", "gi-1"), unit("E1", "gi-2"), unit("ADOG", "dog-1"));
+  o.credits = 250;
   const requestsDog = () =>
     controller
       .control(o, plan, [])
       .intents.some((i) => i.kind === "queue" && i.product.name === "ADOG");
-  assert(requestsDog());
+  assert(
+    requestsDog(),
+    "a fully affordable scout does not wait for the GI surplus gate",
+  );
   o.tick += 200;
   o.own.push(unit("ADOG", "dog-2"));
   assert(!requestsDog());

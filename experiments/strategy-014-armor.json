@@ -1,0 +1,27 @@
+{
+  "purpose": "Test whether all nearby defensive tanks engage together and concentrate fire with the supporting infantry",
+  "subjects": {
+    "supporting-fire": {
+      "ref": "c53cebb",
+      "mode": "bastion"
+    },
+    "grouped-defense": {
+      "ref": "cc0b1ca416098a8e816e0866959b714b2b722b20",
+      "mode": "bastion"
+    }
+  },
+  "opponents": {
+    "old-defense": {
+      "ref": "b3a1f7ce69ed140fbafb82799f6d2b14d487c052",
+      "mode": "bastion"
+    }
+  },
+  "maps": [
+    "mp29u2.map",
+    "mp06t2.map"
+  ],
+  "rounds": 2,
+  "decision": {
+    "budget": "Eight full games with two execution slots; inspect whether changing support estimates still pull defenders away."
+  }
+}
