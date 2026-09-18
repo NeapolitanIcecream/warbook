@@ -129,3 +129,26 @@ test("newly revealed defenders invalidate an ongoing attack before the force is 
     "finish a nearly destroyed objective already in range rather than discarding the result",
   );
 });
+
+test("a supported three-tank opportunity can finish a weak base without waiting for a fourth", () => {
+  const o = observation([
+    contact("barracks", "GAPILE", 20, 2),
+    contact("factory", "GAWEAP", 100, 2),
+  ]);
+  o.enemies[0].hp = 400;
+  o.own = force(3).map((u) => ({ ...u, hp: 240 }));
+  const planner = new Operations();
+  planner.observe(o, []);
+  assert.equal(planner.consider(o, o.own)?.ref, "barracks");
+  o.enemies.push(
+    ...Array.from({ length: 4 }, (_, i) =>
+      contact(`guard-${i}`, "MTNK", 21 + i),
+    ),
+  );
+  planner.observe(o, []);
+  assert.equal(
+    planner.consider(o, o.own),
+    undefined,
+    "the force still waits when its actual opposition is stronger",
+  );
+});

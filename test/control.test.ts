@@ -314,6 +314,7 @@ test("supported tanks focus the same nearby armor target", () => {
 test("quiet attack staging uses the scouted objective route without dragging the infantry garrison", () => {
   const c = new Commander("bastion"),
     o = observation();
+  o.own = o.own.filter((u) => u.name !== "MTNK" || u.ref === "a");
   o.own.push({ ...tank("gi", 67, 41), name: "E1", type: 3, crusher: false });
   o.enemies = [
     {

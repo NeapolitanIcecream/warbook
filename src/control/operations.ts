@@ -185,8 +185,9 @@ export class Operations {
         };
       }
       const window = this.pressured && o.tick - this.lastPressureTick <= 1800;
-      if (power < Math.max(exposed ? 1.5 : 3, required)) continue;
-      if (!exposed && tanks.length < 4) continue;
+      // A supported two/three-tank opportunity must not wait for an arbitrary
+      // fourth tank, especially when late-game income cannot fund it promptly.
+      if (power < Math.max(1.5, required)) continue;
       options.push({
         point: { x: target.x, y: target.y },
         ...(visible ? { ref: target.ref } : {}),
