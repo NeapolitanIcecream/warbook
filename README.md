@@ -1,18 +1,18 @@
 # Warbook / Chrono Divide AI
 
-**当前默认：0.1.9；新增候选：0.1.10 持续交战与分路守备。** 候选让大兵保持近处有效交战，按可见威胁组织最多两组守备，兵力不足时集中处理一路。最新四图同池候选 22/24、0.1.9 为 18/24，48 局全部正常结束。仍有步兵损耗、装甲接敌与反击时机问题，先保留为试验版。详见 [本轮结果与限制](docs/defense-commitment-cycle.md)。
+**当前默认：0.1.11；0.1.10 保留为对照。** 本轮完成独立军犬侦察、按敌情反击、GI 接敌与部署衔接、可通行驻防位置、独立撤回与让路、矿场出矿路线，并修复规划查询干扰原始回放的问题。最终四图同池两版均为 20/24 胜，48 局全部正常结束；新版城市图为 3/6，仍是明确短板，不宣称整体实力提高。具体修复、反例和证据见 [本轮记录](docs/closure-019.md#2026-09-18-0111-发布验收)。
 
 ## 试玩
 
 打开 **[本地玩家入口](http://127.0.0.1:8642/)**，选择「本地对战」→「开始游戏」。默认美国、美国小镇、10000 资金、零起始军队。
 
-试用新版请选择 **[0.1.10 候选 AI](http://127.0.0.1:8642/challenge/)**。游戏页下方显示所选 AI 的版本。旧 0.1.7、0.1.8 阵地路线和 counter 继续保留为冻结研究对手。
+旧版本对照入口为 **[0.1.10 AI](http://127.0.0.1:8642/challenge/)**。游戏页下方显示所选 AI 的版本。旧 0.1.7、0.1.8 阵地路线和 counter 继续保留为冻结研究对手。
 
 - 鼠标选择基地车，按 **D** 展开；在右侧建造栏生产和放置建筑。
 - **Esc → 放弃任务 → 退出** 可以结束当前局；结算后点「继续」再次开局。
 - 服务未启动时，双击 [Play Warbook.command](scripts/Play%20Warbook.command)。Agent 负责环境、版本、日志与运行维护。
 
-只想看 AI 对战，可以打开 **[0.1.10 对 Supalosa 的完整回放](http://127.0.0.1:8642/watch)**：短图，17:38，WarbookRed 获胜。约 4:30–6:00 可看早期防守，11:03 后可看六车反击。这局出生方向与之前 0.1.9 的展示局不同；先前方向的候选记录及损失也保留在研发文档中。也保留 **[历史移动原型的失败记录](http://127.0.0.1:8642/game/#/replay/http%3A%2F%2F127.0.0.1%3A8642%2Fwarbook%2Freplay-check.rpl)**：60:00 达到运行上限，双方未败北，WarbookRed 仍有 53 辆坦克；不计正常败局。可用底部按钮加速，或 Esc → 全屏展开画面。
+只想看 AI 对战，可以打开 **[0.1.11 对 Supalosa 的完整回放](http://127.0.0.1:8642/watch)**：短图，16:54，WarbookRed 获胜。6:30–6:59 可看早期防守（七名步兵有开火信号，但仍损失一座电厂），7:16 后开始反击，8:56 起敌方建筑实际受损。回放右下角可输入时刻并「跳到并暂停」，向后跳会从开头重新推进。也保留 **[历史移动原型的失败记录](http://127.0.0.1:8642/game/#/replay/http%3A%2F%2F127.0.0.1%3A8642%2Fwarbook%2Freplay-check.rpl)**：60:00 达到运行上限，双方未败北，WarbookRed 仍有 53 辆坦克；不计正常败局。可用底部按钮加速，或 Esc → 全屏展开画面。
 
 这是基础地面作战研发版。当前重点是建设、采矿、出兵、坦克对步兵作战和寻找迁移的基地；不宣称已经覆盖所有兵种、地图或真人竞技水平。
 
@@ -41,17 +41,19 @@ npm run batch -- --rounds 12 --modes baseline,combined --map mp03t4.map
 npm run replay -- runs/<run-directory>
 npm run bot:build -- --ref v0.1.7 --mode factory-exit
 npm run bot:build -- --ref v0.1.8 --mode bastion
-npm run bot:build -- --ref v0.1.9 --mode bastion
+npm run bot:build -- --ref v0.1.11 --mode bastion
 # 旧主线仍可用 --ref v0.1.4 --mode combined 冻结构建。
 # 将构建返回的 release.json 路径交给 --actor-release / --opponent-release。
 # --swap 交换创建/执行槽位，不控制地图出生位置。
 ```
 
-`bastion` 是当前默认策略：按可见威胁保护建筑和矿车，调动步兵及车辆，通常组织六车反击；出现观察到的反击窗口时可由四车发起，后续援军先积累四车。`factory-exit` 是保留的 0.1.7 路线，`combined` 是更早主线，`counter` 是实验对手。模式名称本身不冻结代码，跨版本比较必须使用冻结包。全部实验和固定试玩版本见 [执行进展](docs/progress.md)。
+`bastion` 是当前默认策略：独立军犬探索并复查敌情；步兵与车辆保护受威胁的建筑和矿车；主力按实际成组情况、可见/记忆敌军和可能来援判断出击，行军中重新评估。未知目标仍先组织六车探索；已知机会不再使用固定四车门槛。`factory-exit` 是保留的 0.1.7 路线，`combined` 是更早主线，`counter` 是实验对手。模式名称本身不冻结代码，跨版本比较必须使用冻结包。全部实验和固定试玩版本见 [执行进展](docs/progress.md)。
 
-`bastion` 使用分别归属的主力、守备、预备与汇合任务。`cohort-local` 是未晋升的主线编组研究模式。移动射击原型出现过三次上限，已从当前运行代码移除，冻结历史和失败记录见 [阵地与编组实验](docs/defense-cycle.md)。当前尚未实现成熟的 T 优、残血轮换、军犬屏护或完整中后期发展。
+`bastion` 使用分别归属的主力、守备、预备、汇合、侦察与恢复任务；恢复中的单位不会锁住其余主力。`cohort-local` 是未晋升的主线编组研究模式。移动射击原型出现过三次上限，已从当前运行代码移除，冻结历史和失败记录见 [阵地与编组实验](docs/defense-cycle.md)。当前尚未实现成熟的 T 优、残血轮换、军犬屏护或完整中后期发展。
 
 ## 固定版本与证据范围
+
+- 0.1.11 最终开发池：对旧主线 / 旧阵地 / Supalosa 为 7/8、6/8、7/8，0.1.10 为 6/8、6/8、8/8；四图 48 局全部正常。全部四份新版败局及展示局共 1,037 份原快照与终局通过重放核对；98 项测试、类型检查和玩家进入/建造/正常结算/退出/重开检查通过。实际出生位未精确配对，不作为组件因果或未见分布证据。
 
 - 0.1.9 对固定旧阵地 / counter / Supalosa 为 9/16、16/16、14/16；同池 0.1.7 为 6/16、6/16、13/16。四图全部正常结束，短图新版 12/12，城市图 7/12。保留实际出生覆盖和失败，不声称未见地图泛化。发布标签检查两局共 10,131 次指令一致；新增观察字段下的旧主线兼容检查 4,274 次一致。详见 [主动防守实施与发布](docs/active-defense-cycle.md)。
 - 历史 0.1.8 在另一对手池为 28/48、当批 0.1.7 为 38/48；不与本轮不同对手池直接相减。其部署/工事消融受到起点覆盖影响，独立收益未确认。见 [上一轮记录](docs/defense-cycle.md)。
@@ -71,7 +73,8 @@ npm run bot:build -- --ref v0.1.9 --mode bastion
 - [tactics.ts](src/control/tactics.ts)、[production.ts](src/control/production.ts)：分别落实作战与生产任务。
 - [coordinator.ts](src/control/coordinator.ts)：任务修订、单位归属、结果反馈和过期命令检查。
 - [bridge.ts](src/bridge.ts)：观察白名单、局部引用、动作仲裁与提交。
-- [defense-route.ts](src/defense-route.ts)：桥接层调用的已探索区域寻路辅助，不向策略透传全图路径或区域编号。
+- [operations.ts](src/control/operations.ts)、[reconnaissance.ts](src/control/reconnaissance.ts)：机会与风险估计、独立侦察任务。
+- [defense-route.ts](src/defense-route.ts)、[refinery-site.ts](src/refinery-site.ts)：驻防、恢复和矿场位置；通过 [local-ground-map.ts](src/local-ground-map.ts) 在独立 ngraph 图中规划，不修改引擎寻路缓存。
 - [effects.ts](src/effects.ts)：区分「已经请求」和实际观察到的效果。
 - [runner.ts](src/runner.ts)、[referee.ts](src/referee.ts)：对局驱动与独立裁判记录。
 - [player](src/player/)：本地入口、官方客户端接入与固定版本服务。
