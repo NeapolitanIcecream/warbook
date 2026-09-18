@@ -201,7 +201,10 @@ export class BastionStrategy implements StrategicController {
     const mobilizing = !this.firstForceFunded;
     const economy = {
       ...base.production,
-      scouts: { product: o.side === 0 ? "ADOG" : "DOG", count: 1 },
+      scouts: {
+        product: o.side === 0 ? "ADOG" : "DOG",
+        count: o.starts.length > 2 ? 2 : 1,
+      },
       ...(mobilizing
         ? {
             structures: base.production.structures.map((g) => ({
@@ -307,15 +310,18 @@ export class BastionStrategy implements StrategicController {
           engagement: { allowCrush: false },
         }),
       );
-    additionalCombat.push(
-      this.mission("recon", {
-        kind: "scout",
-        units: scouts.map((u) => u.ref),
-        destination: this.recon.destination(o, scouts, feedback),
-        objective: "reveal-approaches-and-enemy-base",
-        engagement: { allowCrush: false },
-      }),
-    );
+    for (const scout of scouts) {
+      const id = `recon-${scout.ref}`;
+      additionalCombat.push(
+        this.mission(id, {
+          kind: "scout",
+          units: [scout.ref],
+          destination: this.recon.destination(o, [scout], feedback, id),
+          objective: "reveal-approaches-and-enemy-base",
+          engagement: { allowCrush: false },
+        }),
+      );
+    }
     const decision =
       operation && assault.length
         ? {

@@ -76,6 +76,31 @@ function fixture(soviet = false): { o: Observation; plan: ProductionPlan } {
 const vehicleOrder = (result: ReturnType<QueueProduction["control"]>) =>
   result.intents.find((i) => i.kind === "queue" && i.product.queue === 3);
 
+test("one surviving scout does not prevent building or replacing a second scout", () => {
+  const { o, plan } = fixture();
+  const controller = new QueueProduction();
+  plan.scouts = { product: "ADOG", count: 2 };
+  plan.infantry = { product: "E1", count: 6 };
+  o.products.push({ name: "ADOG", cost: 200, type: 3, queue: 2 });
+  o.own.push(unit("E1", "gi-1"), unit("E1", "gi-2"), unit("ADOG", "dog-1"));
+  const requestsDog = () =>
+    controller
+      .control(o, plan, [])
+      .intents.some((i) => i.kind === "queue" && i.product.name === "ADOG");
+  assert(requestsDog());
+  o.tick += 200;
+  o.own.push(unit("ADOG", "dog-2"));
+  assert(!requestsDog());
+  o.tick += 3;
+  o.own = o.own.filter((u) => u.ref !== "dog-2");
+  assert(
+    !requestsDog(),
+    "brief unavailability is debounced even with a surviving dog",
+  );
+  o.tick += 150;
+  assert(requestsDog());
+});
+
 test("refinery commitment survives queue, ready placement and buildup, then becomes one live miner", () => {
   for (const soviet of [false, true]) {
     const { o, plan } = fixture(soviet);

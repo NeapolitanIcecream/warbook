@@ -42,6 +42,7 @@ export class WarbookBot extends Bot {
   private intentSequence = 0;
   private pendingEffects: PendingEffect[] = [];
   private scoutPoints: readonly Point[] = [];
+  private exploredStarts: readonly Point[] = [];
   private lastScoutScan = -150;
   private lastControlReportTick = -150;
   private lastCombatRevision = -1;
@@ -134,6 +135,13 @@ export class WarbookBot extends Bot {
             points.push(Object.freeze({ x, y }));
         }
       this.scoutPoints = Object.freeze(points);
+      this.exploredStarts = this.game.map
+        .getStartingLocations()
+        .filter((p) => {
+          const tile = this.game.map.getTile(p.x, p.y);
+          return tile && this.game.map.isVisibleTile(tile, this.name);
+        })
+        .map((p) => ({ x: p.x, y: p.y }));
       this.lastScoutScan = tick;
     }
     const own = this.sorted(this.player.getVisibleUnits("self")).map(
@@ -280,6 +288,7 @@ export class WarbookBot extends Bot {
       queues,
       buildSites,
       scoutPoints: this.scoutPoints,
+      exploredStarts: this.exploredStarts,
       scoutObservedTick: this.lastScoutScan,
       defenseRoute: this.defenseRoute,
       stagingRoute: this.stagingRoute,

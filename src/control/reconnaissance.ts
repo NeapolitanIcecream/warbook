@@ -20,48 +20,75 @@ export const isScout = (unit: Unit) => ["ADOG", "DOG"].includes(unit.name);
 export class Reconnaissance {
   private visited = new Map<string, number>();
   private postponed = new Map<string, number>();
-  private goal?: Point;
-  private bestDistance = Infinity;
-  private progressTick = 0;
+  private routes = new Map<
+    string,
+    { goal?: Point; bestDistance: number; progressTick: number }
+  >();
 
   destination(
     o: Observation,
     scouts: readonly Unit[],
     feedback?: ControlReport,
+    missionId = "recon",
   ): Point | undefined {
     if (!scouts.length) return;
     const unit = scouts[0];
+    let route = this.routes.get(unit.ref);
+    if (!route)
+      this.routes.set(
+        unit.ref,
+        (route = { bestDistance: Infinity, progressTick: o.tick }),
+      );
     const points = o.scoutPoints ?? [];
     const avoiding = feedback?.additionalCombat?.some(
-      (r) => r.task.id === "recon" && r.reason === "avoid-visible-threat",
+      (r) => r.task.id === missionId && r.reason === "avoid-visible-threat",
     );
+    const newlyExplored = (o.exploredStarts ?? []).filter(
+      (p) => !this.visited.has(key(p)),
+    );
+    for (const p of newlyExplored) this.visited.set(key(p), o.tick);
+    for (const pending of this.routes.values())
+      if (
+        pending.goal &&
+        newlyExplored.some((p) => key(p) === key(pending.goal!))
+      )
+        pending.goal = undefined;
+    const reserved = [...this.routes]
+      .filter(
+        ([ref, r]) =>
+          ref !== unit.ref && r.goal && o.own.some((u) => u.ref === ref),
+      )
+      .map(([, r]) => r.goal!);
+    const available = (p: Point) =>
+      !reserved.some((q) => distance2(p, q) < 12 ** 2);
     for (const start of o.starts)
       if (o.own.some((u) => distance2(u, start) <= 5 ** 2))
         this.visited.set(key(start), o.tick);
-    if (this.goal) {
-      const distance = distance2(unit, this.goal);
-      if (distance < this.bestDistance) {
-        this.bestDistance = distance;
-        this.progressTick = o.tick;
+    if (route.goal) {
+      const distance = distance2(unit, route.goal);
+      if (distance < route.bestDistance) {
+        route.bestDistance = distance;
+        route.progressTick = o.tick;
       }
       if (distance <= 4 ** 2) {
-        this.visited.set(key(this.goal), o.tick);
-        this.goal = undefined;
-      } else if (avoiding || o.tick - this.progressTick >= 450) {
-        this.postponed.set(key(this.goal), o.tick + 1800);
-        this.goal = undefined;
+        this.visited.set(key(route.goal), o.tick);
+        route.goal = undefined;
+      } else if (avoiding || o.tick - route.progressTick >= 450) {
+        this.postponed.set(key(route.goal), o.tick + 1800);
+        route.goal = undefined;
       }
     }
     if (avoiding) return;
-    if (!this.goal) {
+    if (!route.goal) {
       const starts = o.starts.filter(
         (p) => distance2(p, o.home) > 12 ** 2 && !this.visited.has(key(p)),
       );
       const candidates = [...starts, ...points];
       const threats = o.enemies.filter((e) => (e.weaponRange ?? 0) > 0);
-      this.goal = candidates
+      route.goal = candidates
         .filter(
           (p) =>
+            available(p) &&
             (this.postponed.get(key(p)) ?? 0) <= o.tick &&
             o.tick - (this.visited.get(key(p)) ?? -Infinity) >= 900 &&
             !threats.some(
@@ -76,9 +103,10 @@ export class Reconnaissance {
             a.y - b.y,
         )[0];
       // Once explored, periodically revisit known base areas; stale visibility is not fresh intelligence.
-      this.goal ??= o.starts
+      route.goal ??= o.starts
         .filter(
           (p) =>
+            available(p) &&
             distance2(p, o.home) > 12 ** 2 &&
             (this.postponed.get(key(p)) ?? 0) <= o.tick &&
             o.tick - (this.visited.get(key(p)) ?? -Infinity) >= 1800,
@@ -88,10 +116,10 @@ export class Reconnaissance {
             (this.visited.get(key(a)) ?? -Infinity) -
             (this.visited.get(key(b)) ?? -Infinity),
         )[0];
-      this.bestDistance = this.goal ? distance2(unit, this.goal) : Infinity;
-      this.progressTick = o.tick;
+      route.bestDistance = route.goal ? distance2(unit, route.goal) : Infinity;
+      route.progressTick = o.tick;
     }
-    return this.goal;
+    return route.goal;
   }
 }
 

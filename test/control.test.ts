@@ -363,7 +363,7 @@ test("a scout has independent ownership and does not replace a garrison infantry
   o.products.push({ name: "ADOG", cost: 200, type: 3, queue: 2 });
   const intents = c.decide(o),
     plan = c.controlPlan!;
-  const scout = plan.additionalCombat!.find((m) => m.id === "recon")!;
+  const scout = plan.additionalCombat!.find((m) => m.kind === "scout")!;
   assert.deepEqual(scout.units, ["dog"]);
   assert.equal(scout.kind, "scout");
   assert.equal(plan.production.infantry.count, 6);
@@ -456,6 +456,44 @@ test("a retreat postpones only the attempted scouting route, then allows another
   assert.equal(recon.destination(o, [dog], feedback), undefined);
   o.tick += 180;
   assert.deepEqual(recon.destination(o, [dog]), { x: 20, y: 20 });
+});
+
+test("two scouts reserve different routes, share explored starts and keep independent retreat feedback", () => {
+  const recon = new Reconnaissance(),
+    o = observation();
+  const dogs = [0, 1].map((i) => ({
+    ...tank(`dog-${i}`, i, 0),
+    name: "ADOG",
+    type: 3,
+  }));
+  o.home = { x: 0, y: 0 };
+  o.own = dogs;
+  o.starts = [o.home, { x: 40, y: 0 }, { x: 0, y: 40 }, { x: 40, y: 40 }];
+  assert.deepEqual(recon.destination(o, [dogs[0]], undefined, "recon-0"), {
+    x: 0,
+    y: 40,
+  });
+  assert.deepEqual(recon.destination(o, [dogs[1]], undefined, "recon-1"), {
+    x: 40,
+    y: 0,
+  });
+  const feedback = {
+    additionalCombat: [
+      { task: { id: "recon-0" }, reason: "avoid-visible-threat" },
+    ],
+  } as any;
+  o.tick += 3;
+  assert.equal(recon.destination(o, [dogs[0]], feedback, "recon-0"), undefined);
+  assert.deepEqual(recon.destination(o, [dogs[1]], feedback, "recon-1"), {
+    x: 40,
+    y: 0,
+  });
+  o.exploredStarts = [{ x: 40, y: 0 }];
+  recon.destination(o, [dogs[0]], feedback, "recon-0");
+  assert.deepEqual(recon.destination(o, [dogs[1]], feedback, "recon-1"), {
+    x: 40,
+    y: 40,
+  });
 });
 
 test("bastion reforms after heavy losses without issuing the same unit to two tasks", () => {

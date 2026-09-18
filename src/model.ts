@@ -66,6 +66,8 @@ export interface Observation {
   home: Point;
   starts: Point[];
   scoutPoints?: readonly Point[];
+  /** Public start tiles that our own shroud has already revealed. */
+  exploredStarts?: readonly Point[];
   scoutObservedTick?: number;
   defenseRoute?: { towards: Point; point: Point; observedTick: number };
   stagingRoute?: { towards: Point; point: Point; observedTick: number };
