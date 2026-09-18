@@ -1,5 +1,6 @@
 {
   "version": "0.1.11",
+  "sourceRun": "runs/closure-release-pool/mp06t2.map/supalosa/0-closure-candidate",
   "replaySha256": "714f627444033ca32dcc1a47ffaca4eadb65560692a724162a18f0187b07a6a8",
   "matchLabel": "黄色 Warbook 0.1.11 · 红色 Supalosa · 本局 16:54 获胜",
   "clips": [
@@ -22,7 +23,7 @@
         },
         {
           "tick": 5850,
-          "text": "美军步兵部署开火，坦克向受击建筑靠拢。"
+          "text": "黄色步兵和坦克正在靠拢，红方大兵已在电厂附近部署。"
         },
         {
           "tick": 6045,

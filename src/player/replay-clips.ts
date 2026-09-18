@@ -9,6 +9,7 @@ export interface ReplayClip {
 
 export interface ReplayClipPlan {
   version: string;
+  sourceRun: string;
   replaySha256: string;
   matchLabel: string;
   clips: ReplayClip[];
