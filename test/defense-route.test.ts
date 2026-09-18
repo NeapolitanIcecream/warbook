@@ -1,12 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { MapApi } from "@chronodivide/game-api";
-import {
-  baseRally,
-  defenseRoute,
-  guardPost,
-  supportedPost,
-} from "../src/defense-route.js";
+import { baseRally, defenseRoute, guardPost } from "../src/defense-route.js";
 import { LocalGroundMap } from "../src/local-ground-map.js";
 
 function mapFixture(hiddenDetour = false) {
@@ -145,16 +140,4 @@ test("the guard screens far enough forward to overlap a tank engagement", () => 
   assert(p);
   assert(Math.hypot(p.x - approaching.x, p.y - approaching.y) <= 5);
   assert(nav.path({ x: -1, y: 0 }, p).length);
-});
-
-test("armor support stays beside the guard on its own reachable ground", () => {
-  const home = { x: 0, y: 0 },
-    nav = new LocalGroundMap(mapFixture(true), "actor", home, 5, 22);
-  const point = supportedPost(nav, home, { x: 6, y: -2 }, []);
-  assert(point);
-  assert(
-    point.x < 4,
-    "an infantry anchor beyond the wall cannot teleport armor across it",
-  );
-  assert(nav.path(home, point).length);
 });

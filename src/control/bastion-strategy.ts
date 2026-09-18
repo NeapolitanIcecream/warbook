@@ -126,9 +126,7 @@ export class BastionStrategy implements StrategicController {
       o.tick - o.stagingRoute.observedTick <= 450
         ? o.stagingRoute.point
         : post;
-    const musterPost = responding
-      ? (o.defenseSupport ?? vehiclePost)
-      : stagingPost;
+    const musterPost = responding ? vehiclePost : stagingPost;
     const outsideFactory = (u: Unit) =>
       !o.own.some(
         (b) =>

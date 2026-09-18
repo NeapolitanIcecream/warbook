@@ -1,0 +1,38 @@
+{
+  "purpose": "Check replacement scouting and the combined defense changes against the maintained release on the same opponents",
+  "subjects": {
+    "published-012": {
+      "ref": "f8f491e",
+      "mode": "bastion"
+    },
+    "grouped-defense": {
+      "ref": "cc0b1ca",
+      "mode": "bastion"
+    },
+    "funded-scout": {
+      "ref": "973a7f5",
+      "mode": "bastion"
+    }
+  },
+  "opponents": {
+    "pressure-specialist": {
+      "ref": "36a7f72",
+      "mode": "pressure"
+    },
+    "old-defense": {
+      "ref": "b3a1f7ce69ed140fbafb82799f6d2b14d487c052",
+      "mode": "bastion"
+    },
+    "supalosa": {
+      "native": "supalosa"
+    }
+  },
+  "maps": [
+    "mp29u2.map",
+    "mp06t2.map"
+  ],
+  "rounds": 1,
+  "decision": {
+    "budget": "18 complete ordinary games, six per subject; all starts and caps retained, with no default promotion from this screen alone."
+  }
+}

@@ -72,8 +72,6 @@ export interface Observation {
   exploredStarts?: readonly Point[];
   scoutObservedTick?: number;
   defenseRoute?: { towards: Point; point: Point; observedTick: number };
-  /** Tank-passable position near the infantry defensive line. */
-  defenseSupport?: Point;
   /** Reachable local guard posts for separate approaches; only explored terrain. */
   defensePosts?: readonly {
     task: string;
