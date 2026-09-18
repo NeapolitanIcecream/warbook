@@ -1,0 +1,27 @@
+{
+  "purpose": "Keep combined supporting fire but restore protection of mobile economic assets; all previous support-point implementation is removed",
+  "subjects": {
+    "funded-scout": {
+      "ref": "973a7f5",
+      "mode": "bastion"
+    },
+    "mobile-support": {
+      "ref": "9daf621616235533fdbffecd991480d749099916",
+      "mode": "bastion"
+    }
+  },
+  "opponents": {
+    "old-defense": {
+      "ref": "b3a1f7ce69ed140fbafb82799f6d2b14d487c052",
+      "mode": "bastion"
+    }
+  },
+  "maps": [
+    "mp29u2.map",
+    "mp06t2.map"
+  ],
+  "rounds": 2,
+  "decision": {
+    "budget": "Eight ordinary full games across two maps and execution slots; inspect mineral income and actual combined engagements."
+  }
+}

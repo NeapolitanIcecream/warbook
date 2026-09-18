@@ -1,0 +1,27 @@
+{
+  "purpose": "Cross-adapt the infantry pressure route using the corrected mobile defense, simultaneous cohorts and funded reconnaissance, against the frozen new defender",
+  "subjects": {
+    "pressure-013": {
+      "ref": "36a7f72",
+      "mode": "pressure"
+    },
+    "adapted-pressure": {
+      "ref": "9daf621",
+      "mode": "pressure"
+    }
+  },
+  "opponents": {
+    "coordinated-defense": {
+      "ref": "9daf621",
+      "mode": "bastion"
+    }
+  },
+  "maps": [
+    "mp06t2.map",
+    "mp29u2.map"
+  ],
+  "rounds": 2,
+  "decision": {
+    "budget": "Eight full games, four per pressure route with both execution slots. The defender is frozen; inspect economic pressure and caps. This compares complete adapted routes, not an isolated component effect."
+  }
+}

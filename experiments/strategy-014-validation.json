@@ -1,0 +1,40 @@
+{
+  "purpose": "Evaluate coordinated defensive engagements, reachable forward guards, fort placement, and funded scouting against the maintained release",
+  "subjects": {
+    "published-012": {
+      "ref": "f8f491e",
+      "mode": "bastion"
+    },
+    "coordinated-defense": {
+      "ref": "9daf621",
+      "mode": "bastion"
+    }
+  },
+  "opponents": {
+    "pressure-specialist": {
+      "ref": "36a7f72",
+      "mode": "pressure"
+    },
+    "old-defense": {
+      "ref": "b3a1f7ce69ed140fbafb82799f6d2b14d487c052",
+      "mode": "bastion"
+    },
+    "old-main": {
+      "ref": "8326311288ec685c3da43b1d182071dc36938fe8",
+      "mode": "factory-exit"
+    },
+    "supalosa": {
+      "native": "supalosa"
+    }
+  },
+  "maps": [
+    "mp29u2.map",
+    "mp08t2.map",
+    "mp06t2.map",
+    "mp03t4.map"
+  ],
+  "rounds": 2,
+  "decision": {
+    "budget": "64 full games, 32 per subject, equal four-map/four-opponent development pool with both execution slots. Candidate and pool frozen; keep caps/errors/start coverage, and inspect losses and actual supporting fire before promotion."
+  }
+}
