@@ -194,3 +194,20 @@ test("a field army can intercept an attack without reaching its own distant base
     "the field army is not omitted just because its own base is far away",
   );
 });
+
+test("cleared observed factories are not replaced with a phantom production source", () => {
+  const o = observation([
+    contact("factory", "GAWEAP", 50, 2),
+    contact("power", "GAPOWR", 55, 2),
+  ]);
+  o.own = force(2).map((u) => ({ ...u, x: u.x + 50 }));
+  const planner = new Operations();
+  planner.observe(o, []);
+  o.enemies = o.enemies.filter((e) => e.name !== "GAWEAP");
+  o.tick += 3;
+  planner.observe(o, []);
+  const operation = planner.consider(o, o.own);
+  assert(operation);
+  assert.equal(operation.productionArrivals, 0);
+  assert.equal(operation.assumedProduction, false);
+});

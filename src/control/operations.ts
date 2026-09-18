@@ -32,6 +32,7 @@ export class Operations {
   private lastPressureTick = -Infinity;
   private previousPositions = new Map<string, { point: Point; tick: number }>();
   private observedTankSpeed = 0.8;
+  private factorySeen = false;
   active?: Operation;
   decision: Record<string, number | string | boolean> = {};
   get hasKnownBase() {
@@ -39,6 +40,7 @@ export class Operations {
   }
 
   observe(o: Observation, localThreats: readonly Contact[]) {
+    if (o.enemies.some(factory)) this.factorySeen = true;
     for (const u of o.own.filter((u) => ["MTNK", "HTNK"].includes(u.name))) {
       const point = u.position ?? u,
         previous = this.previousPositions.get(u.ref);
@@ -115,7 +117,7 @@ export class Operations {
     }
     // A factory last seen under fog is still a possible source of reinforcements.
     const sources: Point[] = [...this.known.values()].filter(factory);
-    const assumedProduction = !sources.length;
+    const assumedProduction = !sources.length && !this.factorySeen;
     if (assumedProduction) {
       // Working prior: one factory near known economic buildings, otherwise at a
       // possible enemy start. A relocating MCV does not teleport its production.
