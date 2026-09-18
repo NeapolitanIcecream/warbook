@@ -759,7 +759,7 @@ test("GI defense packs up out of range, approaches, deploys and actually attacks
   assert.equal(tactics.control(o, mission, []).intents[0].kind, "attack");
 });
 
-test("a damaged factory redirects the assault and infantry without conflicting unit ownership", () => {
+test("a small attack on the factory draws only needed relief while the main assault continues", () => {
   const c = new Commander("bastion"),
     o = observation();
   o.own = o.own.filter((u) => u.name !== "MTNK");
@@ -793,13 +793,12 @@ test("a damaged factory redirects the assault and infantry without conflicting u
   ];
   c.decide(o);
   const plan = c.controlPlan!;
-  assert.equal(plan.combat.objective, "protect-base");
-  assert.equal(plan.combat.kind, "defend");
-  assert.equal(plan.combat.units.length, 6);
-  assert.deepEqual(
-    plan.additionalCombat![0].destination,
-    plan.combat.destination,
-  );
+  assert.equal(plan.combat.kind, "advance");
+  assert.equal(plan.combat.units.length, 5);
+  const relief = plan.additionalCombat!.find((m) => m.id === "base-relief")!;
+  assert.equal(relief.kind, "defend");
+  assert.equal(relief.units.length, 1);
+  assert.deepEqual(plan.additionalCombat![0].destination, relief.destination);
   const refs = [plan.combat, ...plan.additionalCombat!].flatMap((m) => m.units);
   assert.equal(new Set(refs).size, refs.length);
   o.tick += 450;

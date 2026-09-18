@@ -7,6 +7,7 @@ import {
 import { OpeningStrategy } from "./strategy.js";
 import { DefenseAssignments } from "./defense-assignments.js";
 import { DefenseSituation } from "./defense-situation.js";
+import { DefenseRelief } from "./defense-relief.js";
 import { isScout, Reconnaissance } from "./reconnaissance.js";
 import { Operations } from "./operations.js";
 import { formedUnits, rendezvous } from "./formation.js";
@@ -25,6 +26,7 @@ export class BastionStrategy implements StrategicController {
   private readonly opening = new OpeningStrategy();
   private readonly defense = new DefenseAssignments();
   private readonly situation = new DefenseSituation();
+  private readonly relief = new DefenseRelief();
   private readonly recon = new Reconnaissance();
   private readonly operations = new Operations();
   private readonly revisions = new Map<string, TaskRevision>();
@@ -72,8 +74,8 @@ export class BastionStrategy implements StrategicController {
       this.firstForceFunded = true;
     const scouts = assessment.army.filter(isScout);
     const infantry = assessment.army.filter((u) => u.type === 3 && !isScout(u));
-    const vehicles = assessment.army.filter((u) => u.type !== 3);
-    const alive = new Set(vehicles.map((u) => u.ref));
+    const allVehicles = assessment.army.filter((u) => u.type !== 3);
+    const alive = new Set(allVehicles.map((u) => u.ref));
     const hadAssault = this.assault.size > 0;
     this.assault = new Set([...this.assault].filter((ref) => alive.has(ref)));
     this.joining = new Set([...this.joining].filter((ref) => alive.has(ref)));
@@ -85,10 +87,24 @@ export class BastionStrategy implements StrategicController {
       incursions,
       vehiclePost,
       protectNow,
-      localArmor,
       responding,
       damagedAt,
     } = this.situation.observe(o);
+    const relief = this.relief.assign(
+      o,
+      allVehicles,
+      infantry,
+      [...new Map(incursions.map((i) => [i.enemy.ref, i.enemy])).values()],
+      vehiclePost,
+      this.assault,
+      protectNow && this.assault.size > 0,
+    );
+    const reliefRefs = new Set(relief.map((u) => u.ref));
+    for (const ref of reliefRefs) {
+      this.assault.delete(ref);
+      this.joining.delete(ref);
+    }
+    const vehicles = allVehicles.filter((u) => !reliefRefs.has(u.ref));
     this.operations.observe(o, [
       ...new Map(incursions.map((i) => [i.enemy.ref, i.enemy])).values(),
     ]);
@@ -234,31 +250,25 @@ export class BastionStrategy implements StrategicController {
     };
     const operation = this.operations.target(o, assault);
     const combat = this.mission("main-force", {
-      kind:
-        assault.length && !protectNow
-          ? "advance"
-          : responding || protectNow
-            ? "defend"
-            : "assemble",
-      units: (protectNow ? vehicles : assault.length ? assault : reserve).map(
-        (u) => u.ref,
-      ),
-      destination:
-        assault.length && !protectNow ? operation?.point : musterPost,
-      groundDestination:
-        assault.length && !protectNow ? operation?.point : musterPost,
-      objective: protectNow
-        ? "protect-base"
-        : assault.length
-          ? (operation?.reason ?? "reassess-operation")
-          : responding
-            ? "protect-economy"
-            : "muster-counterattack",
+      kind: assault.length
+        ? "advance"
+        : responding || protectNow
+          ? "defend"
+          : "assemble",
+      units: (assault.length ? assault : reserve).map((u) => u.ref),
+      destination: assault.length ? operation?.point : musterPost,
+      groundDestination: assault.length ? operation?.point : musterPost,
+      objective:
+        protectNow && !assault.length
+          ? "protect-base"
+          : assault.length
+            ? (operation?.reason ?? "reassess-operation")
+            : responding
+              ? "protect-economy"
+              : "muster-counterattack",
       engagement: { allowCrush: true },
       approach: stagingDirection,
-      ...(assault.length && !protectNow && operation?.ref
-        ? { target: operation.ref }
-        : {}),
+      ...(assault.length && operation?.ref ? { target: operation.ref } : {}),
     });
     const guards = this.defense.assign(o.tick, infantry, incursions, damagedAt);
     const additionalCombat = guards.length
@@ -290,7 +300,18 @@ export class BastionStrategy implements StrategicController {
             engagement: { allowCrush: false },
           }),
         ];
-    if (assault.length && !protectNow)
+    if (relief.length)
+      additionalCombat.push(
+        this.mission("base-relief", {
+          kind: "defend",
+          units: relief.map((u) => u.ref),
+          destination: this.relief.destination ?? vehiclePost,
+          objective: "reinforce-base-defense",
+          protectedAssets: assets.map((u) => u.ref),
+          engagement: { allowCrush: true },
+        }),
+      );
+    if (assault.length)
       additionalCombat.push(
         this.mission("reserve-force", {
           kind: responding ? "defend" : "assemble",
@@ -300,7 +321,7 @@ export class BastionStrategy implements StrategicController {
           engagement: { allowCrush: true },
         }),
       );
-    if (joiners.length && !protectNow)
+    if (joiners.length)
       additionalCombat.push(
         this.mission("reinforcements", {
           kind: "advance",
