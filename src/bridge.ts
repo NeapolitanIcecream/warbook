@@ -239,6 +239,7 @@ export class WarbookBot extends Bot {
         hp: u.hitPoints,
         maxHp: u.maxHitPoints,
         observedTick: tick,
+        deployed: u.stance === 3,
         airborne: u.zone === 1,
         ...combatCapabilities(u),
       }),

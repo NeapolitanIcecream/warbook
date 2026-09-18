@@ -312,63 +312,6 @@ test("supported tanks focus the same nearby armor target", () => {
   });
 });
 
-test("light pillboxes do not disable a bounded infantry crush, while nearby armor still does", () => {
-  const t = new StrikeTactics(),
-    o = observation();
-  o.own = [tank("a", 20, 20), tank("b", 21, 20)];
-  o.enemies = [
-    {
-      ref: "gi",
-      name: "E1",
-      type: 3,
-      x: 23,
-      y: 20,
-      hp: 125,
-      maxHp: 125,
-      weaponRange: 5,
-      observedTick: o.tick,
-    },
-    {
-      ref: "pill",
-      name: "GAPILL",
-      type: 2,
-      x: 26,
-      y: 22,
-      hp: 400,
-      maxHp: 400,
-      weaponRange: 5,
-      observedTick: o.tick,
-    },
-  ];
-  const mission: CombatMission = {
-    id: "force",
-    revision: 1,
-    kind: "advance",
-    units: ["a", "b"],
-    destination: { x: 40, y: 20 },
-    objective: "advance",
-    engagement: { allowCrush: true },
-  };
-  assert(t.control(o, mission, []).intents.every((i) => i.kind === "crush"));
-  o.tick += 30;
-  o.enemies.push({
-    ref: "armor",
-    name: "MTNK",
-    type: 7,
-    x: 24,
-    y: 22,
-    hp: 300,
-    maxHp: 300,
-    weaponRange: 5,
-    observedTick: o.tick,
-  });
-  const result = t.control(o, mission, []);
-  assert(result.intents.length > 0);
-  assert(
-    result.intents.every((i) => i.kind === "attack" && i.target === "armor"),
-  );
-});
-
 test("quiet attack staging uses the scouted objective route without dragging the infantry garrison", () => {
   const c = new Commander("bastion"),
     o = observation();

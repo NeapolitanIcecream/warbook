@@ -112,7 +112,15 @@ export class Operations {
       // before our estimated arrival to take part in the battle.
       if (distance(e, target) > reach && distance(e, center) > reach) continue;
       const value =
-        e.type === 2 ? 0.45 : e.type === 3 ? 0.12 : e.name === "FV" ? 0.6 : 1;
+        e.type === 2
+          ? 0.45
+          : e.type === 3
+            ? e.name === "E1" && e.deployed
+              ? 0.37
+              : 0.12
+            : e.name === "FV"
+              ? 0.6
+              : 1;
       defenders += value * Math.sqrt(e.hp / e.maxHp);
     }
     // A factory last seen under fog is still a possible source of reinforcements.

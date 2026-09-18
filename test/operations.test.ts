@@ -211,3 +211,29 @@ test("cleared observed factories are not replaced with a phantom production sour
   assert.equal(operation.productionArrivals, 0);
   assert.equal(operation.assumedProduction, false);
 });
+
+test("deployed GI firepower changes the estimate for a fortified target", () => {
+  const o = observation([
+    contact("power", "GAPOWR", 20, 2),
+    contact("factory", "GAWEAP", 100, 2),
+    ...Array.from({ length: 6 }, (_, i) => ({
+      ...contact(`gi-${i}`, "E1", 20 + i, 3),
+      hp: 125,
+      maxHp: 125,
+      weaponRange: 5,
+      deployed: false,
+    })),
+  ]);
+  o.own = force(2);
+  o.enemies[0].hp = 300;
+  const planner = new Operations();
+  planner.observe(o, []);
+  assert(planner.consider(o, o.own));
+  o.tick += 3;
+  o.enemies = o.enemies.map((e) =>
+    e.type === 3 ? { ...e, deployed: true } : e,
+  );
+  planner.observe(o, []);
+  assert.equal(planner.consider(o, o.own), undefined);
+  assert(Number(planner.decision.defenders) > 2);
+});

@@ -33,6 +33,8 @@ export interface Unit extends Point {
   deployedWeaponRange?: number;
 }
 export interface Contact extends Point {
+  /** Visually observable stance of a currently visible infantry unit. */
+  deployed?: boolean;
   position?: Point & { z: number };
   ref: string;
   name: string;

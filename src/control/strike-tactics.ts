@@ -64,10 +64,7 @@ export class StrikeTactics extends LocalCombat {
       core.some((u) => distance2(e, u) <= 10 ** 2),
     );
     const preferred = o.enemies.find((e) => e.ref === mission.target);
-    const finishNow =
-      preferred &&
-      preferred.hp <= core.length * 45 &&
-      core.some((u) => distance2(u, preferred) <= 8 ** 2);
+    const finishNow = preferred && preferred.hp <= core.length * 45;
     const overwhelmed =
       nearby.length >= Math.max(2, Math.ceil(core.length * 1.5)) && !finishNow;
     const lagging = tanks.filter((u) => !coreIds.has(u.ref));
@@ -168,14 +165,9 @@ export class StrikeTactics extends LocalCombat {
       }
       const crush =
         mission.engagement.allowCrush &&
-        !finishNow &&
         !(preferred && mission.objective === "exposed-construction") &&
         u.crusher &&
-        !hard.some(
-          (e) =>
-            !["GAPILL", "NALASR"].includes(e.name) &&
-            distance2(e, u) <= 10 ** 2,
-        )
+        !hard.some((e) => distance2(e, u) <= 10 ** 2)
           ? o.enemies
               .filter(
                 (e) =>
