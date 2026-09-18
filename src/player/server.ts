@@ -11,6 +11,7 @@ import {
 import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 import { execFileSync } from "node:child_process";
+import type { ReplayClipPlan } from "./replay-clips.js";
 import {
   CLIENT_BUILDS,
   LEGACY_CLIENT,
@@ -81,6 +82,24 @@ if (
   throw new Error(
     "WATCH_MATCH must reference a verified, compatible full game",
   );
+
+const clipPlan: ReplayClipPlan | undefined = process.env.REPLAY_CLIP_PLAN
+  ? JSON.parse(readFileSync(process.env.REPLAY_CLIP_PLAN, "utf8"))
+  : undefined;
+if (
+  clipPlan &&
+  (clipPlan.replaySha256 !== watchResult?.replay.sha256 ||
+    !/^\d+\.\d+\.\d+$/.test(clipPlan.version) ||
+    !clipPlan.clips.every(
+      (clip) =>
+        /^[a-z0-9-]+$/.test(clip.id) &&
+        clip.startTick >= 0 &&
+        clip.endTick > clip.startTick &&
+        clip.endTick <= watchResult.tick &&
+        clip.camera.length > 0,
+    ))
+)
+  throw new Error("Clip plan must describe the selected verified replay");
 
 async function getClientAsset(
   path: string,
@@ -210,6 +229,57 @@ app.get("/warbook/watch.rpl", (c) =>
       })
     : c.notFound(),
 );
+app.get("/warbook/clip-plan", (c) =>
+  clipPlan ? c.json(clipPlan) : c.notFound(),
+);
+if (clipPlan)
+  app.post("/warbook/clips/:id", async (c) => {
+    if (c.req.header("origin") !== localOrigin)
+      return c.text("Local origin required", 403);
+    const clip = clipPlan.clips.find((entry) => entry.id === c.req.param("id"));
+    if (!clip) return c.notFound();
+    if (Number(c.req.header("content-length")) > 100_000_000)
+      return c.text("Clip too large", 413);
+    const form = await c.req.formData();
+    const video = form.get("video"),
+      rawReport = form.get("report");
+    if (
+      !(video instanceof File) ||
+      video.size > 100_000_000 ||
+      typeof rawReport !== "string"
+    )
+      return c.text("Invalid recording", 400);
+    const report = JSON.parse(rawReport);
+    if (
+      report.replaySha256 !== clipPlan.replaySha256 ||
+      report.clipId !== clip.id ||
+      Math.abs(report.startTick - clip.startTick) > 2 ||
+      Math.abs(report.endTick - clip.endTick) > 2
+    )
+      return c.text("Recorded ticks do not match the selected clip", 400);
+    const directory = `runs/showcase/${clipPlan.version}`;
+    mkdirSync(directory, { recursive: true });
+    const body = Buffer.from(await video.arrayBuffer());
+    writeFileSync(`${directory}/${clip.id}.webm`, body);
+    writeFileSync(
+      `${directory}/${clip.id}.capture.json`,
+      JSON.stringify(
+        {
+          ...report,
+          bytes: body.length,
+          sha256: createHash("sha256").update(body).digest("hex"),
+          capturedAt: new Date().toISOString(),
+          playerRelease: release,
+          plan: clip,
+        },
+        null,
+        2,
+      ),
+    );
+    return c.json({ saved: true });
+  });
+app.get("/showcase", (c) => c.redirect("/showcase/"));
+app.get("/showcase/*", serveStatic({ root: "runs" }));
 app.get("/warbook/health", (c) =>
   c.json({
     ok: true,

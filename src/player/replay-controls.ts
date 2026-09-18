@@ -1,5 +1,8 @@
+import { loadReplayClipControls } from "./replay-clips.js";
+
 /** Use the pinned client's own replay speed/pause mechanism; recorded actions are untouched. */
 export async function installReplayControls(): Promise<void> {
+  const addClipControls = await loadReplayClipControls();
   const { ReplayScreen } = await SystemJS.import(
     "gui/screen/replay/ReplayScreen",
   );
@@ -39,6 +42,8 @@ export async function installReplayControls(): Promise<void> {
         return;
       }
       const tick = (Number(match[1]) * 60 + Number(match[2])) * 15;
+      input.blur();
+      button.blur();
       screen.warbookReviewTime = input.value.trim();
       screen.warbookReviewTick = tick;
       if (tick < screen.game.currentTick) {
@@ -64,5 +69,6 @@ export async function installReplayControls(): Promise<void> {
       panel.remove();
     });
     if (screen.warbookReviewTick !== undefined) run();
+    addClipControls(screen);
   };
 }
