@@ -1,0 +1,32 @@
+{
+  "purpose": "Release identity checks on identical legal observations",
+  "subjects": {
+    "defense-release": {
+      "ref": "7b4299b",
+      "mode": "bastion"
+    },
+    "pressure-release": {
+      "ref": "36a7f72",
+      "mode": "pressure"
+    }
+  },
+  "shadows": {
+    "defense-release": {
+      "ref": "567f688",
+      "mode": "bastion"
+    },
+    "pressure-release": {
+      "ref": "f42a0de",
+      "mode": "pressure"
+    }
+  },
+  "opponents": {
+    "supalosa": {
+      "native": "supalosa"
+    }
+  },
+  "maps": [
+    "mp06t2.map"
+  ],
+  "rounds": 1
+}

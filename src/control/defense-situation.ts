@@ -38,7 +38,11 @@ export class DefenseSituation {
       route && o.tick - route.observedTick <= 450
         ? route.point
         : (o.baseRally ?? o.home);
-    const assets = o.own.filter((u) => u.type === 2 || u.harvester);
+    // Mobile miners need vehicle relief. Forward forts are supporting fire,
+    // not new anchors that may drag the whole garrison out of the base.
+    const assets = o.own.filter(
+      (u) => u.harvester || (u.type === 2 && !(u.weaponRange ?? 0)),
+    );
     for (const asset of assets) {
       if (asset.hp < (this.previousHp.get(asset.ref) ?? asset.hp))
         this.damagedAt.set(asset.ref, o.tick);
@@ -49,7 +53,7 @@ export class DefenseSituation {
         x: Math.max(asset.x, Math.min(enemy.x, asset.x + asset.width)),
         y: Math.max(asset.y, Math.min(enemy.y, asset.y + asset.height)),
       });
-    const guardIncursions = o.enemies
+    const contacts = o.enemies
       .filter(
         (e) =>
           !e.airborne &&
@@ -80,7 +84,8 @@ export class DefenseSituation {
               o.tick - (this.damagedAt.get(a.asset.ref) ?? -Infinity) < 150,
             ) || a.distance - b.distance,
       );
-    const incursions = guardIncursions.filter((i) => i.distance <= 10 ** 2);
+    const incursions = contacts.filter((i) => i.distance <= 10 ** 2);
+    const guardIncursions = contacts.filter((i) => i.asset.type === 2);
     if (incursions.length) {
       this.lastThreatTick = o.tick;
       if (o.tick - this.lastResponseTick >= 90) {

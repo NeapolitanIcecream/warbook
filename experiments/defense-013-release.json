@@ -1,0 +1,40 @@
+{
+  "purpose": "Fixed release comparison after a challenger-first defense and counter-adaptation cycle",
+  "subjects": {
+    "published-0112": {
+      "ref": "f8f491e",
+      "mode": "bastion"
+    },
+    "release-0113": {
+      "ref": "7b4299b",
+      "mode": "bastion"
+    }
+  },
+  "opponents": {
+    "pressure-specialist": {
+      "ref": "36a7f72",
+      "mode": "pressure"
+    },
+    "old-defense": {
+      "ref": "b3a1f7ce69ed140fbafb82799f6d2b14d487c052",
+      "mode": "bastion"
+    },
+    "old-main": {
+      "ref": "8326311288ec685c3da43b1d182071dc36938fe8",
+      "mode": "factory-exit"
+    },
+    "supalosa": {
+      "native": "supalosa"
+    }
+  },
+  "maps": [
+    "mp06t2.map",
+    "mp03t4.map",
+    "mp29u2.map",
+    "mp08t2.map"
+  ],
+  "rounds": 2,
+  "decision": {
+    "budget": "64 full ordinary games, 32 per frozen defender. Same opponent and map weights for both; uncontrolled starts and alternate execution slots. Preserve all caps, losses and errors. Review all candidate failures/caps and selected defense/scout examples. This exposed development pool is not a formal generalization evaluation. Pressure adaptations that underperformed were not promoted; the original effective pressure package is versioned separately."
+  }
+}

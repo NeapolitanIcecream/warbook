@@ -1438,6 +1438,55 @@ test("a fort covering one approach permits a supported infantry split", () => {
   assert.deepEqual(split.map((g) => g.units.length).sort(), [3, 3]);
 });
 
+test("remote miners and forward forts cannot pull the infantry garrison away from base buildings", () => {
+  const c = new Commander("bastion"),
+    o = observation();
+  o.defenseRoute = {
+    towards: o.starts[1],
+    point: { x: 69, y: 39 },
+    observedTick: o.tick,
+  };
+  o.own.push(
+    { ...tank("miner", 30, 10), name: "CMIN", harvester: true, combat: false },
+    { ...building("forward-fort", "GAPILL", 32, 11), weaponRange: 5.5 },
+    ...Array.from({ length: 6 }, (_, i) => ({
+      ...tank(`gi-${i}`, 69, 39 + (i % 2)),
+      name: "E1",
+      type: 3,
+      crusher: false,
+    })),
+  );
+  o.enemies = [
+    {
+      ref: "raider",
+      name: "E1",
+      type: 3,
+      x: 28,
+      y: 10,
+      hp: 125,
+      maxHp: 125,
+      observedTick: o.tick,
+      weaponRange: 5,
+    },
+  ];
+  const situation = new DefenseSituation().observe(o);
+  assert(situation.incursions.some((i) => i.asset.ref === "miner"));
+  assert.equal(situation.guardIncursions.length, 0);
+  c.decide(o);
+  const guard = c.controlPlan!.additionalCombat!.find(
+    (m) => m.id === "base-garrison",
+  )!;
+  assert.deepEqual(guard.destination, o.defenseRoute.point);
+  assert(
+    !guard.protectedAssets!.includes("miner") &&
+      !guard.protectedAssets!.includes("forward-fort"),
+  );
+  assert(
+    c.controlPlan!.combat.destination!.x < 40,
+    "uncommitted vehicles can still respond to the miner",
+  );
+});
+
 test("insufficient reserves do not become a solitary second squad", () => {
   const allocator = new DefenseAssignments();
   const infantry = Array.from({ length: 6 }, (_, i) => ({
