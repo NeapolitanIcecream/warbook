@@ -606,6 +606,27 @@ test("the offensive cohort funds its first force before expanding the economy", 
   assert.equal(c.controlPlan!.production.vehicles.harvesters, 4);
 });
 
+test("four-tank economic expansion keeps the six-tank blind exploration requirement", () => {
+  const c = new Commander("bastion"),
+    o = observation();
+  o.own = o.own.filter((u) => u.name !== "MTNK");
+  o.own.push(
+    ...Array.from({ length: 3 }, (_, i) => tank(`wave-${i}`, 68 + i, 42)),
+  );
+  c.decide(o);
+  assert.equal(c.controlPlan!.production.vehicles.harvesters, 2);
+  o.own.push(tank("fourth", 68, 43));
+  o.tick += 3;
+  c.decide(o);
+  assert.equal(c.controlPlan!.production.vehicles.harvesters, 4);
+  assert.equal(c.controlPlan!.combat.kind, "assemble");
+  o.own.push(tank("fifth", 69, 43), tank("sixth", 70, 43));
+  o.tick += 3;
+  c.decide(o);
+  assert.equal(c.controlPlan!.production.vehicles.harvesters, 4);
+  assert.equal(c.controlPlan!.combat.kind, "advance");
+});
+
 test("extra combat tasks keep separate ownership and receive only their own feedback", () => {
   const c = new Commander("bastion"),
     o = observation();

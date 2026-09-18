@@ -72,7 +72,10 @@ export class BastionStrategy implements StrategicController {
   ): StrategicPlan {
     const base = this.opening.plan(o, assessment);
     const { unitType: armor, factoryType: factory } = this.assessmentRequest(o);
-    if (assessment.observedArmor >= this.launchSize)
+    if (
+      assessment.observedArmor >=
+      (this.doctrine === "bastion" ? 4 : this.launchSize)
+    )
       this.firstForceFunded = true;
     const scouts = assessment.army.filter(isScout);
     const infantry = assessment.army.filter((u) => u.type === 3 && !isScout(u));
