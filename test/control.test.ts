@@ -153,43 +153,6 @@ test("pressure assigns distinct economic targets and preserves a home guard", ()
   const refs = [plan.combat, ...plan.additionalCombat!].flatMap((m) => m.units);
   assert.equal(new Set(refs).size, refs.length);
   assert.equal(plan.production.infantry.count, 10);
-  o.tick += 3;
-  o.enemies.push({
-    ref: "miner",
-    name: "CMIN",
-    type: 7,
-    x: 48,
-    y: 84,
-    hp: 1000,
-    maxHp: 1000,
-    observedTick: o.tick,
-    weaponRange: 0,
-  });
-  c.decide(o);
-  assert.equal(
-    c.controlPlan!.additionalCombat!.find((m) => m.id === "pressure-1")!.target,
-    "miner",
-  );
-  o.tick += 3;
-  o.enemies = o.enemies.filter((e) => e.ref !== "miner");
-  c.decide(o);
-  assert.notEqual(
-    c.controlPlan!.additionalCombat!.find((m) => m.id === "pressure-1")!.target,
-    "miner",
-    "no object-target attack on an unseen miner",
-  );
-  o.tick += 3;
-  o.credits = 400;
-  o.queues = o.queues.map((q) =>
-    q.type === 3
-      ? { ...q, status: 1, size: 1, items: [{ name: "MTNK", quantity: 1 }] }
-      : q,
-  );
-  const replacements = c.decide(o);
-  assert(
-    replacements.some((i) => i.kind === "queue" && i.product.name === "E1"),
-    "active armor production must not prevent affordable infantry replacements",
-  );
 });
 
 test("bastion keeps infantry at home and releases reinforcements as a separate batch", () => {

@@ -16,9 +16,7 @@ import {
 
 /** Independent pressure route: two infantry groups attack separate economic targets. */
 export class PressureStrategy implements StrategicController {
-  readonly id = "two-front-pressure-v2";
-  // Pressure accepts a near-parity engagement; the defender keeps its larger
-  // margin. Both still assess legal enemy contacts, reinforcements and health.
+  readonly id = "two-front-pressure-v3";
   private readonly base = new BastionStrategy("cohort", new Operations(1, 0.9));
   private readonly revisions = new Map<string, TaskRevision>();
   private readonly productionRevision = new TaskRevision();
@@ -79,24 +77,11 @@ export class PressureStrategy implements StrategicController {
         distance2(a, o.home) - distance2(b, o.home),
     );
     const first = structures[0];
-    const miners = o.enemies.filter(
-      (e) =>
-        ["CMIN", "HARV"].includes(e.name) &&
-        (!first || distance2(e, first) >= 8 ** 2),
-    );
-    const secondGroup = gi.filter((u) => this.groups[1].has(u.ref));
-    miners.sort(
-      (a, b) =>
-        Math.min(...secondGroup.map((u) => distance2(a, u)), Infinity) -
-        Math.min(...secondGroup.map((u) => distance2(b, u)), Infinity),
-    );
-    const second =
-      miners[0] ??
-      (first
-        ? [...structures]
-            .filter((e) => e.ref !== first.ref)
-            .sort((a, b) => distance2(b, first) - distance2(a, first))[0]
-        : undefined);
+    const second = first
+      ? [...structures]
+          .filter((e) => e.ref !== first.ref)
+          .sort((a, b) => distance2(b, first) - distance2(a, first))[0]
+      : undefined;
     const starts = o.starts.filter((p) => distance2(p, o.home) > 12 ** 2);
     const additionalCombat = (plan.additionalCombat ?? []).map((m) =>
       this.revise({
@@ -128,9 +113,6 @@ export class PressureStrategy implements StrategicController {
     const updated = {
       ...production,
       infantry: { ...production.infantry, count: 10 },
-      // The route depends on replacing raiders after the opening. The base's
-      // 800-credit infantry gate lets continuous armor production starve them.
-      spending: { ...production.spending, infantryAbove: 250 },
     };
     return {
       ...plan,

@@ -1,0 +1,23 @@
+{
+  "purpose": "Validate the pressure route with its independent near-parity commitment against frozen F3 defense",
+  "subjects": {
+    "pressure-p3": {
+      "ref": "ea5a124",
+      "mode": "pressure"
+    }
+  },
+  "opponents": {
+    "prepared-f3": {
+      "ref": "567f688",
+      "mode": "bastion"
+    }
+  },
+  "maps": [
+    "mp06t2.map",
+    "mp03t4.map"
+  ],
+  "rounds": 2,
+  "decision": {
+    "budget": "Four ordinary complete games. Actual infantry/armor pressure and end states, not a score claim; preserve starts and caps. The conservative defense margin remains unchanged."
+  }
+}
