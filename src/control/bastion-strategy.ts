@@ -83,7 +83,6 @@ export class BastionStrategy implements StrategicController {
     this.joining = new Set([...this.joining].filter((ref) => alive.has(ref)));
     const {
       direction,
-      requestedPost,
       post,
       assets,
       incursions,
@@ -136,6 +135,22 @@ export class BastionStrategy implements StrategicController {
           u.y < b.y + b.height,
       );
     const center = rendezvous;
+    const covered = (p: Point) =>
+      o.own.some(
+        (u) =>
+          u.type === 2 &&
+          p.x >= u.x &&
+          p.x < u.x + u.width &&
+          p.y >= u.y &&
+          p.y < u.y + u.height,
+      );
+    if (
+      this.withdrawalPoint &&
+      covered(this.withdrawalPoint) &&
+      o.baseRally &&
+      !covered(o.baseRally)
+    )
+      this.withdrawalPoint = o.baseRally;
     for (const ref of this.withdrawing) {
       const u = vehicles.find((u) => u.ref === ref);
       if (
@@ -147,11 +162,11 @@ export class BastionStrategy implements StrategicController {
         this.withdrawing.delete(ref);
     }
     const beginWithdrawal = () => {
-      this.withdrawalPoint = post;
+      this.withdrawalPoint = o.baseRally ?? post;
       for (const u of vehicles)
         if (
           (this.assault.has(u.ref) || this.joining.has(u.ref)) &&
-          (u.onBridge || distance2(u, post) > 4 ** 2)
+          (u.onBridge || distance2(u, this.withdrawalPoint) > 4 ** 2)
         )
           this.withdrawing.add(u.ref);
     };
@@ -255,7 +270,7 @@ export class BastionStrategy implements StrategicController {
             vehicles: { ...base.production.vehicles, harvesters: 2 },
           }
         : {}),
-      defenseAnchor: requestedPost,
+      defenseAnchor: post,
       defenses: [
         {
           product: fort,

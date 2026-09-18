@@ -70,6 +70,7 @@ export interface Observation {
   exploredStarts?: readonly Point[];
   scoutObservedTick?: number;
   defenseRoute?: { towards: Point; point: Point; observedTick: number };
+  baseRally?: Point;
   stagingRoute?: { towards: Point; point: Point; observedTick: number };
   own: Unit[];
   enemies: Contact[];

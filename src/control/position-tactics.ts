@@ -245,14 +245,8 @@ export class PositionTactics extends LocalCombat {
         { x: -2, y: 2 },
         { x: 2, y: -2 },
       ];
-      const desired = {
-        x:
-          base.x +
-          (mission.kind === "withdraw" ? 0 : offsets[slot % offsets.length].x),
-        y:
-          base.y +
-          (mission.kind === "withdraw" ? 0 : offsets[slot % offsets.length].y),
-      };
+      // Ground posts are validated; arbitrary vehicle offsets can land in a cliff.
+      const desired = { x: base.x, y: base.y };
       if (unit.type === 3) {
         const dx = base.x - o.home.x,
           dy = base.y - o.home.y;

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { MapApi } from "@chronodivide/game-api";
-import { defenseRoute } from "../src/defense-route.js";
+import { baseRally, defenseRoute } from "../src/defense-route.js";
 import { LocalGroundMap } from "../src/local-ground-map.js";
 
 function mapFixture(hiddenDetour = false) {
@@ -27,26 +27,53 @@ function mapFixture(hiddenDetour = false) {
   } as unknown as MapApi;
 }
 
-test("defensive staging follows an explored detour on its independent ground graph", () => {
+test("defensive staging is forward even when the route to it initially detours behind home", () => {
   const p = defenseRoute(
     mapFixture(),
     "actor",
     { x: 0, y: 0 },
-    { x: 30, y: 0 },
+    { x: 30, y: -30 },
     5,
   );
   assert(p);
   assert(
-    p.y >= 5 && p.x <= 4,
-    "the post follows the detour rather than pointing into the wall",
+    p.x >= 6 && p.y < 0,
+    "do not park guards at the rear turning point of the detour",
   );
 });
 
 test("an unexplored detour cannot become a staging hint", () => {
-  assert.equal(
-    defenseRoute(mapFixture(true), "actor", { x: 0, y: 0 }, { x: 30, y: 0 }, 5),
-    undefined,
+  const p = defenseRoute(
+    mapFixture(true),
+    "actor",
+    { x: 0, y: 0 },
+    { x: 30, y: -30 },
+    5,
   );
+  assert(p);
+  assert(p.x < 4, "the post stays in the known reachable component");
+});
+
+test("the withdrawal rally stays near home and both posts avoid owned factory footprints", () => {
+  const map = mapFixture(),
+    home = { x: 0, y: 0 },
+    nav = new LocalGroundMap(map, "actor", home, 5, 22);
+  const occupied = [{ x: -1, y: -1, width: 3, height: 3 }];
+  const rally = baseRally(nav, home, occupied),
+    front = defenseRoute(
+      map,
+      "actor",
+      home,
+      { x: 30, y: -30 },
+      5,
+      nav,
+      occupied,
+    );
+  assert(rally && front);
+  const inside = (p: { x: number; y: number }) =>
+    p.x >= -1 && p.x < 2 && p.y >= -1 && p.y < 2;
+  assert(!inside(rally) && !inside(front));
+  assert(Math.hypot(rally.x, rally.y) < Math.hypot(front.x, front.y));
 });
 
 test("hypothetical refinery footprints block only the independent query, without changing the next path", () => {

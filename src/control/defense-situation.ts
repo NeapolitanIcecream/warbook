@@ -33,16 +33,11 @@ export class DefenseSituation {
         x: o.home.x + 4,
         y: o.home.y + 4,
       };
-    const dx = direction.x - o.home.x,
-      dy = direction.y - o.home.y,
-      length = Math.hypot(dx, dy) || 1;
-    const requestedPost = {
-      x: Math.round(o.home.x + (6 * dx) / length),
-      y: Math.round(o.home.y + (6 * dy) / length),
-    };
     const route = o.defenseRoute;
     const post =
-      route && o.tick - route.observedTick <= 450 ? route.point : o.home;
+      route && o.tick - route.observedTick <= 450
+        ? route.point
+        : (o.baseRally ?? o.home);
     const assets = o.own.filter((u) => u.type === 2 || u.harvester);
     for (const asset of assets) {
       if (asset.hp < (this.previousHp.get(asset.ref) ?? asset.hp))
@@ -103,22 +98,13 @@ export class DefenseSituation {
         asset.type === 2 &&
         o.tick - (this.damagedAt.get(asset.ref) ?? -Infinity) < 150,
     );
-    const localArmor = o.enemies.filter(
-      (e) =>
-        e.type === 7 &&
-        !["CMIN", "HARV", "AMCV", "SMCV"].includes(e.name) &&
-        (distance2(e, o.home) <= 30 ** 2 ||
-          assets.some((a) => distance2(a, e) <= 15 ** 2)),
-    );
     return {
       direction,
-      requestedPost,
       post,
       assets,
       incursions,
       vehiclePost,
       protectNow,
-      localArmor,
       responding: !!this.responsePost,
       damagedAt: this.damagedAt as ReadonlyMap<string, number>,
     };

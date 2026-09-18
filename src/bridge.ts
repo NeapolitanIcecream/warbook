@@ -7,7 +7,7 @@ import {
   type UnitData,
   type TechnoRules,
 } from "@chronodivide/game-api";
-import { defenseRoute } from "./defense-route.js";
+import { baseRally, defenseRoute } from "./defense-route.js";
 import { refinerySite } from "./refinery-site.js";
 import { LocalGroundMap } from "./local-ground-map.js";
 import { combatCapabilities } from "./unit-capabilities.js";
@@ -51,6 +51,7 @@ export class WarbookBot extends Bot {
   private lastProductionRevision = -1;
   private lastAdditionalRevisions = "";
   private defenseRoute?: Observation["defenseRoute"];
+  private baseRally?: Point;
   private stagingRoute?: Observation["stagingRoute"];
   private lastDefenseRouteTick = -150;
   public trace?: (event: Trace) => void;
@@ -114,6 +115,17 @@ export class WarbookBot extends Bot {
         speed === undefined
           ? undefined
           : new LocalGroundMap(this.game.map, this.name, home, speed, 22);
+      const occupied = this.sorted(this.player.getVisibleUnits("self"))
+        .filter((u) => u.type === ObjectType.Building)
+        .map((u) => ({
+          x: u.tile.rx,
+          y: u.tile.ry,
+          width: u.foundation.width,
+          height: u.foundation.height,
+        }));
+      this.baseRally = navigation
+        ? baseRally(navigation, home, occupied)
+        : undefined;
       const point =
         speed === undefined || !towards
           ? undefined
@@ -124,6 +136,7 @@ export class WarbookBot extends Bot {
               towards,
               speed,
               navigation,
+              occupied,
             );
       this.defenseRoute =
         point && towards ? { towards, point, observedTick: tick } : undefined;
@@ -136,6 +149,7 @@ export class WarbookBot extends Bot {
               staging,
               speed,
               navigation,
+              occupied,
             )
           : undefined;
       this.stagingRoute =
@@ -340,6 +354,7 @@ export class WarbookBot extends Bot {
       exploredStarts: this.exploredStarts,
       scoutObservedTick: this.lastScoutScan,
       defenseRoute: this.defenseRoute,
+      baseRally: this.baseRally,
       stagingRoute: this.stagingRoute,
     };
     if (this.lastObservation) {
