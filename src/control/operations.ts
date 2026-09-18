@@ -18,6 +18,7 @@ export interface Operation {
   defenders: number;
   productionArrivals: number;
   travelSeconds: number;
+  assumedProduction?: boolean;
 }
 const mcv = (c: Contact) => ["AMCV", "SMCV"].includes(c.name);
 const yard = (c: Contact) => ["GACNST", "NACNST"].includes(c.name);
@@ -85,6 +86,53 @@ export class Operations {
     return { x: target.x, y: target.y };
   }
 
+  private opposition(
+    o: Observation,
+    target: Contact,
+    center: Point,
+    tanks: number,
+  ) {
+    const travelSeconds =
+      (distance(center, target) / this.observedTankSpeed) * 1.2;
+    const horizon = travelSeconds + target.hp / (12 * tanks);
+    let defenders = 0;
+    for (const e of this.known.values()) {
+      if (
+        !(e.weaponRange ?? 0) ||
+        e.airborne ||
+        e.canThreatenVehicles === false
+      )
+        continue;
+      const speed = e.type === 2 ? 0 : e.type === 3 ? 0.45 : 0.8;
+      const age = Math.min(30, (o.tick - e.observedTick) / 15);
+      if (distance(e, target) > 7 + speed * (horizon + age)) continue;
+      const value =
+        e.type === 2 ? 0.45 : e.type === 3 ? 0.12 : e.name === "FV" ? 0.6 : 1;
+      defenders += value * Math.sqrt(e.hp / e.maxHp);
+    }
+    // A factory last seen under fog is still a possible source of reinforcements.
+    const sources: Point[] = [...this.known.values()].filter(factory);
+    const assumedProduction = !sources.length;
+    if (assumedProduction) {
+      // Working prior: one factory near known economic buildings, otherwise at a
+      // possible enemy start. A relocating MCV does not teleport its production.
+      const origin =
+        [...this.known.values()]
+          .filter((e) => e.type === 2 && !yard(e) && !(e.weaponRange ?? 0))
+          .sort((a, b) => distance2(a, target) - distance2(b, target))[0] ??
+        o.starts
+          .filter((p) => distance2(p, o.home) > 12 ** 2)
+          .sort((a, b) => distance2(a, target) - distance2(b, target))[0];
+      if (origin) sources.push(origin);
+    }
+    const productionArrivals = sources.reduce(
+      (n, f) =>
+        n + Math.max(0, Math.floor((horizon - distance(f, target) / 0.8) / 30)),
+      0,
+    );
+    return { defenders, productionArrivals, travelSeconds, assumedProduction };
+  }
+
   consider(o: Observation, force: readonly Unit[]): Operation | undefined {
     const tanks = force.filter((u) => ["MTNK", "HTNK"].includes(u.name));
     this.decision = {
@@ -97,7 +145,6 @@ export class Operations {
       y: tanks.reduce((s, u) => s + u.y, 0) / tanks.length,
     };
     const bases = [...this.known.values()].filter((e) => e.type === 2);
-    const factories = o.enemies.filter(factory);
     const candidates = o.enemies
       .filter((e) => mcv(e) || e.type === 2)
       .sort(
@@ -120,32 +167,8 @@ export class Operations {
         visible &&
         (mcv(target) || yard(target)) &&
         distance(target, o.home) <= 30;
-      const travelSeconds =
-        (distance(center, target) / this.observedTankSpeed) * 1.2;
-      const killSeconds = target.hp / (12 * tanks.length);
-      const horizon = travelSeconds + killSeconds;
-      let defenders = 0;
-      for (const e of this.known.values()) {
-        if (
-          !(e.weaponRange ?? 0) ||
-          e.airborne ||
-          e.canThreatenVehicles === false
-        )
-          continue;
-        const speed = e.type === 2 ? 0 : e.type === 3 ? 0.45 : 0.8;
-        const age = Math.min(30, (o.tick - e.observedTick) / 15);
-        if (distance(e, target) > 7 + speed * (horizon + age)) continue;
-        const value =
-          e.type === 2 ? 0.45 : e.type === 3 ? 0.12 : e.name === "FV" ? 0.6 : 1;
-        defenders += value * Math.sqrt(e.hp / e.maxHp);
-      }
-      // Production needs both build time and travel time to the threatened objective.
-      const productionArrivals = factories.reduce(
-        (n, f) =>
-          n +
-          Math.max(0, Math.floor((horizon - distance(f, target) / 0.8) / 30)),
-        0,
-      );
+      const estimate = this.opposition(o, target, center, tanks.length);
+      const { defenders, productionArrivals, travelSeconds } = estimate;
       const uncertainty = visible ? 0 : 1;
       const required = (defenders + productionArrivals + uncertainty) * 1.2;
       if (required < lowestRequired) {
@@ -158,6 +181,7 @@ export class Operations {
           defenders,
           productionArrivals,
           travelSeconds,
+          assumedProduction: estimate.assumedProduction,
         };
       }
       const window = this.pressured && o.tick - this.lastPressureTick <= 1800;
@@ -171,9 +195,7 @@ export class Operations {
           : window
             ? "counterattack-window"
             : "attack-opportunity",
-        defenders,
-        productionArrivals,
-        travelSeconds,
+        ...estimate,
         score:
           (exposed ? 100 : yard(target) ? 25 : factory(target) ? 20 : 10) -
           travelSeconds / 10 -
@@ -191,22 +213,41 @@ export class Operations {
         defenders: operation.defenders,
         productionArrivals: operation.productionArrivals,
         travelSeconds: operation.travelSeconds,
+        assumedProduction: operation.assumedProduction ?? false,
       };
       return operation;
     }
-    // A nearby remaining attacker can be finished by a supported four-tank counterattack.
+    // Assess the attacker's reachable support, including units outside the home radius.
     const nearby = o.enemies
-      .filter((e) => e.type === 7 && !mcv(e) && distance(e, o.home) <= 24)
+      .filter(
+        (e) =>
+          e.type === 7 &&
+          !mcv(e) &&
+          (e.weaponRange ?? 0) > 0 &&
+          e.canThreatenVehicles !== false &&
+          distance(e, o.home) <= 24,
+      )
       .sort((a, b) => distance2(a, center) - distance2(b, center));
-    if (this.pressured && tanks.length >= 4 && nearby.length <= 1 && nearby[0])
-      return {
-        point: { x: nearby[0].x, y: nearby[0].y },
-        ref: nearby[0].ref,
-        reason: "local-counterattack",
-        defenders: 1,
-        productionArrivals: 0,
-        travelSeconds: distance(center, nearby[0]) * 2,
+    if (this.pressured && tanks.length >= 4 && nearby[0]) {
+      const estimate = this.opposition(o, nearby[0], center, tanks.length);
+      const required = (estimate.defenders + estimate.productionArrivals) * 1.2;
+      this.decision = {
+        operationReason: "local-support-risk",
+        formedTanks: tanks.length,
+        ownPower: power,
+        requiredPower: required,
+        ...estimate,
       };
+      if (power >= Math.max(3, required)) {
+        this.decision.operationReason = "local-counterattack";
+        return {
+          point: { x: nearby[0].x, y: nearby[0].y },
+          ref: nearby[0].ref,
+          reason: "local-counterattack",
+          ...estimate,
+        };
+      }
+    }
   }
 
   target(o: Observation, force: readonly Unit[]): Operation | undefined {

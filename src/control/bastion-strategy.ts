@@ -324,6 +324,7 @@ export class BastionStrategy implements StrategicController {
             defenders: operation.defenders,
             productionArrivals: operation.productionArrivals,
             travelSeconds: operation.travelSeconds,
+            assumedProduction: operation.assumedProduction ?? false,
           }
         : this.operations.decision;
     return { tick: o.tick, combat, additionalCombat, production, decision };

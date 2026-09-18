@@ -485,32 +485,25 @@ test("a local counterattack window can release four ready tanks after observed a
   o.own.push(
     ...Array.from({ length: 4 }, (_, i) => tank(`wave-${i}`, 68 + (i % 3), 42)),
   );
-  o.enemies = [
-    {
-      ref: "enemy-a",
-      name: "MTNK",
-      type: 7,
-      x: 70,
-      y: 45,
-      hp: 300,
-      maxHp: 300,
-      observedTick: o.tick,
-    },
-    {
-      ref: "enemy-b",
-      name: "MTNK",
-      type: 7,
-      x: 71,
-      y: 45,
-      hp: 300,
-      maxHp: 300,
-      observedTick: o.tick,
-    },
-  ];
+  o.enemies = Array.from({ length: 6 }, (_, i) => ({
+    ref: `enemy-${i}`,
+    name: "MTNK",
+    type: 7,
+    x: 70 + (i % 3),
+    y: 45 + Math.floor(i / 3),
+    hp: 300,
+    maxHp: 300,
+    weaponRange: 5,
+    observedTick: o.tick,
+  }));
   c.decide(o);
   assert.equal(c.controlPlan!.combat.kind, "defend");
   o.tick += 90;
-  o.enemies = o.enemies.slice(0, 1);
+  o.enemies = o.enemies.map((e, i) => ({
+    ...e,
+    ...(i ? { x: 130 + i, y: 120 } : {}),
+    observedTick: o.tick,
+  }));
   c.decide(o);
   assert.equal(c.controlPlan!.combat.kind, "advance");
   assert.equal(c.controlPlan!.combat.units.length, 4);
