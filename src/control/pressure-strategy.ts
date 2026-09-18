@@ -91,7 +91,8 @@ export class PressureStrategy implements StrategicController {
     this.groups.forEach((group, i) => {
       if (!group.size) return;
       const target = i ? (second ?? first) : first;
-      const destination = target ?? starts[i % starts.length];
+      const goal = target ?? starts[i % starts.length];
+      const destination = goal ? { x: goal.x, y: goal.y } : undefined;
       additionalCombat.push(
         this.revise({
           id: `pressure-${i}`,
