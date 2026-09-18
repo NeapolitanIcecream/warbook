@@ -1,6 +1,6 @@
 # 无需客户端的对局短片
 
-2026-09-18 按用户同意制作第一版样片。读者打开普通 HTML 视频页即可观看；游戏客户端只用于制作阶段。当前文件保存在本机，未公开上传视频。
+2026-09-18 按用户同意制作第一版样片，并持续推进到公开分享。精选素材现已上线：[观看页](https://neapolitanicecream.github.io/warbook/0.1.11/) · [Release 素材包](https://github.com/NeapolitanIcecream/warbook/releases/tag/v0.1.11)。
 
 ## 当前展示约定
 
@@ -8,9 +8,18 @@
 
 新版文件为 `defense-4x.mp4`、`counterattack-4x.mp4`、`preview-4x.gif`。短片页只保留版本、片段名称、速度、时长和下载控件。新文件名使浏览器不会继续显示上一次的带字素材。原来的 MP4/GIF 下载路径也已同步为新版。两段均实测 12.5 秒、1280×720、30 fps，文件分别为 2,251,818 / 2,244,744 字节；GIF 为 8 秒、2,610,411 字节。已检查成片无添加文字、无黑帧，并核对 HTTP 文件哈希；浏览器中两段均正常播完 12.5 秒。
 
-## 远端呈现方案（已核对，未部署）
+## 公开入口已上线
 
-按用户“研究如何在远端呈现”的要求，选择 **GitHub Pages 展示 + Release 素材归档**。已通过仓库 API 核对：`NeapolitanIcecream/warbook` 为公开仓库，Actions 可用，Pages 尚未启用，也尚无 GitHub Release；已有 Git 标签不等同于已创建 Release。
+- 固定版本观看页：<https://neapolitanicecream.github.io/warbook/0.1.11/>；项目入口 <https://neapolitanicecream.github.io/warbook/> 指向当前版本。页面无需登录，也不加载游戏客户端。
+- 首次发布来源 `88dc03b`，[Actions 运行 35325563166](https://github.com/NeapolitanIcecream/warbook/actions/runs/35325563166) 成功。Pages 强制 HTTPS。公开 Release 包的 GitHub SHA-256 与本地发布包一致。
+- 未附带认证信息的 HTTP 检查：入口与七份精选文件均返回 200、哈希一致；两份 MP4 的 Range 请求均返回 206 与正确字节范围。原始回放和 GIF 的下载内容也一致。
+- 公开页中两段视频均实际播放至 12.5 秒结束，无媒体错误；防守视频跳转到 8.41 秒并暂停成功。390×844 的浏览器视口下，页面宽度为 390，没有横向溢出；这属于窄屏浏览器检查，不冒充各种真实手机或地区网络的覆盖。
+- 发布清单在 [publications.json](../showcase/publications.json)，[构建脚本](../scripts/build-showcase-site.py) 从公开 Release 下载并检查哈希，仅提取清单内文件；[Pages 工作流](../.github/workflows/showcase-pages.yml) 发布独立 `_site` artifact。官方 Actions 固定到已核对的提交。没有把素材提交到源码 Git 历史，也没有上传本地配置、MIX、原始 WebM 或运行日志。
+- 后续先验证并上传新的精选 Release 包，再更新发布清单及 `latest`，旧版本目录保留。修改发布清单或发布脚本会重新部署，也支持手动运行工作流；普通 AI 代码或文档提交不会触发。机器验收记录在 `work/showcase-publish/publication-check.json`。
+
+## 远端呈现准备（历史）
+
+以下为公开部署前的准备记录。按用户“研究如何在远端呈现”的要求，选择 **GitHub Pages 展示 + Release 素材归档**。当时通过仓库 API 核对：`NeapolitanIcecream/warbook` 为公开仓库，Actions 可用，Pages 尚未启用，也尚无 GitHub Release；已有 Git 标签不等同于已创建 Release。
 
 - 本地页面及其引用一共七份精选文件：HTML、两份 MP4、两张封面、GIF、完整 `.rpl`，合计 **8,062,633 字节**。全部引用为相对路径，不依赖 localhost、游戏客户端、Node 服务或游戏素材。
 - 已在忽略目录准备 `work/showcase-publish/warbook-showcase-0.1.11-4x.zip`，**7,978,534 字节**，SHA-256 `5df7f58f88dc836675a97728b3f7a61fa8d476c3223cfb49eccca7256150469e`。包内为版本目录、入口、`.nojekyll` 和校验清单；逐项校验解压内容与原文件哈希一致。未纳入原始 WebM、运行日志、capture.json、本地配置和游戏资源；MP4 标签中也没有本地路径。

@@ -1,8 +1,12 @@
 # 2026-09-15 执行进展
 
+## 2026-09-18：公开观看页已上线
+
+精选 4× 无添加文字短片已发布到 [GitHub Pages](https://neapolitanicecream.github.io/warbook/0.1.11/)，对应 [Release](https://github.com/NeapolitanIcecream/warbook/releases/tag/v0.1.11) 保存素材包。首个发布工作流 `35325563166` 成功；匿名 HTTPS 下载的入口与七份素材哈希一致，两段视频的 Range 请求均为 206。公开页中两段均播放至 12.5 秒结束，跳转进度与 390 像素窄屏布局通过。源码仓库保存白名单、包哈希和发布流程，媒体不进入 Git 历史，本地玩家入口保持。详情见 [公开入口](replay-showcase.md#公开入口已上线)。
+
 ## 2026-09-18：核对远端展示条件，准备精选静态包
 
-公开仓库与 Actions 可用，Pages/Release 尚未创建。现有短片页的七份文件共 8.06 MB，引用均可移植；已准备并核对 7.98 MB 发布包。推荐 Pages 展示、Release 保存版本素材、Actions 只发布精选静态文件，媒体不进源码 Git 历史。此轮为研究和本地准备，未启动公开部署；见 [远端呈现方案](replay-showcase.md#远端呈现方案已核对未部署)。
+公开仓库与 Actions 可用，Pages/Release 尚未创建。现有短片页的七份文件共 8.06 MB，引用均可移植；已准备并核对 7.98 MB 发布包。推荐 Pages 展示、Release 保存版本素材、Actions 只发布精选静态文件，媒体不进源码 Git 历史。此轮为研究和本地准备，未启动公开部署；见 [远端呈现准备记录](replay-showcase.md#远端呈现准备历史)。
 
 ## 2026-09-18：短片改为 4× 原始画面
 
