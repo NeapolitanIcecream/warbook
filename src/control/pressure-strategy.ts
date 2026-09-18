@@ -76,11 +76,24 @@ export class PressureStrategy implements StrategicController {
         distance2(a, o.home) - distance2(b, o.home),
     );
     const first = structures[0];
-    const second = first
-      ? [...structures]
-          .filter((e) => e.ref !== first.ref)
-          .sort((a, b) => distance2(b, first) - distance2(a, first))[0]
-      : undefined;
+    const miners = o.enemies.filter(
+      (e) =>
+        ["CMIN", "HARV"].includes(e.name) &&
+        (!first || distance2(e, first) >= 8 ** 2),
+    );
+    const secondGroup = gi.filter((u) => this.groups[1].has(u.ref));
+    miners.sort(
+      (a, b) =>
+        Math.min(...secondGroup.map((u) => distance2(a, u)), Infinity) -
+        Math.min(...secondGroup.map((u) => distance2(b, u)), Infinity),
+    );
+    const second =
+      miners[0] ??
+      (first
+        ? [...structures]
+            .filter((e) => e.ref !== first.ref)
+            .sort((a, b) => distance2(b, first) - distance2(a, first))[0]
+        : undefined);
     const starts = o.starts.filter((p) => distance2(p, o.home) > 12 ** 2);
     const additionalCombat = (plan.additionalCombat ?? []).map((m) =>
       this.revise({
