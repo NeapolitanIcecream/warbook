@@ -1,6 +1,5 @@
 import {
   distance2,
-  weaponDistance2,
   type Contact,
   type Intent,
   type Observation,
@@ -26,7 +25,7 @@ const hardTarget = (e: Contact) =>
 
 /** Keep a supported fighting core; native orders still choose legal paths and perform shooting. */
 export class StrikeTactics extends LocalCombat {
-  override readonly id = "supported-strike-v3";
+  override readonly id = "supported-strike-v2";
   private leaders = new Map<string, string>();
   private trails = new Map<string, Point[]>();
   private retreats = new Map<string, { point: Point; until: number }>();
@@ -78,25 +77,9 @@ export class StrikeTactics extends LocalCombat {
     } else this.waits.delete(mission.id);
     const wait = this.waits.get(mission.id);
     const regroup = wait !== undefined && o.tick - wait < 450;
-    const inRange = new Map(
-      nearby.map((enemy) => [
-        enemy.ref,
-        core.filter(
-          (unit) =>
-            weaponDistance2(unit, enemy) <= (unit.weaponRange ?? 5) ** 2,
-        ).length,
-      ]),
-    );
-    const firingCost = (enemy: Contact) => {
-      const count = inRange.get(enemy.ref) ?? 0;
-      return count ? enemy.hp / count : Infinity;
-    };
     const dangerous = nearby.sort(
       (a, b) =>
         Number(b.type === 7) - Number(a.type === 7) ||
-        (inRange.get(a.ref) || inRange.get(b.ref)
-          ? firingCost(a) - firingCost(b)
-          : 0) ||
         a.hp / a.maxHp - b.hp / b.maxHp ||
         distance2(a, rally) - distance2(b, rally),
     )[0];

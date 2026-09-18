@@ -1,0 +1,17 @@
+{
+  "purpose": "Compare local armor target selection using guns already in range against HP-only priority",
+  "subjects": {
+    "sequenced-economy": { "ref": "6bc10dd", "mode": "bastion" },
+    "nearby-finish": { "ref": "d4000e5", "mode": "bastion" },
+    "fire-coverage": { "ref": "1a7040d", "mode": "bastion" }
+  },
+  "opponents": {
+    "old-defense": { "ref": "b3a1f7ce69ed140fbafb82799f6d2b14d487c052", "mode": "bastion" },
+    "supalosa": { "native": "supalosa" }
+  },
+  "maps": ["mp29u2.map", "mp06t2.map"],
+  "rounds": 2,
+  "decision": {
+    "budget": "24 normal new complete games, 8 per subject. Inspect winning and losing engagement slices and raw replay consistency. In-range counts are geometric hints, not verified firing or damage attribution; retain all results."
+  }
+}

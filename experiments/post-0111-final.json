@@ -1,0 +1,17 @@
+{
+  "purpose": "Frozen four-map comparison of the retained economic sequencing and nearby finishing changes against published 0.1.11",
+  "subjects": {
+    "published-0111": { "ref": "7a42d2a", "mode": "bastion" },
+    "retained": { "ref": "d4000e5", "mode": "bastion" }
+  },
+  "opponents": {
+    "old-main": { "ref": "8326311288ec685c3da43b1d182071dc36938fe8", "mode": "factory-exit" },
+    "old-defense": { "ref": "b3a1f7ce69ed140fbafb82799f6d2b14d487c052", "mode": "bastion" },
+    "supalosa": { "native": "supalosa" }
+  },
+  "maps": ["mp29u2.map", "mp06t2.map", "mp03t4.map", "mp08t2.map"],
+  "rounds": 4,
+  "decision": {
+    "budget": "96 normal full games, 48 per frozen subject, with alternating execution slots. No seeded pairing, no exclusions after seeing outcomes, and no score changes. These maps and opponent sources are previously exposed development assets. Review every retained-candidate loss/cap and at least one success before promotion."
+  }
+}
