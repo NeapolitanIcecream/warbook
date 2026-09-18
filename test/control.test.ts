@@ -659,41 +659,6 @@ test("the offensive cohort funds its first force before expanding the economy", 
   assert.equal(c.controlPlan!.production.vehicles.harvesters, 4);
 });
 
-test("one replacement tank bridges expansion, then miner investment resumes despite later losses", () => {
-  const c = new Commander("bastion"),
-    o = observation();
-  o.own = o.own.filter((u) => u.name !== "MTNK");
-  o.own.push(
-    ...Array.from({ length: 6 }, (_, i) => tank(`wave-${i}`, 68 + (i % 3), 42)),
-    ...Array.from({ length: 2 }, (_, i) => ({
-      ...tank(`miner-${i}`),
-      name: "CMIN",
-      harvester: true,
-      combat: false,
-    })),
-  );
-  o.queues[0] = {
-    type: 0,
-    status: 1,
-    size: 1,
-    items: [{ name: "GAREFN", quantity: 1 }],
-  };
-  let intents = c.decide(o);
-  assert.equal(c.controlPlan!.production.vehicles.harvesters, 3);
-  assert(intents.some((i) => i.kind === "queue" && i.product.name === "MTNK"));
-  o.tick += 3;
-  // The first new tank replaces a casualty, so the live count never reaches seven.
-  o.own = o.own.filter((u) => u.ref !== "wave-0");
-  o.own.push(tank("reinforcement", 75, 40));
-  intents = c.decide(o);
-  assert.equal(c.controlPlan!.production.vehicles.harvesters, 4);
-  assert(intents.some((i) => i.kind === "queue" && i.product.name === "CMIN"));
-  o.tick += 3;
-  o.own = o.own.filter((u) => u.ref !== "reinforcement");
-  c.decide(o);
-  assert.equal(c.controlPlan!.production.vehicles.harvesters, 4);
-});
-
 test("extra combat tasks keep separate ownership and receive only their own feedback", () => {
   const c = new Commander("bastion"),
     o = observation();

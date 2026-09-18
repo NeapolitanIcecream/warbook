@@ -267,6 +267,15 @@ export class Operations {
 
   target(o: Observation, force: readonly Unit[]): Operation | undefined {
     if (!this.active) return;
+    // Exploration serves target discovery. A newly located base or MCV must
+    // replace the old search waypoint, even if that waypoint was never reached.
+    if (
+      this.active.reason === "formed-advance" &&
+      (this.hasKnownBase || o.enemies.some(mcv))
+    ) {
+      this.active = this.consider(o, force);
+      if (!this.active) return;
+    }
     const visible = o.enemies.find((e) => e.ref === this.active!.ref);
     const remembered = this.active.ref
       ? this.known.get(this.active.ref)

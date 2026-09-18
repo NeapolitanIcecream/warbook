@@ -38,12 +38,11 @@ export class BastionStrategy implements StrategicController {
   private nextLaunchTick = 0;
   private readonly launchSize = 6;
   private firstForceFunded = false;
-  private firstForce?: Set<string>;
   private launchedArmor = 6;
 
   constructor(private readonly doctrine: "bastion" | "cohort" = "bastion") {
     this.id =
-      doctrine === "bastion" ? "bastion-strategy-v9" : "cohort-strategy-v5";
+      doctrine === "bastion" ? "bastion-strategy-v8" : "cohort-strategy-v5";
   }
 
   assessmentRequest(o: Observation) {
@@ -73,16 +72,8 @@ export class BastionStrategy implements StrategicController {
   ): StrategicPlan {
     const base = this.opening.plan(o, assessment);
     const { unitType: armor, factoryType: factory } = this.assessmentRequest(o);
-    if (!this.firstForceFunded && assessment.observedArmor >= this.launchSize) {
+    if (assessment.observedArmor >= this.launchSize)
       this.firstForceFunded = true;
-      this.firstForce = new Set(
-        o.own.filter((u) => u.name === armor).map((u) => u.ref),
-      );
-    } else if (
-      this.firstForce &&
-      o.own.some((u) => u.name === armor && !this.firstForce!.has(u.ref))
-    )
-      this.firstForce = undefined;
     const scouts = assessment.army.filter(isScout);
     const infantry = assessment.army.filter((u) => u.type === 3 && !isScout(u));
     const allVehicles = assessment.army.filter((u) => u.type !== 3);
@@ -289,17 +280,6 @@ export class BastionStrategy implements StrategicController {
         },
       ],
     };
-    // Bridge the first reinforcement gap with one tank, then restore miner
-    // investment. Waiting for the whole refinery delayed income on short maps.
-    if (
-      this.doctrine === "bastion" &&
-      this.firstForce &&
-      o.own.filter((u) => u.name === refinery && u.buildStatus !== 0).length < 2
-    )
-      economy.vehicles = {
-        ...economy.vehicles,
-        harvesters: Math.min(3, economy.vehicles.harvesters),
-      };
     const { revision: _oldRevision, ...productionDescription } = economy;
     const production = {
       ...economy,

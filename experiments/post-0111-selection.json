@@ -1,0 +1,40 @@
+{
+  "purpose": "Compare a single-tank expansion bridge and nearby finishing alone against published 0.1.11 on the same exposed four-map pool",
+  "subjects": {
+    "published-0111": {
+      "ref": "7a42d2a",
+      "mode": "bastion"
+    },
+    "finish-only": {
+      "ref": "1d1f0cc",
+      "mode": "bastion"
+    },
+    "one-reinforcement": {
+      "ref": "5ad3535",
+      "mode": "bastion"
+    }
+  },
+  "opponents": {
+    "old-main": {
+      "ref": "8326311288ec685c3da43b1d182071dc36938fe8",
+      "mode": "factory-exit"
+    },
+    "old-defense": {
+      "ref": "b3a1f7ce69ed140fbafb82799f6d2b14d487c052",
+      "mode": "bastion"
+    },
+    "supalosa": {
+      "native": "supalosa"
+    }
+  },
+  "maps": [
+    "mp29u2.map",
+    "mp06t2.map",
+    "mp03t4.map",
+    "mp08t2.map"
+  ],
+  "rounds": 2,
+  "decision": {
+    "budget": "72 complete ordinary games, 24 per frozen policy. No controlled starts and no changed evaluator. Retain caps and errors. Inspect every selected-policy failure/cap and a success; do not promote an aggregate score that masks the known short-map regression."
+  }
+}

@@ -56,6 +56,38 @@ test("a long attack on a partially scouted base reserves risk for unknown produc
   assert(Number(planner.decision.productionArrivals) > 0);
 });
 
+test("discovering a base replaces an unreached exploration waypoint and checks its defenders", () => {
+  const o = observation([]),
+    planner = new Operations();
+  const searching = {
+    point: { x: 100, y: 100 },
+    reason: "formed-advance" as const,
+    defenders: 0,
+    productionArrivals: 0,
+    travelSeconds: 0,
+  };
+  planner.active = searching;
+  planner.observe(o, []);
+  assert.deepEqual(planner.target(o, o.own)?.point, searching.point);
+  o.enemies = [contact("new-base", "GAWEAP", 25, 2)];
+  planner.observe(o, []);
+  const attack = planner.target(o, o.own);
+  assert.equal(attack?.ref, "new-base");
+  assert.deepEqual(attack?.point, { x: 25, y: 0 });
+  planner.active = searching;
+  o.enemies.push(
+    ...Array.from({ length: 12 }, (_, i) =>
+      contact(`guard-${i}`, "MTNK", 22 + i),
+    ),
+  );
+  planner.observe(o, []);
+  assert.equal(
+    planner.target(o, o.own),
+    undefined,
+    "discovery is not permission to attack a stronger defense",
+  );
+});
+
 test("a previously observed factory continues to count when it leaves vision", () => {
   const o = observation([
     contact("factory", "GAWEAP", 90, 2),
