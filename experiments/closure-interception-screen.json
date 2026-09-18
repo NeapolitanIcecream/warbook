@@ -1,0 +1,30 @@
+{
+  "purpose": "Count enemy field armies that can intercept the route near our force, instead of requiring them to reach their own base",
+  "subjects": {
+    "objective-only": {
+      "ref": "53ef7bdfed794efd228ef299b091c0a2f6b74cd6",
+      "mode": "bastion"
+    },
+    "interception-aware": {
+      "ref": "a9b91b73ec3701f3496df2139f770bbb3fb660d9",
+      "mode": "bastion"
+    }
+  },
+  "opponents": {
+    "old-defense": {
+      "ref": "b3a1f7ce69ed140fbafb82799f6d2b14d487c052",
+      "mode": "bastion"
+    },
+    "supalosa": {
+      "native": "supalosa"
+    }
+  },
+  "maps": [
+    "mp06t2.map",
+    "mp03t4.map"
+  ],
+  "rounds": 2,
+  "decision": {
+    "budget": "16 ordinary full games; inspect interceptions and defense after delayed attacks. Maintain exposed target opportunities and keep all outcomes."
+  }
+}

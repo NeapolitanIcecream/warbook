@@ -1,0 +1,30 @@
+{
+  "purpose": "Use an already engine-routed defensive ground point while enemy approach coordinates move; eliminate the impassable fixed retreat post",
+  "subjects": {
+    "unchecked-post": {
+      "ref": "557dfc212162eef70feb8b8e0fa445eceb4277a9",
+      "mode": "bastion"
+    },
+    "ground-post": {
+      "ref": "53ef7bdfed794efd228ef299b091c0a2f6b74cd6",
+      "mode": "bastion"
+    }
+  },
+  "opponents": {
+    "old-defense": {
+      "ref": "b3a1f7ce69ed140fbafb82799f6d2b14d487c052",
+      "mode": "bastion"
+    },
+    "supalosa": {
+      "native": "supalosa"
+    }
+  },
+  "maps": [
+    "mp06t2.map",
+    "mp03t4.map"
+  ],
+  "rounds": 2,
+  "decision": {
+    "budget": "16 ordinary full games, keep all outcomes. Check withdrawal duration and command liveness, with a read-only reproduction proving the old tile impassable and the retained tile reachable."
+  }
+}
