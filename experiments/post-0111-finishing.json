@@ -1,0 +1,17 @@
+{
+  "purpose": "Check the shared nearby-finishing condition after the recorded distant pillbox target overrode adjacent enemy tanks",
+  "subjects": {
+    "published-0111": { "ref": "7a42d2a", "mode": "bastion" },
+    "sequenced-economy": { "ref": "6bc10dd", "mode": "bastion" },
+    "nearby-finish": { "ref": "d4000e5", "mode": "bastion" }
+  },
+  "opponents": {
+    "old-defense": { "ref": "b3a1f7ce69ed140fbafb82799f6d2b14d487c052", "mode": "bastion" },
+    "supalosa": { "native": "supalosa" }
+  },
+  "maps": ["mp29u2.map", "mp03t4.map"],
+  "rounds": 2,
+  "decision": {
+    "budget": "24 complete ordinary games, 8 per subject. Retain all outcomes and actual starts. Check whether local armor is engaged before a distant objective and whether withdrawal/finishing still terminate; no scoring changes."
+  }
+}

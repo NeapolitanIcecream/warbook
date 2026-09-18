@@ -365,6 +365,60 @@ test("a distant objective cannot override nearby armor as an immediate finishing
   );
 });
 
+test("armor target selection considers how many core guns are already in range", () => {
+  const t = new StrikeTactics(),
+    o = observation();
+  o.own = [
+    tank("a", 20, 20),
+    tank("b", 21, 20),
+    tank("c", 20, 21),
+    tank("d", 21, 21),
+  ];
+  o.enemies = [
+    {
+      ref: "weak",
+      name: "MTNK",
+      type: 7,
+      x: 26,
+      y: 20,
+      hp: 170,
+      maxHp: 300,
+      weaponRange: 5,
+      observedTick: o.tick,
+    },
+    {
+      ref: "exposed",
+      name: "MTNK",
+      type: 7,
+      x: 23,
+      y: 22,
+      hp: 205,
+      maxHp: 300,
+      weaponRange: 5,
+      observedTick: o.tick,
+    },
+  ];
+  const mission: CombatMission = {
+    id: "force",
+    revision: 1,
+    kind: "advance",
+    units: o.own.map((u) => u.ref),
+    destination: { x: 50, y: 50 },
+    objective: "advance",
+    engagement: { allowCrush: true },
+  };
+  let result = t.control(o, mission, []);
+  assert(
+    result.intents.some((i) => i.kind === "attack" && i.target === "exposed"),
+  );
+  o.enemies[0].hp = 1;
+  o.tick += 30;
+  result = t.control(o, mission, []);
+  assert(
+    result.intents.some((i) => i.kind === "attack" && i.target === "weak"),
+  );
+});
+
 test("quiet attack staging uses the scouted objective route without dragging the infantry garrison", () => {
   const c = new Commander("bastion"),
     o = observation();
