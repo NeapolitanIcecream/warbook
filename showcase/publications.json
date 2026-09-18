@@ -1,0 +1,21 @@
+{
+  "repository": "NeapolitanIcecream/warbook",
+  "latest": "0.1.11",
+  "releases": [
+    {
+      "version": "0.1.11",
+      "tag": "v0.1.11",
+      "asset": "warbook-showcase-0.1.11-4x.zip",
+      "sha256": "5df7f58f88dc836675a97728b3f7a61fa8d476c3223cfb49eccca7256150469e",
+      "files": [
+        "index.html",
+        "defense-4x.mp4",
+        "defense-4x.jpg",
+        "counterattack-4x.mp4",
+        "counterattack-4x.jpg",
+        "preview-4x.gif",
+        "match.rpl"
+      ]
+    }
+  ]
+}
