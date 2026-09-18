@@ -1,0 +1,23 @@
+{
+  "purpose": "Behavior screen for the renewed two-front infantry pressure challenger against frozen 0.1.12",
+  "subjects": {
+    "pressure-p0": {
+      "ref": "f63a546",
+      "mode": "pressure"
+    }
+  },
+  "opponents": {
+    "main-0112": {
+      "ref": "f8f491e",
+      "mode": "bastion"
+    }
+  },
+  "maps": [
+    "mp06t2.map",
+    "mp03t4.map"
+  ],
+  "rounds": 2,
+  "decision": {
+    "budget": "Four complete ordinary games. Check actual separate target pressure, infantry movement/deployment/damage and normal termination; no claims from mode names alone. Starts not controlled."
+  }
+}

@@ -51,9 +51,11 @@ export class WarbookBot extends Bot {
   private lastProductionRevision = -1;
   private lastAdditionalRevisions = "";
   private defenseRoute?: Observation["defenseRoute"];
+  private defensePosts: NonNullable<Observation["defensePosts"]> = [];
   private baseRally?: Point;
   private stagingRoute?: Observation["stagingRoute"];
   private lastDefenseRouteTick = -150;
+  private defenseRequestIds = "";
   public trace?: (event: Trace) => void;
   public autoTick = false;
   public observation?: Observation;
@@ -99,75 +101,6 @@ export class WarbookBot extends Bot {
     this.currentRefs.clear();
     const data = this.player.getPlayerData();
     const tick = this.game.getCurrentTick();
-    const towards = this.commander.controlPlan?.additionalCombat?.find(
-      (m) => m.approach,
-    )?.approach;
-    const staging = this.commander.controlPlan?.combat.approach;
-    if ((towards || staging) && tick - this.lastDefenseRouteTick >= 150) {
-      const home = { x: data.startLocation.x, y: data.startLocation.y };
-      const speed = (
-        this.game.rules.getObject(
-          data.country!.side === 0 ? "MTNK" : "HTNK",
-          ObjectType.Vehicle,
-        ) as TechnoRules
-      ).speedType;
-      const navigation =
-        speed === undefined
-          ? undefined
-          : new LocalGroundMap(this.game.map, this.name, home, speed, 22);
-      const occupied = this.sorted(this.player.getVisibleUnits("self"))
-        .filter((u) => u.type === ObjectType.Building)
-        .map((u) => ({
-          x: u.tile.rx,
-          y: u.tile.ry,
-          width: u.foundation.width,
-          height: u.foundation.height,
-          defense: u.rules.isBaseDefense,
-        }));
-      this.baseRally = navigation
-        ? baseRally(navigation, home, occupied)
-        : undefined;
-      const footSpeed = (
-        this.game.rules.getObject(
-          data.country!.side === 0 ? "E1" : "E2",
-          ObjectType.Infantry,
-        ) as TechnoRules
-      ).speedType;
-      const infantryNavigation =
-        footSpeed === undefined
-          ? undefined
-          : new LocalGroundMap(
-              this.game.map,
-              this.name,
-              home,
-              footSpeed,
-              22,
-              true,
-            );
-      const point =
-        towards && infantryNavigation
-          ? guardPost(infantryNavigation, home, towards, occupied)
-          : undefined;
-      this.defenseRoute =
-        point && towards ? { towards, point, observedTick: tick } : undefined;
-      const stagePoint =
-        staging && speed !== undefined
-          ? defenseRoute(
-              this.game.map,
-              this.name,
-              home,
-              staging,
-              speed,
-              navigation,
-              occupied,
-            )
-          : undefined;
-      this.stagingRoute =
-        stagePoint && staging
-          ? { towards: staging, point: stagePoint, observedTick: tick }
-          : undefined;
-      this.lastDefenseRouteTick = tick;
-    }
     if (tick - this.lastScoutScan >= 150) {
       const size = this.game.map.getRealMapSize();
       const points: Point[] = [];
@@ -244,6 +177,109 @@ export class WarbookBot extends Bot {
         ...combatCapabilities(u),
       }),
     );
+    const towards = this.commander.controlPlan?.additionalCombat?.find(
+      (m) => m.approach,
+    )?.approach;
+    const staging = this.commander.controlPlan?.combat.approach;
+    const requests = (this.commander.controlPlan?.additionalCombat ?? [])
+      .filter((m) => m.kind === "defend" && m.approach && m.units.length)
+      .slice(0, 2);
+    const requestIds = requests
+      .map((m) => m.id)
+      .sort()
+      .join(",");
+    const newApproach = requestIds !== this.defenseRequestIds;
+    if (
+      (towards || staging) &&
+      (newApproach || tick - this.lastDefenseRouteTick >= 150)
+    ) {
+      const home = { x: data.startLocation.x, y: data.startLocation.y };
+      const speed = (
+        this.game.rules.getObject(
+          data.country!.side === 0 ? "MTNK" : "HTNK",
+          ObjectType.Vehicle,
+        ) as TechnoRules
+      ).speedType;
+      const navigation =
+        speed === undefined
+          ? undefined
+          : new LocalGroundMap(this.game.map, this.name, home, speed, 22);
+      const occupied = own
+        .filter((u) => u.type === ObjectType.Building)
+        .map((u) => ({
+          ref: u.ref,
+          x: u.x,
+          y: u.y,
+          width: u.width,
+          height: u.height,
+          defense: (u.weaponRange ?? 0) > 0,
+        }));
+      this.baseRally = navigation
+        ? baseRally(navigation, home, occupied)
+        : undefined;
+      const footSpeed = (
+        this.game.rules.getObject(
+          data.country!.side === 0 ? "E1" : "E2",
+          ObjectType.Infantry,
+        ) as TechnoRules
+      ).speedType;
+      const infantryNavigation =
+        footSpeed === undefined
+          ? undefined
+          : new LocalGroundMap(
+              this.game.map,
+              this.name,
+              home,
+              footSpeed,
+              22,
+              true,
+            );
+      this.defensePosts = infantryNavigation
+        ? requests.flatMap((m) => {
+            const point = guardPost(
+              infantryNavigation,
+              home,
+              m.approach!,
+              occupied,
+              m.protectedAssets,
+            );
+            return point
+              ? [
+                  {
+                    task: m.id,
+                    towards: m.approach!,
+                    point,
+                    observedTick: tick,
+                  },
+                ]
+              : [];
+          })
+        : [];
+      const point =
+        towards && infantryNavigation
+          ? guardPost(infantryNavigation, home, towards, occupied)
+          : undefined;
+      this.defenseRoute =
+        point && towards ? { towards, point, observedTick: tick } : undefined;
+      const stagePoint =
+        staging && speed !== undefined
+          ? defenseRoute(
+              this.game.map,
+              this.name,
+              home,
+              staging,
+              speed,
+              navigation,
+              occupied,
+            )
+          : undefined;
+      this.stagingRoute =
+        stagePoint && staging
+          ? { towards: staging, point: stagePoint, observedTick: tick }
+          : undefined;
+      this.lastDefenseRouteTick = tick;
+      this.defenseRequestIds = requestIds;
+    }
     const products = this.player.production.getAvailableObjects().map((p) => ({
       name: p.name,
       type: p.type,
@@ -371,6 +407,7 @@ export class WarbookBot extends Bot {
       exploredStarts: this.exploredStarts,
       scoutObservedTick: this.lastScoutScan,
       defenseRoute: this.defenseRoute,
+      defensePosts: this.defensePosts,
       baseRally: this.baseRally,
       stagingRoute: this.stagingRoute,
     };

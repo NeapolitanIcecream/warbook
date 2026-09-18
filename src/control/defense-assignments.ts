@@ -17,6 +17,7 @@ interface Front {
   destination: Point;
   assets: string[];
   urgent: boolean;
+  lastSeen: number;
 }
 export interface GuardAssignment {
   id: string;
@@ -25,6 +26,7 @@ export interface GuardAssignment {
   threats: string[];
   protectedAssets: string[];
   urgent: boolean;
+  approach: Point;
 }
 
 /** Small, game-scoped assignments for visible defense contacts, not a terrain model. */
@@ -39,6 +41,7 @@ export class DefenseAssignments {
     infantry: readonly Unit[],
     incursions: readonly Incursion[],
     damagedAt: ReadonlyMap<string, number>,
+    support: readonly Unit[] = [],
   ): GuardAssignment[] {
     const remaining = new Map(
       incursions.map(({ enemy }) => [enemy.ref, enemy]),
@@ -94,8 +97,22 @@ export class DefenseAssignments {
             tick - (damagedAt.get(asset.ref) ?? -Infinity) < 150 &&
             distance <= ((enemy.weaponRange ?? 5) + 1) ** 2,
         ),
+        lastSeen: tick,
       };
     });
+    // A briefly empty approach remains a useful post between waves. Do not
+    // march the whole guard back to one unrelated point after every contact.
+    fronts.push(
+      ...this.fronts
+        .filter(
+          (f) =>
+            !used.has(f.id) &&
+            tick - f.lastSeen <= 900 &&
+            (!support.length ||
+              f.assets.some((ref) => support.some((u) => u.ref === ref))),
+        )
+        .map((f) => ({ ...f, contacts: [], urgent: false })),
+    );
     const canEngage = (unit: Unit, front: Front) =>
       front.contacts.some(
         (e) =>
@@ -105,11 +122,28 @@ export class DefenseAssignments {
             : (unit.weaponRange ?? 4)) **
             2,
       );
-    const weight = (f: Front) =>
-      f.contacts.reduce((n, e) => n + (e.type === 7 ? 3 : 1), 0);
+    const weight = (f: Front) => {
+      const demand = f.contacts.reduce((n, e) => n + (e.type === 7 ? 3 : 1), 0);
+      const covering = support.filter(
+        (u) =>
+          u.type !== 3 &&
+          (u.type === 2 || u.combat) &&
+          !u.harvester &&
+          (u.weaponRange ?? 0) > 0 &&
+          f.contacts.some(
+            (e) => weaponDistance2(u, e) <= ((u.weaponRange ?? 5) + 2) ** 2,
+          ),
+      );
+      const relief = covering.reduce(
+        (n, u) => n + 3 * Math.sqrt(u.hp / u.maxHp),
+        0,
+      );
+      return Math.max(2, demand - Math.min(demand / 2, relief));
+    };
     fronts.sort(
       (a, b) =>
         Number(b.urgent) - Number(a.urgent) ||
+        Number(b.contacts.length > 0) - Number(a.contacts.length > 0) ||
         infantry.filter((u) => canEngage(u, b)).length -
           infantry.filter((u) => canEngage(u, a)).length ||
         weight(b) - weight(a) ||
@@ -123,7 +157,11 @@ export class DefenseAssignments {
         Math.max(2, weight(fronts[0])) + Math.max(2, weight(fronts[1]));
     if (!split) {
       const committed = fronts.find((f) => f.id === this.focus);
-      if (committed && !fronts.some((f) => f.urgent))
+      if (
+        committed &&
+        (committed.contacts.length || !fronts.some((f) => f.contacts.length)) &&
+        !fronts.some((f) => f.urgent)
+      )
         fronts = [committed, ...fronts.filter((f) => f !== committed)];
     }
     fronts = fronts.slice(0, split ? 2 : 1);
@@ -218,6 +256,10 @@ export class DefenseAssignments {
         threats: front.contacts.map((e) => e.ref).sort(),
         protectedAssets: front.assets,
         urgent: front.urgent,
+        approach: {
+          x: (front.contacts[0] ?? front.destination).x,
+          y: (front.contacts[0] ?? front.destination).y,
+        },
       };
     });
   }

@@ -42,7 +42,7 @@ export class BastionStrategy implements StrategicController {
 
   constructor(private readonly doctrine: "bastion" | "cohort" = "bastion") {
     this.id =
-      doctrine === "bastion" ? "bastion-strategy-v8" : "cohort-strategy-v5";
+      doctrine === "bastion" ? "bastion-strategy-v9" : "cohort-strategy-v5";
   }
 
   assessmentRequest(o: Observation) {
@@ -86,6 +86,7 @@ export class BastionStrategy implements StrategicController {
       post,
       assets,
       incursions,
+      guardIncursions,
       vehiclePost,
       protectNow,
       responding,
@@ -307,19 +308,28 @@ export class BastionStrategy implements StrategicController {
       approach: stagingDirection,
       ...(assault.length && operation?.ref ? { target: operation.ref } : {}),
     });
-    const guards = this.defense.assign(o.tick, infantry, incursions, damagedAt);
+    const guards = this.defense.assign(
+      o.tick,
+      infantry,
+      guardIncursions,
+      damagedAt,
+      o.own,
+    );
     const additionalCombat = guards.length
       ? guards.map((guard) =>
           this.mission(guard.id, {
             kind: "defend",
             units: guard.units,
-            destination: guard.destination,
+            destination:
+              o.defensePosts?.find(
+                (p) => p.task === guard.id && o.tick - p.observedTick <= 450,
+              )?.point ?? guard.destination,
             objective: guard.urgent
               ? "protect-critical-building"
               : "guard-approach",
             threats: guard.threats,
             protectedAssets: guard.protectedAssets,
-            approach: direction,
+            approach: guard.approach,
             engagement: {
               allowCrush: false,
               ...(guard.urgent ? { interrupt: true } : {}),

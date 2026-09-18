@@ -116,3 +116,16 @@ test("infantry planning cannot use a vehicle-only factory passage", () => {
     0,
   );
 });
+
+test("each approach gets a reachable post next to its own protected asset", () => {
+  const home = { x: 0, y: 0 },
+    nav = new LocalGroundMap(mapFixture(), "actor", home, 5, 22, true);
+  const assets = [
+    { ref: "north", x: -5, y: -5, width: 2, height: 2 },
+    { ref: "south", x: -5, y: 8, width: 2, height: 2 },
+  ];
+  const p = guardPost(nav, home, { x: -20, y: -20 }, assets, ["south"]);
+  assert(p);
+  assert(p.y >= 6, "the other exposed building cannot steal this group's post");
+  assert(nav.path(home, p).length);
+});

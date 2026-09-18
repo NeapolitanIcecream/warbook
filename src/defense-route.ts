@@ -2,7 +2,12 @@ import type { MapApi, SpeedType } from "@chronodivide/game-api";
 import { distance2, type Point } from "./model.js";
 import { LocalGroundMap } from "./local-ground-map.js";
 
-type Footprint = Point & { width: number; height: number; defense?: boolean };
+type Footprint = Point & {
+  ref?: string;
+  width: number;
+  height: number;
+  defense?: boolean;
+};
 function availableGround(
   navigation: LocalGroundMap,
   home: Point,
@@ -44,13 +49,19 @@ export function guardPost(
   home: Point,
   towards: Point,
   occupied: readonly Footprint[],
+  protectedAssets: readonly string[] = [],
 ): Point | undefined {
   const center = (b: Footprint) => ({
     x: b.x + b.width / 2,
     y: b.y + b.height / 2,
   });
   const assets = occupied
-    .filter((b) => !b.defense)
+    .filter(
+      (b) =>
+        !b.defense &&
+        (!protectedAssets.length ||
+          (!!b.ref && protectedAssets.includes(b.ref))),
+    )
     .sort(
       (a, b) => distance2(center(a), towards) - distance2(center(b), towards),
     );

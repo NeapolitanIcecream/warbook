@@ -1309,8 +1309,21 @@ test("two approaches keep engaged defenders, send free troops, and can reinforce
     incidents.filter((i) => i.asset === lower),
     new Map(),
   );
-  assert.equal(cleared.length, 1);
-  assert.equal(cleared[0].units.length, 6);
+  assert.equal(
+    cleared.length,
+    2,
+    "keep a small post on the recently empty approach",
+  );
+  assert.equal(cleared.filter((g) => g.threats.length).length, 1);
+  assert.equal(cleared.flatMap((g) => g.units).length, 6);
+  const later = allocator.assign(
+    1200,
+    infantry,
+    incidents.filter((i) => i.asset === lower),
+    new Map(),
+  );
+  assert.equal(later.length, 1, "old approaches do not reserve troops forever");
+  assert.equal(later[0].units.length, 6);
 });
 
 test("a small guard concentrates on its current fight rather than dividing into single infantry", () => {
@@ -1346,6 +1359,83 @@ test("a small guard concentrates on its current fight rather than dividing into 
     new Map(),
   );
   assert.equal(repeated[0].id, groups[0].id);
+});
+
+test("visible incoming infantry trigger a guard assignment before entering building weapon range", () => {
+  const o = observation(),
+    c = new Commander("bastion");
+  o.home = { x: 0, y: 0 };
+  o.own = [
+    building("asset", "GAPOWR", 0, 0),
+    ...Array.from({ length: 4 }, (_, i) => ({
+      ...tank(`gi-${i}`, 4, i),
+      name: "E1",
+      type: 3,
+      crusher: false,
+    })),
+  ];
+  o.enemies = [
+    {
+      ref: "incoming",
+      name: "E1",
+      type: 3,
+      x: -14,
+      y: 0,
+      hp: 125,
+      maxHp: 125,
+      weaponRange: 5,
+      observedTick: o.tick,
+    },
+  ];
+  const situation = new DefenseSituation().observe(o);
+  assert.equal(situation.incursions.length, 0);
+  assert.equal(situation.guardIncursions.length, 1);
+  c.decide(o);
+  const guard = c.controlPlan!.additionalCombat!.find((m) =>
+    m.threats?.includes("incoming"),
+  );
+  assert(guard);
+  assert.equal(guard.units.length, 4);
+  assert(guard.destination!.x < 0);
+});
+
+test("a fort covering one approach permits a supported infantry split", () => {
+  const gi = Array.from({ length: 6 }, (_, i) => ({
+    ...tank(`gi-${i}`, 0, 10),
+    name: "E1",
+    type: 3,
+  }));
+  const assets = [
+    building("upper", "GAPOWR", 0, 0),
+    building("lower", "GAWEAP", 0, 25),
+  ];
+  const incidents = assets.flatMap((asset, index) =>
+    Array.from({ length: index ? 3 : 6 }, (_, i) => ({
+      asset,
+      distance: 9,
+      enemy: {
+        ref: `${asset.ref}-${i}`,
+        name: "E1",
+        type: 3,
+        x: 3 + (i % 2),
+        y: asset.y,
+        hp: 125,
+        maxHp: 125,
+        observedTick: 0,
+      },
+    })),
+  );
+  assert.equal(
+    new DefenseAssignments().assign(0, gi, incidents, new Map()).length,
+    1,
+  );
+  const fort = { ...building("fort", "GAPILL", 1, 1), weaponRange: 5 };
+  const split = new DefenseAssignments().assign(0, gi, incidents, new Map(), [
+    ...assets,
+    fort,
+  ]);
+  assert.equal(split.length, 2);
+  assert.deepEqual(split.map((g) => g.units.length).sort(), [3, 3]);
 });
 
 test("insufficient reserves do not become a solitary second squad", () => {

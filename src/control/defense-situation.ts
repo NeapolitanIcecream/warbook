@@ -49,7 +49,7 @@ export class DefenseSituation {
         x: Math.max(asset.x, Math.min(enemy.x, asset.x + asset.width)),
         y: Math.max(asset.y, Math.min(enemy.y, asset.y + asset.height)),
       });
-    const incursions = o.enemies
+    const guardIncursions = o.enemies
       .filter(
         (e) =>
           !e.airborne &&
@@ -63,7 +63,7 @@ export class DefenseSituation {
               (asset.type === 2
                 ? enemy.canThreatenBuildings !== false
                 : enemy.canThreatenVehicles !== false) &&
-              assetDistance(enemy, asset) <= 10 ** 2,
+              assetDistance(enemy, asset) <= (asset.type === 2 ? 18 : 10) ** 2,
           )
           .map((asset) => ({
             enemy,
@@ -80,6 +80,7 @@ export class DefenseSituation {
               o.tick - (this.damagedAt.get(a.asset.ref) ?? -Infinity) < 150,
             ) || a.distance - b.distance,
       );
+    const incursions = guardIncursions.filter((i) => i.distance <= 10 ** 2);
     if (incursions.length) {
       this.lastThreatTick = o.tick;
       if (o.tick - this.lastResponseTick >= 90) {
@@ -103,6 +104,7 @@ export class DefenseSituation {
       post,
       assets,
       incursions,
+      guardIncursions,
       vehiclePost,
       protectNow,
       responding: !!this.responsePost,
