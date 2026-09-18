@@ -312,6 +312,59 @@ test("supported tanks focus the same nearby armor target", () => {
   });
 });
 
+test("a distant objective cannot override nearby armor as an immediate finishing target", () => {
+  const t = new StrikeTactics(),
+    o = observation();
+  o.own = Array.from({ length: 10 }, (_, i) =>
+    tank(`tank-${i}`, 20 + (i % 4), 20 + Math.floor(i / 4)),
+  );
+  o.enemies = [
+    {
+      ref: "armor",
+      name: "MTNK",
+      type: 7,
+      x: 26,
+      y: 20,
+      hp: 300,
+      maxHp: 300,
+      weaponRange: 5,
+      observedTick: o.tick,
+    },
+    {
+      ref: "objective",
+      name: "GAPILL",
+      type: 2,
+      x: 50,
+      y: 50,
+      hp: 400,
+      maxHp: 400,
+      weaponRange: 5,
+      observedTick: o.tick,
+    },
+  ];
+  const mission: CombatMission = {
+    id: "force",
+    revision: 1,
+    kind: "advance",
+    units: o.own.map((u) => u.ref),
+    destination: { x: 50, y: 50 },
+    target: "objective",
+    objective: "advance",
+    engagement: { allowCrush: true },
+  };
+  const far = t.control(o, mission, []);
+  assert(far.intents.some((i) => i.kind === "attack" && i.target === "armor"));
+  assert(
+    !far.intents.some((i) => i.kind === "attack" && i.target === "objective"),
+  );
+  o.enemies[1] = { ...o.enemies[1], x: 27, y: 20 };
+  o.tick += 30;
+  const near = t.control(o, mission, []);
+  assert(
+    near.intents.some((i) => i.kind === "attack" && i.target === "objective"),
+  );
+});
+
 test("quiet attack staging uses the scouted objective route without dragging the infantry garrison", () => {
   const c = new Commander("bastion"),
     o = observation();

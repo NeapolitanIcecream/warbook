@@ -14,6 +14,7 @@ import {
 } from "./contracts.js";
 import { formedUnits, rendezvous } from "./formation.js";
 import { LocalCombat } from "./tactics.js";
+import { canFinishNearby } from "./finishing.js";
 
 const armor = (u: Unit) => ["MTNK", "HTNK"].includes(u.name);
 const hardTarget = (e: Contact) =>
@@ -24,7 +25,7 @@ const hardTarget = (e: Contact) =>
 
 /** Keep a supported fighting core; native orders still choose legal paths and perform shooting. */
 export class StrikeTactics extends LocalCombat {
-  override readonly id = "supported-strike-v1";
+  override readonly id = "supported-strike-v2";
   private leaders = new Map<string, string>();
   private trails = new Map<string, Point[]>();
   private retreats = new Map<string, { point: Point; until: number }>();
@@ -64,7 +65,7 @@ export class StrikeTactics extends LocalCombat {
       core.some((u) => distance2(e, u) <= 10 ** 2),
     );
     const preferred = o.enemies.find((e) => e.ref === mission.target);
-    const finishNow = preferred && preferred.hp <= core.length * 45;
+    const finishNow = canFinishNearby(preferred, core);
     const overwhelmed =
       nearby.length >= Math.max(2, Math.ceil(core.length * 1.5)) && !finishNow;
     const lagging = tanks.filter((u) => !coreIds.has(u.ref));

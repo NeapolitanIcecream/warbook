@@ -5,6 +5,7 @@ import {
   type Point,
   type Unit,
 } from "../model.js";
+import { canFinishNearby } from "./finishing.js";
 
 export interface Operation {
   point: Point;
@@ -279,10 +280,7 @@ export class Operations {
       };
       const estimate = this.opposition(o, target, center, tanks.length);
       const power = tanks.reduce((s, u) => s + Math.sqrt(u.hp / u.maxHp), 0);
-      const finishNow =
-        visible &&
-        target.hp <= tanks.length * 45 &&
-        tanks.some((u) => distance2(u, target) <= 8 ** 2);
+      const finishNow = canFinishNearby(visible, tanks);
       // Re-evaluate during travel and combat. A small commitment margin avoids
       // cancelling a viable fight at exactly the stricter launch threshold.
       if (

@@ -1,0 +1,18 @@
+{
+  "purpose": "Separate early economic investment from sequenced refinery/miner investment after the observed six-tank production gap",
+  "subjects": {
+    "published-0111": { "ref": "7a42d2a", "mode": "bastion" },
+    "early-economy": { "ref": "476457c", "mode": "bastion" },
+    "sequenced-economy": { "ref": "6bc10dd", "mode": "bastion" }
+  },
+  "opponents": {
+    "old-main": { "ref": "8326311288ec685c3da43b1d182071dc36938fe8", "mode": "factory-exit" },
+    "old-defense": { "ref": "b3a1f7ce69ed140fbafb82799f6d2b14d487c052", "mode": "bastion" },
+    "supalosa": { "native": "supalosa" }
+  },
+  "maps": ["mp29u2.map", "mp06t2.map"],
+  "rounds": 2,
+  "decision": {
+    "budget": "36 ordinary complete games, 12 per subject. Keep losses and caps. Review early military timing, miner/refinery completion and subsequent armor production alongside outcomes. Actual starts are recorded and are not assumed paired. This is development screening."
+  }
+}
