@@ -1,0 +1,30 @@
+{
+  "purpose": "Choose legal explored refinery sites by native outbound ground paths, including future refinery footprint and real dock; compare actual unload-to-harvest trips",
+  "subjects": {
+    "home-sites": {
+      "ref": "8e23062e738962d4ff90afc12ebb0b5010d0df80",
+      "mode": "bastion"
+    },
+    "ore-routes": {
+      "ref": "51bdc06639e88cce4adaf6d096fc5ea4509de132",
+      "mode": "bastion"
+    }
+  },
+  "opponents": {
+    "old-defense": {
+      "ref": "b3a1f7ce69ed140fbafb82799f6d2b14d487c052",
+      "mode": "bastion"
+    },
+    "supalosa": {
+      "native": "supalosa"
+    }
+  },
+  "maps": [
+    "mp06t2.map",
+    "mp03t4.map"
+  ],
+  "rounds": 2,
+  "decision": {
+    "budget": "16 ordinary full games with all outcomes retained. Read native cargo/position cycles in at least matched-start examples, check placement and mining remain live. Do not infer Chrono return walking cost or claim income from geometry."
+  }
+}

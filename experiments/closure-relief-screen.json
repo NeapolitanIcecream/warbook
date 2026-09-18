@@ -1,0 +1,30 @@
+{
+  "purpose": "Compare whole-army recall with limited nearby relief for an active assault; check ongoing defense, assault continuation and force ownership",
+  "subjects": {
+    "whole-recall": {
+      "ref": "05f5d05",
+      "mode": "bastion"
+    },
+    "selective-relief": {
+      "ref": "8e23062e738962d4ff90afc12ebb0b5010d0df80",
+      "mode": "bastion"
+    }
+  },
+  "opponents": {
+    "old-defense": {
+      "ref": "b3a1f7ce69ed140fbafb82799f6d2b14d487c052",
+      "mode": "bastion"
+    },
+    "supalosa": {
+      "native": "supalosa"
+    }
+  },
+  "maps": [
+    "mp06t2.map",
+    "mp03t4.map"
+  ],
+  "rounds": 2,
+  "decision": {
+    "budget": "16 ordinary full games, two maps and two opponents. Inspect both main-assault continuation and actual base damage, not just the number of recalled vehicles."
+  }
+}

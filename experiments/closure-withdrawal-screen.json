@@ -1,0 +1,30 @@
+{
+  "purpose": "Keep cancelled assaults in a Move-only withdrawal until actual arrival; prevent defense/crush behavior from reopening an unsafe fight",
+  "subjects": {
+    "mixed-retreat": {
+      "ref": "d2a1a1ebaf886da78464036f59ab8fd3310907ab",
+      "mode": "bastion"
+    },
+    "committed-withdrawal": {
+      "ref": "557dfc212162eef70feb8b8e0fa445eceb4277a9",
+      "mode": "bastion"
+    }
+  },
+  "opponents": {
+    "old-defense": {
+      "ref": "b3a1f7ce69ed140fbafb82799f6d2b14d487c052",
+      "mode": "bastion"
+    },
+    "supalosa": {
+      "native": "supalosa"
+    }
+  },
+  "maps": [
+    "mp06t2.map",
+    "mp03t4.map"
+  ],
+  "rounds": 2,
+  "decision": {
+    "budget": "16 ordinary full games; inspect withdrawal lifetimes, commands while withdrawing, actual losses and opportunities after recovery. Compare the bridge abandonment counterexample and preserve losses/timeouts."
+  }
+}

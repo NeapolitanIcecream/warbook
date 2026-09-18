@@ -1,0 +1,30 @@
+{
+  "purpose": "Re-evaluate attack support during travel and contact after observed defenders or production change; preserve close finishing opportunities",
+  "subjects": {
+    "launch-only": {
+      "ref": "927ec7a13ad390c455328f796cc65c370e278f62",
+      "mode": "bastion"
+    },
+    "reassess": {
+      "ref": "1bb8d40fd055586aef7b633265da4f6b02e44e3f",
+      "mode": "bastion"
+    }
+  },
+  "opponents": {
+    "old-defense": {
+      "ref": "b3a1f7ce69ed140fbafb82799f6d2b14d487c052",
+      "mode": "bastion"
+    },
+    "supalosa": {
+      "native": "supalosa"
+    }
+  },
+  "maps": [
+    "mp06t2.map",
+    "mp03t4.map"
+  ],
+  "rounds": 2,
+  "decision": {
+    "budget": "16 ordinary full games, keep failures and timeouts. Inspect abort/relaunch loops, actual building damage, and whether already-winnable nearby fights remain committed."
+  }
+}

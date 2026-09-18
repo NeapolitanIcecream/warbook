@@ -1,0 +1,29 @@
+{
+  "purpose": "Independent two-dog routes on four-start maps with shared own-shroud start discovery; investigate practical scouting coverage and costs",
+  "subjects": {
+    "single-scout": {
+      "ref": "1bb8d40fd055586aef7b633265da4f6b02e44e3f",
+      "mode": "bastion"
+    },
+    "split-scouts": {
+      "ref": "05f5d055d99ea66f8b78926cecafb837c68e6e56",
+      "mode": "bastion"
+    }
+  },
+  "opponents": {
+    "old-defense": {
+      "ref": "b3a1f7ce69ed140fbafb82799f6d2b14d487c052",
+      "mode": "bastion"
+    },
+    "supalosa": {
+      "native": "supalosa"
+    }
+  },
+  "maps": [
+    "mp03t4.map"
+  ],
+  "rounds": 3,
+  "decision": {
+    "budget": "12 ordinary full games on the current four-start map, two opponents, three rounds. Compare distinct routes, first enemy production seen, scout production requests and completion. Other maps retained for final coverage."
+  }
+}

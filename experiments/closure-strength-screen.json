@@ -1,0 +1,30 @@
+{
+  "purpose": "Remove the arbitrary four-tank floor when a formed force already meets estimated target risk; retain six-tank blind exploration and support estimates",
+  "subjects": {
+    "fixed-minimum": {
+      "ref": "51bdc06639e88cce4adaf6d096fc5ea4509de132",
+      "mode": "bastion"
+    },
+    "strength-gated": {
+      "ref": "d2a1a1ebaf886da78464036f59ab8fd3310907ab",
+      "mode": "bastion"
+    }
+  },
+  "opponents": {
+    "old-defense": {
+      "ref": "b3a1f7ce69ed140fbafb82799f6d2b14d487c052",
+      "mode": "bastion"
+    },
+    "supalosa": {
+      "native": "supalosa"
+    }
+  },
+  "maps": [
+    "mp06t2.map",
+    "mp03t4.map"
+  ],
+  "rounds": 2,
+  "decision": {
+    "budget": "16 ordinary full games. Check actual early attacks, unsupported losses and late-game liveness; preserve timeouts, compare first departures and building damage."
+  }
+}
