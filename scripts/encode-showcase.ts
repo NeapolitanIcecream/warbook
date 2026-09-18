@@ -119,6 +119,8 @@ for (const clip of plan.clips) {
     "2",
     `${directory}/${posterName}`,
   ]);
+  copyFileSync(output, `${directory}/${clip.id}.mp4`);
+  copyFileSync(`${directory}/${posterName}`, `${directory}/${clip.id}.jpg`);
   clips.push({
     id: clip.id,
     fileName,
@@ -152,6 +154,7 @@ ffmpeg([
   "0",
   `${directory}/${previewFile}`,
 ]);
+copyFileSync(`${directory}/${previewFile}`, `${directory}/preview.gif`);
 const match = JSON.parse(readFileSync(`${plan.sourceRun}/result.json`, "utf8"));
 if (hash(match.replay.file) !== plan.replaySha256)
   throw new Error("Source replay changed");
