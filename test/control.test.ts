@@ -1246,6 +1246,30 @@ test("defending armor brings the nearby rear rank into the same fight", () => {
     .intents.flatMap((i) => (i.kind === "attack" ? [i] : []));
   assert.deepEqual(attacks.flatMap((i) => i.refs).sort(), ["front", "rear"]);
   assert(attacks.every((i) => i.target === "attacker"));
+  o.tick += 30;
+  o.own[1].antiAir = true;
+  o.enemies.push({
+    ref: "aircraft",
+    name: "ORCA",
+    type: 0,
+    x: 0,
+    y: 5,
+    airborne: true,
+    hp: 100,
+    maxHp: 100,
+    weaponRange: 5,
+    observedTick: o.tick,
+  });
+  const defended = tactics.control(o, m, []).intents;
+  assert(
+    defended.some(
+      (i) =>
+        i.kind === "attack" &&
+        i.refs.includes("rear") &&
+        i.target === "aircraft",
+    ),
+    "shared ground targeting preserves the anti-air unit's immediate job",
+  );
 });
 
 test("guards move into range to support a nearby defending tank, then deploy", () => {

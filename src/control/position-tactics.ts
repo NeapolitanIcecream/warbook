@@ -91,12 +91,13 @@ export class PositionTactics extends LocalCombat {
       }
     };
     const base = mission.destination;
-    const armor = mission.units
-      .map((ref) => owns.get(ref))
-      .filter((u) => u?.type === 7 && u.combat && !u.harvester);
+    const armor = mission.units.flatMap((ref) => {
+      const u = owns.get(ref);
+      return u?.type === 7 && u.combat && !u.harvester ? [u] : [];
+    });
     const coveringGuns = (enemy: Observation["enemies"][number]) =>
       armor.filter(
-        (u) => weaponDistance2(u!, enemy) <= ((u!.weaponRange ?? 5) + 1) ** 2,
+        (u) => weaponDistance2(u, enemy) <= ((u.weaponRange ?? 5) + 1) ** 2,
       ).length;
     const sharedTarget =
       base && mission.kind !== "withdraw"
@@ -106,14 +107,15 @@ export class PositionTactics extends LocalCombat {
                 e.type === 7 &&
                 !e.airborne &&
                 (e.weaponRange ?? 0) > 0 &&
-                distance2(e, base) <= 12 ** 2 &&
-                coveringGuns(e) > 0,
+                distance2(e, base) <= 12 ** 2,
             )
+            .map((enemy) => ({ enemy, guns: coveringGuns(enemy) }))
+            .filter((t) => t.guns > 0)
             .sort(
               (a, b) =>
-                coveringGuns(b) - coveringGuns(a) ||
-                a.hp / a.maxHp - b.hp / b.maxHp,
-            )[0]
+                b.guns - a.guns ||
+                a.enemy.hp / a.enemy.maxHp - b.enemy.hp / b.enemy.maxHp,
+            )[0]?.enemy
         : undefined;
     let stationed = 0,
       deployed = 0,
@@ -260,19 +262,19 @@ export class PositionTactics extends LocalCombat {
           );
           continue;
         }
+        const localTarget = close.sort(
+          (a, b) =>
+            (unit.antiAir ? Number(!!b.airborne) - Number(!!a.airborne) : 0) ||
+            Number(b.type === 7) - Number(a.type === 7) ||
+            a.hp / a.maxHp - b.hp / b.maxHp ||
+            distance2(a, unit) - distance2(b, unit),
+        )[0];
         const target =
-          (sharedTarget && weaponDistance2(sharedTarget, unit) <= 9 ** 2
-            ? sharedTarget
-            : undefined) ??
-          close.sort(
-            (a, b) =>
-              (unit.antiAir
-                ? Number(!!b.airborne) - Number(!!a.airborne)
-                : 0) ||
-              Number(b.type === 7) - Number(a.type === 7) ||
-              a.hp / a.maxHp - b.hp / b.maxHp ||
-              distance2(a, unit) - distance2(b, unit),
-          )[0];
+          unit.antiAir && localTarget?.airborne
+            ? localTarget
+            : sharedTarget && weaponDistance2(sharedTarget, unit) <= 9 ** 2
+              ? sharedTarget
+              : localTarget;
         if (target) {
           engaging++;
           issue(
