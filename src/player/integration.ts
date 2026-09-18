@@ -190,6 +190,12 @@ export async function install(): Promise<void> {
   bar.style.cssText =
     "position:fixed;z-index:10000;left:12px;bottom:8px;background:#111c25e8;color:#ccd8de;font:12px system-ui;padding:6px 10px;border:1px solid #425665;border-radius:5px;pointer-events:none";
   document.body.append(bar);
+  const policyLabel =
+    __WARBOOK_POLICY__ === "pressure"
+      ? "步兵压制"
+      : __WARBOOK_POLICY__ === "bastion"
+        ? "阵地反击"
+        : "历史策略";
   const updateStatus = () => {
     const isReplay = location.hash.startsWith("#/replay/");
     bar.style.bottom = isReplay ? "38px" : "8px";
@@ -197,8 +203,8 @@ export async function install(): Promise<void> {
     bar.textContent = isReplay
       ? "Warbook · 完整对局回放"
       : bot?.observation
-        ? `Warbook 本地 AI · ${POLICY_VERSION} · 对战中`
-        : `Warbook 本地 AI · ${POLICY_VERSION} · 点击「本地对战」开局`;
+        ? `Warbook · ${policyLabel} · ${POLICY_VERSION} · 对战中`
+        : `Warbook · ${policyLabel} · ${POLICY_VERSION} · 点击「本地对战」开局`;
   };
   updateStatus();
   setInterval(updateStatus, 1000);

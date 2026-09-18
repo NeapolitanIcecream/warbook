@@ -1,0 +1,27 @@
+{
+  "purpose": "Check retained economic-front pressure with independent attack commitment against both defender generations",
+  "subjects": {
+    "pressure-retained": {
+      "ref": "489a04b",
+      "mode": "pressure"
+    }
+  },
+  "opponents": {
+    "published-0112": {
+      "ref": "f8f491e",
+      "mode": "bastion"
+    },
+    "prepared-f3": {
+      "ref": "567f688",
+      "mode": "bastion"
+    }
+  },
+  "maps": [
+    "mp06t2.map",
+    "mp03t4.map"
+  ],
+  "rounds": 2,
+  "decision": {
+    "budget": "Eight ordinary full games. Compare actual pressure and caps across defender generations. Keep all results and starts; no claim of pressure-route strength from naming or aggression alone."
+  }
+}

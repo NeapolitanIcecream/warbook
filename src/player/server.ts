@@ -41,26 +41,39 @@ if (
   release.sha256
 )
   throw new Error("Player bundle hash mismatch");
-const challengerRelease = process.env.PLAYER_CHALLENGER
-  ? JSON.parse(
-      readFileSync(
-        `dist/player/${process.env.PLAYER_CHALLENGER}/release.json`,
-        "utf8",
-      ),
-    )
-  : undefined;
+function optionalRelease(hash: string | undefined) {
+  if (!hash) return;
+  if (!/^[a-f0-9]{64}$/.test(hash))
+    throw new Error("Invalid player variant hash");
+  const selected = JSON.parse(
+    readFileSync(`dist/player/${hash}/release.json`, "utf8"),
+  );
+  if (
+    selected.sha256 !== hash ||
+    selected.clientVersion !== CLIENT_VERSION ||
+    createHash("sha256")
+      .update(readFileSync(`dist/player/${hash}/bot.js`))
+      .digest("hex") !== hash
+  )
+    throw new Error(
+      "Player variant must be a verified bundle for the same client",
+    );
+  return selected;
+}
+const challengerRelease = optionalRelease(process.env.PLAYER_CHALLENGER);
+const referenceRelease = optionalRelease(process.env.PLAYER_REFERENCE);
 const challengerBotPath = challengerRelease
   ? `dist/player/${challengerRelease.sha256}/bot.js`
   : undefined;
-if (
-  challengerRelease &&
-  (!/^[a-f0-9]{64}$/.test(challengerRelease.sha256) ||
-    challengerRelease.clientVersion !== CLIENT_VERSION ||
-    createHash("sha256")
-      .update(readFileSync(challengerBotPath!))
-      .digest("hex") !== challengerRelease.sha256)
-)
-  throw new Error("Challenger must be a verified bundle for the same client");
+const referenceBotPath = referenceRelease
+  ? `dist/player/${referenceRelease.sha256}/bot.js`
+  : undefined;
+const policyName = (mode: string) =>
+  mode === "pressure"
+    ? "步兵压制（实验）"
+    : mode === "bastion"
+      ? "阵地反击"
+      : "历史策略";
 const pending = new Map<string, Promise<{ body: Buffer; type: string }>>();
 // Keep one selected, completed match available without exposing local file paths.
 const watchResult = process.env.WATCH_MATCH
@@ -211,7 +224,7 @@ app.get("/warbook/gpu/:file", async (c) => {
 });
 app.get("/", (c) =>
   c.html(
-    `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Warbook · 本地对战</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b1119;color:#e5ebf0;font:17px/1.65 system-ui}main{max-width:680px;padding:48px}small{color:#8cabb8;letter-spacing:3px}h1{font-size:52px;margin:12px 0}p{color:#adbac7}.start{display:inline-block;padding:14px 28px;background:#c9aa65;color:#111820;text-decoration:none;font-weight:700;border-radius:5px;margin:20px 12px 20px 0}.watch{background:transparent;color:#c9aa65;border:1px solid #c9aa65}li{margin:6px 0}footer{margin-top:40px;font-size:13px;color:#758793}</style><main><small>WARBOOK / LOCAL PLAY</small><h1>指挥你的下一场战役。</h1><p>在红色警戒 2 的完整战场上，与 Warbook AI 对战。</p><p>当前默认 AI：${release.version.replace("warbook-", "")}。</p><a class="start" href="/game/">开始本地对战 →</a>${challengerRelease ? `<a class="start watch" href="/challenge/">对照 AI（${challengerRelease.version.replace("warbook-", "")}）→</a>` : ""}${watchReplay ? '<a class="start watch" href="/watch">观看 AI 对局回放 →</a>' : ""}${existsSync("runs/showcase/index.html") ? '<a class="start watch" href="/showcase/">观看阶段短片 →</a>' : ""}<ol><li>选择「本地对战」，点击「开始游戏」。</li><li>选择美国，展开基地车，建设基地并作战。</li><li>按 Esc 退出；回到菜单即可再次开局。</li></ol><p>首次打开会自动导入本机游戏资源，稍候即可。</p><footer>研发试玩版 · 客户端 ${CLIENT_VERSION} · AI 使用已探索区域的 API 观察。<br>支持基本建设、采矿、补兵和地面战斗；仍在持续改进。</footer></main></html>`,
+    `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Warbook · 本地对战</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b1119;color:#e5ebf0;font:17px/1.65 system-ui}main{max-width:680px;padding:48px}small{color:#8cabb8;letter-spacing:3px}h1{font-size:52px;margin:12px 0}p{color:#adbac7}.start{display:inline-block;padding:14px 28px;background:#c9aa65;color:#111820;text-decoration:none;font-weight:700;border-radius:5px;margin:20px 12px 20px 0}.watch{background:transparent;color:#c9aa65;border:1px solid #c9aa65}li{margin:6px 0}footer{margin-top:40px;font-size:13px;color:#758793}</style><main><small>WARBOOK / LOCAL PLAY</small><h1>指挥你的下一场战役。</h1><p>在红色警戒 2 的完整战场上，与 Warbook AI 对战。</p><p>当前默认 AI：${policyName(release.mode)} ${release.version.replace("warbook-", "")}。</p><a class="start" href="/game/">开始本地对战 →</a>${challengerRelease ? `<a class="start watch" href="/challenge/">${policyName(challengerRelease.mode)} ${challengerRelease.version.replace("warbook-", "")}→</a>` : ""}${referenceRelease ? `<a class="start watch" href="/reference/">旧版对照 ${referenceRelease.version.replace("warbook-", "")} →</a>` : ""}${watchReplay ? '<a class="start watch" href="/watch">观看 AI 对局回放 →</a>' : ""}${existsSync("runs/showcase/index.html") ? '<a class="start watch" href="/showcase/">观看阶段短片 →</a>' : ""}<ol><li>选择「本地对战」，点击「开始游戏」。</li><li>选择美国，展开基地车，建设基地并作战。</li><li>按 Esc 退出；回到菜单即可再次开局。</li></ol><p>首次打开会自动导入本机游戏资源，稍候即可。</p><footer>研发试玩版 · 客户端 ${CLIENT_VERSION} · AI 使用已探索区域的 API 观察。<br>支持基本建设、采矿、补兵和地面战斗；仍在持续改进。</footer></main></html>`,
   ),
 );
 app.get("/watch", (c) =>
@@ -288,11 +301,14 @@ app.get("/warbook/health", (c) =>
     watchAvailable: Boolean(watchReplay),
     release,
     challengerRelease,
+    referenceRelease,
   }),
 );
 app.get("/warbook/bot.js", serveStatic({ path: botPath }));
 if (challengerBotPath)
   app.get("/warbook/challenger.js", serveStatic({ path: challengerBotPath }));
+if (referenceBotPath)
+  app.get("/warbook/reference.js", serveStatic({ path: referenceBotPath }));
 app.get(
   "/warbook/ra2-local.zip",
   serveStatic({ path: "assets/ra2-local.zip" }),
@@ -316,45 +332,60 @@ if (challengerRelease)
     "/warbook/challenger/telemetry",
     receiveTelemetry(challengerRelease),
   );
+if (referenceRelease)
+  app.post("/warbook/reference/telemetry", receiveTelemetry(referenceRelease));
 const localConfig = (c: Context) =>
   c.text(
     `[General]\nreplaysUrlWhitelist=127.0.0.1\nbotsEnabled=yes\nquickMatchEnabled=no\nunrankedQueueEnabled=no\nlegacyRegistrationEnabled=no\nviewport.width=1280\nviewport.height=800\ndefaultLanguage=zh-TW\ngameResArchiveUrl=${localOrigin}/warbook/ra2-local.zip\nserversUrl=${localOrigin}/warbook/servers.ini\nmapsBaseUrl=${localOrigin}/game/maps/\nmodsBaseUrl=${localOrigin}/game/mods/\n`,
   );
 app.get("/game/config.ini", localConfig);
 app.get("/challenge/config.ini", localConfig);
+app.get("/reference/config.ini", localConfig);
 app.get("/client/:version/config.ini", localConfig);
 app.get("/warbook/servers.ini", (c) => c.text("[Servers]\n"));
-const gamePage = (isChallenger: boolean) => async (c: Context) => {
-  if (isChallenger && !challengerRelease) return c.notFound();
-  const botUrl = `${isChallenger ? "/warbook/challenger.js" : "/warbook/bot.js"}?v=${(isChallenger ? challengerRelease : release).sha256}`;
-  const telemetryUrl = isChallenger
-    ? "/warbook/challenger/telemetry"
-    : "/warbook/telemetry";
-  const { body } = await getClientAsset("/");
-  let html = body.toString();
-  html = html.replace(
-    "<head>",
-    `<head><base href="/client/${CLIENT_VERSION}/">`,
-  );
-  html = html.replace(/<!-- Global site tag[\s\S]*?(?=  <link)/, "");
-  html = html.replace(
-    /<script>\(function\(\)\{function c\(\)[\s\S]*?<\/script>/,
-    "",
-  );
-  if (!html.includes('SystemJS.import("main")'))
-    throw new Error("Unsupported pinned client bootstrap");
-  html = html.replace(
-    'SystemJS.import("main")',
-    `SystemJS.import('game/api/index').then(async api => {
+const gamePage =
+  (slot: "main" | "challenge" | "reference") => async (c: Context) => {
+    const selected =
+      slot === "challenge"
+        ? challengerRelease
+        : slot === "reference"
+          ? referenceRelease
+          : release;
+    if (!selected) return c.notFound();
+    const name =
+      slot === "challenge"
+        ? "challenger"
+        : slot === "reference"
+          ? "reference"
+          : "bot";
+    const botUrl = `/warbook/${name}.js?v=${selected.sha256}`;
+    const telemetryUrl =
+      slot === "main" ? "/warbook/telemetry" : `/warbook/${name}/telemetry`;
+    const { body } = await getClientAsset("/");
+    let html = body.toString();
+    html = html.replace(
+      "<head>",
+      `<head><base href="/client/${CLIENT_VERSION}/">`,
+    );
+    html = html.replace(/<!-- Global site tag[\s\S]*?(?=  <link)/, "");
+    html = html.replace(
+      /<script>\(function\(\)\{function c\(\)[\s\S]*?<\/script>/,
+      "",
+    );
+    if (!html.includes('SystemJS.import("main")'))
+      throw new Error("Unsupported pinned client bootstrap");
+    html = html.replace(
+      'SystemJS.import("main")',
+      `SystemJS.import('game/api/index').then(async api => {
     globalThis.WarbookEngineApi=api;
     await new Promise((resolve,reject)=>{const s=document.createElement('script');s.src=${JSON.stringify(botUrl)};s.onload=resolve;s.onerror=reject;document.head.append(s);});
     await Warbook.install();
     await SystemJS.import('main');
   }).catch(error=>{document.body.textContent='本地 AI 启动失败：'+error.message;console.error(error);})`,
-  );
-  html = html.replace(
-    "</head>",
-    `<script>
+    );
+    html = html.replace(
+      "</head>",
+      `<script>
     const originalFetch=window.fetch;
     window.fetch=function(input,init){
       if(input==='/warbook/telemetry') input=${JSON.stringify(telemetryUrl)};
@@ -370,18 +401,20 @@ const gamePage = (isChallenger: boolean) => async (c: Context) => {
     });
     localImport.observe(document.documentElement,{subtree:true,childList:true});
   </script></head>`,
-  );
-  c.header(
-    "Content-Security-Policy",
-    "connect-src 'self' blob:; worker-src 'self' blob:;",
-  );
-  c.header("Cross-Origin-Opener-Policy", "same-origin");
-  c.header("Cross-Origin-Embedder-Policy", "require-corp");
-  return c.html(html);
-};
-app.get("/game/", gamePage(false));
+    );
+    c.header(
+      "Content-Security-Policy",
+      "connect-src 'self' blob:; worker-src 'self' blob:;",
+    );
+    c.header("Cross-Origin-Opener-Policy", "same-origin");
+    c.header("Cross-Origin-Embedder-Policy", "require-corp");
+    return c.html(html);
+  };
+app.get("/game/", gamePage("main"));
 app.get("/challenge", (c) => c.redirect("/challenge/"));
-app.get("/challenge/", gamePage(true));
+app.get("/challenge/", gamePage("challenge"));
+app.get("/reference", (c) => c.redirect("/reference/"));
+app.get("/reference/", gamePage("reference"));
 const clientAsset = async (c: Context) => {
   const url = new URL(c.req.url);
   const requestedVersion = c.req.param("version");

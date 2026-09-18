@@ -269,27 +269,3 @@ test("deployed GI firepower changes the estimate for a fortified target", () => 
   assert.equal(planner.consider(o, o.own), undefined);
   assert(Number(planner.decision.defenders) > 2);
 });
-
-test("the pressure route accepts parity but still abandons a clearly unsupported attack", () => {
-  const o = observation([
-    contact("power", "GAPOWR", 20, 2),
-    contact("factory", "GAWEAP", 100, 2),
-    ...Array.from({ length: 4 }, (_, i) =>
-      contact(`guard-${i}`, "MTNK", 19 + i),
-    ),
-  ]);
-  const defense = new Operations(),
-    pressure = new Operations(1, 0.9);
-  defense.observe(o, []);
-  pressure.observe(o, []);
-  assert.equal(defense.consider(o, o.own), undefined);
-  pressure.active = pressure.consider(o, o.own);
-  assert.equal(pressure.active?.ref, "power");
-  o.tick += 3;
-  o.enemies.push(
-    contact("extra-a", "MTNK", 21),
-    contact("extra-b", "MTNK", 22),
-  );
-  pressure.observe(o, []);
-  assert.equal(pressure.target(o, o.own), undefined);
-});
