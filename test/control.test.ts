@@ -1489,6 +1489,14 @@ test("remote miners and forward forts cannot pull the infantry garrison away fro
     c.controlPlan!.combat.destination!.x < 40,
     "uncommitted vehicles can still respond to the miner",
   );
+  o.tick += 3;
+  o.defenseSupport = { x: 68, y: 40 };
+  c.decide(o);
+  assert.deepEqual(
+    c.controlPlan!.combat.destination,
+    o.defenseSupport,
+    "when a supported line is available, the whole armor force does not fight alone at the remote miner",
+  );
 });
 
 test("insufficient reserves do not become a solitary second squad", () => {

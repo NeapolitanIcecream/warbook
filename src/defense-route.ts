@@ -43,6 +43,21 @@ export function baseRally(
   return p ? { x: p.x, y: p.y } : undefined;
 }
 
+/** Armor holds the same defensive line as the slower guard, on tank-passable ground. */
+export function supportedPost(
+  navigation: LocalGroundMap,
+  home: Point,
+  guard: Point,
+  occupied: readonly Footprint[],
+): Point | undefined {
+  const p = availableGround(navigation, home, occupied).sort(
+    (a, b) =>
+      distance2(a, guard) - distance2(b, guard) ||
+      distance2(a, home) - distance2(b, home),
+  )[0];
+  return p ? { x: p.x, y: p.y } : undefined;
+}
+
 /** Infantry cover an exposed building from nearby ground, rather than a distant point toward the enemy. */
 export function guardPost(
   navigation: LocalGroundMap,

@@ -7,7 +7,12 @@ import {
   type UnitData,
   type TechnoRules,
 } from "@chronodivide/game-api";
-import { baseRally, defenseRoute, guardPost } from "./defense-route.js";
+import {
+  baseRally,
+  defenseRoute,
+  guardPost,
+  supportedPost,
+} from "./defense-route.js";
 import { refinerySite } from "./refinery-site.js";
 import {
   defenseSite,
@@ -56,6 +61,7 @@ export class WarbookBot extends Bot {
   private lastProductionRevision = -1;
   private lastAdditionalRevisions = "";
   private defenseRoute?: Observation["defenseRoute"];
+  private defenseSupport?: Point;
   private defensePosts: NonNullable<Observation["defensePosts"]> = [];
   private baseRally?: Point;
   private stagingRoute?: Observation["stagingRoute"];
@@ -267,6 +273,10 @@ export class WarbookBot extends Bot {
           : undefined;
       this.defenseRoute =
         point && towards ? { towards, point, observedTick: tick } : undefined;
+      this.defenseSupport =
+        navigation && point
+          ? supportedPost(navigation, home, point, occupied)
+          : undefined;
       const stagePoint =
         staging && speed !== undefined
           ? defenseRoute(
@@ -463,6 +473,7 @@ export class WarbookBot extends Bot {
       exploredStarts: this.exploredStarts,
       scoutObservedTick: this.lastScoutScan,
       defenseRoute: this.defenseRoute,
+      defenseSupport: this.defenseSupport,
       defensePosts: this.defensePosts,
       baseRally: this.baseRally,
       stagingRoute: this.stagingRoute,
