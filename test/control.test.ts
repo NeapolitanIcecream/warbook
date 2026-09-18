@@ -665,6 +665,78 @@ test("a defensive handoff cancels an offensive order even when the old hold key 
   );
 });
 
+test("a cancelled attack keeps withdrawing until arrival, without renewed crushing", () => {
+  const c = new Commander("bastion"),
+    o = observation();
+  o.own = Array.from({ length: 6 }, (_, i) =>
+    tank(`force-${i}`, 68 + (i % 3), 40 + Math.floor(i / 3)),
+  );
+  o.enemies = [
+    {
+      ref: "base",
+      name: "GAREFN",
+      type: 2,
+      x: 96,
+      y: 37,
+      hp: 1000,
+      maxHp: 1000,
+      weaponRange: 0,
+      observedTick: o.tick,
+    },
+  ];
+  c.decide(o);
+  assert.equal(c.controlPlan!.combat.kind, "advance");
+  o.tick += 150;
+  o.own = o.own.map((u) => ({ ...u, x: u.x + 18 }));
+  o.enemies.push(
+    ...Array.from({ length: 8 }, (_, i) => ({
+      ref: `enemy-${i}`,
+      name: "MTNK",
+      type: 7,
+      x: 94 + (i % 3),
+      y: 39 + Math.floor(i / 3),
+      hp: 300,
+      maxHp: 300,
+      weaponRange: 5,
+      observedTick: o.tick,
+    })),
+  );
+  const initial = c.decide(o);
+  assert.equal(c.controlPlan!.combat.kind, "withdraw");
+  assert(initial.some((i) => i.kind === "move"));
+  assert(!initial.some((i) => i.kind === "crush" || i.kind === "attack"));
+  const destination = c.controlPlan!.combat.destination!;
+  o.tick += 900;
+  o.enemies = [
+    {
+      ref: "infantry",
+      name: "E1",
+      type: 3,
+      x: 87,
+      y: 40,
+      hp: 125,
+      maxHp: 125,
+      weaponRange: 5,
+      observedTick: o.tick,
+    },
+  ];
+  const later = c.decide(o);
+  assert.equal(
+    c.controlPlan!.combat.kind,
+    "withdraw",
+    "elapsed time alone does not end a withdrawal",
+  );
+  assert(!later.some((i) => i.kind === "crush" || i.kind === "attack"));
+  o.own = o.own.map((u, i) => ({
+    ...u,
+    x: destination.x + (i % 2),
+    y: destination.y,
+  }));
+  o.tick += 3;
+  c.decide(o);
+  assert.notEqual(c.controlPlan!.combat.kind, "withdraw");
+});
+
 test("GI deploys using actual subcell range and attacks immediately after deployment is observed", () => {
   const tactics = new PositionTactics(),
     o = observation();

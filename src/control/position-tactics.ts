@@ -54,7 +54,11 @@ export class PositionTactics extends LocalCombat {
       return this.scouts.control(o, mission, evidence);
     if (mission.kind === "advance")
       return this.strike.control(o, mission, evidence);
-    if (mission.kind !== "defend" && mission.kind !== "assemble")
+    if (
+      mission.kind !== "defend" &&
+      mission.kind !== "assemble" &&
+      mission.kind !== "withdraw"
+    )
       return super.control(o, mission, evidence);
     const intents: Intent[] = [];
     const owns = new Map(o.own.map((u) => [u.ref, u]));
@@ -84,7 +88,7 @@ export class PositionTactics extends LocalCombat {
     for (const ref of mission.units) {
       const unit = owns.get(ref);
       if (!unit || !base) continue;
-      if (unit.type === 3) {
+      if (unit.type === 3 && mission.kind !== "withdraw") {
         const range =
           unit.name === "E1"
             ? (unit.deployedWeaponRange ?? 5)
@@ -170,7 +174,7 @@ export class PositionTactics extends LocalCombat {
           continue;
         }
         this.targets.delete(ref);
-      } else {
+      } else if (mission.kind !== "withdraw") {
         const close = o.enemies.filter(
           (e) =>
             (!e.airborne || unit.antiAir) &&
@@ -242,8 +246,12 @@ export class PositionTactics extends LocalCombat {
         { x: 2, y: -2 },
       ];
       const desired = {
-        x: base.x + offsets[slot % offsets.length].x,
-        y: base.y + offsets[slot % offsets.length].y,
+        x:
+          base.x +
+          (mission.kind === "withdraw" ? 0 : offsets[slot % offsets.length].x),
+        y:
+          base.y +
+          (mission.kind === "withdraw" ? 0 : offsets[slot % offsets.length].y),
       };
       if (unit.type === 3) {
         const dx = base.x - o.home.x,
@@ -312,7 +320,12 @@ export class PositionTactics extends LocalCombat {
       report: {
         task: { id: mission.id, revision: mission.revision },
         status: mission.units.length ? "active" : "idle",
-        reason: engaging ? "engage-visible-threat" : "cover-approach",
+        reason:
+          mission.kind === "withdraw"
+            ? "withdraw-to-support"
+            : engaging
+              ? "engage-visible-threat"
+              : "cover-approach",
         proposedIntents: intents.length,
         facts: {
           assignedUnits: mission.units.length,

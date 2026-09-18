@@ -5,7 +5,7 @@ export interface TaskIdentity {
   readonly revision: number;
 }
 export interface CombatMission extends TaskIdentity {
-  readonly kind: "assemble" | "advance" | "defend" | "scout";
+  readonly kind: "assemble" | "advance" | "defend" | "scout" | "withdraw";
   readonly units: readonly string[];
   /** Undefined means preserve existing orders; it does not send Stop. */
   readonly destination?: Point;

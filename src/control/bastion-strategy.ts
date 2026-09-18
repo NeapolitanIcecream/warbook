@@ -33,6 +33,8 @@ export class BastionStrategy implements StrategicController {
   private readonly productionRevision = new TaskRevision();
   private assault = new Set<string>();
   private joining = new Set<string>();
+  private withdrawing = new Set<string>();
+  private withdrawalPoint?: Point;
   private nextLaunchTick = 0;
   private readonly launchSize = 6;
   private firstForceFunded = false;
@@ -134,12 +136,36 @@ export class BastionStrategy implements StrategicController {
           u.y < b.y + b.height,
       );
     const center = rendezvous;
+    for (const ref of this.withdrawing) {
+      const u = vehicles.find((u) => u.ref === ref);
+      if (
+        !u ||
+        (!u.onBridge &&
+          this.withdrawalPoint &&
+          distance2(u, this.withdrawalPoint) <= 4 ** 2)
+      )
+        this.withdrawing.delete(ref);
+    }
+    const beginWithdrawal = () => {
+      this.withdrawalPoint = post;
+      for (const u of vehicles)
+        if (
+          (this.assault.has(u.ref) || this.joining.has(u.ref)) &&
+          (u.onBridge || distance2(u, post) > 4 ** 2)
+        )
+          this.withdrawing.add(u.ref);
+    };
+    const isReserve = (u: Unit) =>
+      !this.assault.has(u.ref) &&
+      !this.joining.has(u.ref) &&
+      !this.withdrawing.has(u.ref);
     let assault = vehicles.filter((u) => this.assault.has(u.ref));
     if (
       hadAssault &&
       assault.filter((u) => u.name === armor).length <
         Math.min(3, this.launchedArmor)
     ) {
+      beginWithdrawal();
       this.assault.clear();
       this.joining.clear();
       this.operations.active = undefined;
@@ -147,13 +173,12 @@ export class BastionStrategy implements StrategicController {
       this.nextLaunchTick = o.tick + 450;
     }
     if (assault.length && !this.operations.target(o, assault)) {
+      beginWithdrawal();
       this.assault.clear();
       this.joining.clear();
       assault = [];
     }
-    let reserve = vehicles.filter(
-      (u) => !this.assault.has(u.ref) && !this.joining.has(u.ref),
-    );
+    let reserve = vehicles.filter(isReserve);
     const ready = formedUnits(
       reserve.filter(
         (u) => outsideFactory(u) && distance2(u, musterPost) <= 12 ** 2,
@@ -176,6 +201,7 @@ export class BastionStrategy implements StrategicController {
     const nextOperation = opportunity ?? exploration;
     if (
       !this.assault.size &&
+      !this.withdrawing.size &&
       !protectNow &&
       o.tick >= this.nextLaunchTick &&
       nextOperation
@@ -192,9 +218,7 @@ export class BastionStrategy implements StrategicController {
           this.joining.delete(u.ref);
           this.assault.add(u.ref);
         }
-      reserve = vehicles.filter(
-        (u) => !this.assault.has(u.ref) && !this.joining.has(u.ref),
-      );
+      reserve = vehicles.filter(isReserve);
       const nextBatch = formedUnits(
         reserve.filter(
           (u) => outsideFactory(u) && distance2(u, musterPost) <= 12 ** 2,
@@ -209,9 +233,8 @@ export class BastionStrategy implements StrategicController {
     }
     assault = vehicles.filter((u) => this.assault.has(u.ref));
     const joiners = vehicles.filter((u) => this.joining.has(u.ref));
-    reserve = vehicles.filter(
-      (u) => !this.assault.has(u.ref) && !this.joining.has(u.ref),
-    );
+    reserve = vehicles.filter(isReserve);
+    const withdrawing = vehicles.filter((u) => this.withdrawing.has(u.ref));
     const fort = o.side === 0 ? "GAPILL" : "NALASR";
     const refinery = o.side === 0 ? "GAREFN" : "NAREFN";
     const mobilizing = !this.firstForceFunded;
@@ -250,23 +273,39 @@ export class BastionStrategy implements StrategicController {
     };
     const operation = this.operations.target(o, assault);
     const combat = this.mission("main-force", {
-      kind: assault.length
-        ? "advance"
-        : responding || protectNow
-          ? "defend"
-          : "assemble",
-      units: (assault.length ? assault : reserve).map((u) => u.ref),
-      destination: assault.length ? operation?.point : musterPost,
-      groundDestination: assault.length ? operation?.point : musterPost,
-      objective:
-        protectNow && !assault.length
+      kind: withdrawing.length
+        ? "withdraw"
+        : assault.length
+          ? "advance"
+          : responding || protectNow
+            ? "defend"
+            : "assemble",
+      units: (withdrawing.length
+        ? withdrawing
+        : assault.length
+          ? assault
+          : reserve
+      ).map((u) => u.ref),
+      destination: withdrawing.length
+        ? this.withdrawalPoint
+        : assault.length
+          ? operation?.point
+          : musterPost,
+      groundDestination: withdrawing.length
+        ? this.withdrawalPoint
+        : assault.length
+          ? operation?.point
+          : musterPost,
+      objective: withdrawing.length
+        ? "regroup-after-unfavorable-contact"
+        : protectNow && !assault.length
           ? "protect-base"
           : assault.length
             ? (operation?.reason ?? "reassess-operation")
             : responding
               ? "protect-economy"
               : "muster-counterattack",
-      engagement: { allowCrush: true },
+      engagement: { allowCrush: !withdrawing.length },
       approach: stagingDirection,
       ...(assault.length && operation?.ref ? { target: operation.ref } : {}),
     });
@@ -311,7 +350,7 @@ export class BastionStrategy implements StrategicController {
           engagement: { allowCrush: true },
         }),
       );
-    if (assault.length)
+    if (assault.length || withdrawing.length)
       additionalCombat.push(
         this.mission("reserve-force", {
           kind: responding ? "defend" : "assemble",
