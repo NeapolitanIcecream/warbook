@@ -280,17 +280,6 @@ export class BastionStrategy implements StrategicController {
         },
       ],
     };
-    // Let the second refinery supply the third miner before buying a fourth.
-    // The vehicle queue can keep reinforcing the first force during that investment.
-    if (
-      this.doctrine === "bastion" &&
-      !mobilizing &&
-      o.own.filter((u) => u.name === refinery && u.buildStatus !== 0).length < 2
-    )
-      economy.vehicles = {
-        ...economy.vehicles,
-        harvesters: Math.min(3, economy.vehicles.harvesters),
-      };
     const { revision: _oldRevision, ...productionDescription } = economy;
     const production = {
       ...economy,
