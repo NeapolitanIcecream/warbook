@@ -70,7 +70,11 @@ export class Reconnaissance {
         route.bestDistance = distance;
         route.progressTick = o.tick;
       }
-      if (distance <= 4 ** 2) {
+      const revealed =
+        o.scoutPoints !== undefined &&
+        !o.starts.some((p) => key(p) === key(route.goal!)) &&
+        !points.some((p) => key(p) === key(route.goal!));
+      if (distance <= 4 ** 2 || revealed) {
         this.visited.set(key(route.goal), o.tick);
         route.goal = undefined;
       } else if (avoiding || o.tick - route.progressTick >= 450) {

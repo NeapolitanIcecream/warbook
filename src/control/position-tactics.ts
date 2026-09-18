@@ -54,12 +54,19 @@ export class PositionTactics extends LocalCombat {
     this.prepareMission(mission);
     if (mission.kind === "scout")
       return this.scouts.control(o, mission, evidence);
-    if (mission.kind === "advance")
+    const infantryAdvance =
+      mission.kind === "advance" &&
+      mission.units.length > 0 &&
+      mission.units.every((ref) =>
+        o.own.some((u) => u.ref === ref && u.type === 3),
+      );
+    if (mission.kind === "advance" && !infantryAdvance)
       return this.strike.control(o, mission, evidence);
     if (
       mission.kind !== "defend" &&
       mission.kind !== "assemble" &&
-      mission.kind !== "withdraw"
+      mission.kind !== "withdraw" &&
+      !infantryAdvance
     )
       return super.control(o, mission, evidence);
     const intents: Intent[] = [];

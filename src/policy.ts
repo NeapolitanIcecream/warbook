@@ -3,6 +3,7 @@ import { LegacyCommander } from "./legacy-policy.js";
 import { ControlCoordinator } from "./control/coordinator.js";
 import { BastionStrategy } from "./control/bastion-strategy.js";
 import { PositionTactics } from "./control/position-tactics.js";
+import { PressureStrategy } from "./control/pressure-strategy.js";
 import type {
   ControlComponents,
   ExecutionEvidence,
@@ -25,6 +26,7 @@ export type PolicyMode =
   | "formed"
   | "factory-exit"
   | "bastion"
+  | "pressure"
   | "cohort-local"
   | "contact-filter";
 export const POLICY_MODES: readonly PolicyMode[] = [
@@ -43,6 +45,7 @@ export const POLICY_MODES: readonly PolicyMode[] = [
   "formed",
   "factory-exit",
   "bastion",
+  "pressure",
   "cohort-local",
   "contact-filter",
 ];
@@ -57,6 +60,12 @@ export class Commander {
   ) {
     if (mode === "factory-exit")
       this.control = new ControlCoordinator(components);
+    else if (mode === "pressure")
+      this.control = new ControlCoordinator({
+        strategy: new PressureStrategy(),
+        tactics: new PositionTactics(),
+        ...components,
+      });
     else if (mode === "bastion")
       this.control = new ControlCoordinator({
         strategy: new BastionStrategy(),

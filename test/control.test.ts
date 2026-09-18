@@ -83,6 +83,78 @@ function observation(): Observation {
 const economic = (intents: readonly Intent[]) =>
   intents.filter((i) => ["queue", "place", "deploy"].includes(i.kind));
 
+test("a scout releases a revealed grid goal without waiting to stand on an inaccessible tile", () => {
+  const o = observation(),
+    recon = new Reconnaissance();
+  const dog = { ...tank("dog", 70, 70), name: "ADOG", type: 3 };
+  o.own = [dog];
+  o.exploredStarts = o.starts;
+  o.scoutPoints = [
+    { x: 76, y: 60 },
+    { x: 84, y: 60 },
+  ];
+  assert.deepEqual(recon.destination(o, [dog]), { x: 76, y: 60 });
+  o.tick += 150;
+  dog.x = 77;
+  dog.y = 67;
+  o.scoutPoints = [{ x: 84, y: 60 }];
+  assert.deepEqual(recon.destination(o, [dog]), { x: 84, y: 60 });
+});
+
+test("pressure assigns distinct economic targets and preserves a home guard", () => {
+  const c = new Commander("pressure"),
+    o = observation();
+  o.own.push(
+    ...Array.from({ length: 8 }, (_, i) => ({
+      ...tank(`gi-${i}`, 67 + (i % 3), 40),
+      name: "E1",
+      type: 3,
+      crusher: false,
+    })),
+  );
+  o.enemies = [
+    {
+      ref: "power",
+      name: "GAPOWR",
+      type: 2,
+      x: 25,
+      y: 70,
+      hp: 750,
+      maxHp: 750,
+      observedTick: o.tick,
+    },
+    {
+      ref: "refinery",
+      name: "GAREFN",
+      type: 2,
+      x: 40,
+      y: 80,
+      hp: 1000,
+      maxHp: 1000,
+      observedTick: o.tick,
+    },
+  ];
+  c.decide(o);
+  const plan = c.controlPlan!,
+    pressure = plan.additionalCombat!.filter((m) =>
+      m.id.startsWith("pressure-"),
+    );
+  assert.deepEqual(
+    pressure.map((m) => m.units.length),
+    [3, 3],
+  );
+  assert.equal(new Set(pressure.map((m) => m.target)).size, 2);
+  assert.equal(
+    plan
+      .additionalCombat!.filter((m) => m.kind === "defend")
+      .flatMap((m) => m.units).length,
+    2,
+  );
+  const refs = [plan.combat, ...plan.additionalCombat!].flatMap((m) => m.units);
+  assert.equal(new Set(refs).size, refs.length);
+  assert.equal(plan.production.infantry.count, 10);
+});
+
 test("bastion keeps infantry at home and releases reinforcements as a separate batch", () => {
   const c = new Commander("bastion");
   const o = observation();
