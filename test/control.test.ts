@@ -7,6 +7,7 @@ import { GroupedAdvance, LocalCombat } from "../src/control/tactics.js";
 import { ControlCoordinator } from "../src/control/coordinator.js";
 import { PositionTactics } from "../src/control/position-tactics.js";
 import { DefenseAssignments } from "../src/control/defense-assignments.js";
+import { DefenseSituation } from "../src/control/defense-situation.js";
 import { Reconnaissance, ScoutTactics } from "../src/control/reconnaissance.js";
 import { Operations } from "../src/control/operations.js";
 import { formedUnits } from "../src/control/formation.js";
@@ -500,6 +501,11 @@ test("two scouts reserve different routes, share explored starts and keep indepe
 test("bastion reforms after heavy losses without issuing the same unit to two tasks", () => {
   const c = new Commander("bastion"),
     o = observation();
+  o.defenseRoute = {
+    point: { x: 67, y: 42 },
+    towards: o.starts[1],
+    observedTick: o.tick,
+  };
   o.own = o.own.filter((u) => u.name !== "MTNK");
   o.own.push(
     ...Array.from({ length: 8 }, (_, i) => tank(`wave-${i}`, 68 + (i % 3), 42)),
@@ -551,6 +557,11 @@ test("a local counterattack window can release four ready tanks after observed a
 test("a wiped assault releases surviving joiners back into the reserve", () => {
   const c = new Commander("bastion"),
     o = observation();
+  o.defenseRoute = {
+    point: { x: 67, y: 42 },
+    towards: o.starts[1],
+    observedTick: o.tick,
+  };
   o.own = o.own.filter((u) => u.name !== "MTNK");
   o.own.push(
     ...Array.from({ length: 6 }, (_, i) => tank(`wave-${i}`, 68 + (i % 3), 42)),
@@ -737,6 +748,30 @@ test("a cancelled attack keeps withdrawing until arrival, without renewed crushi
   assert.notEqual(c.controlPlan!.combat.kind, "withdraw");
 });
 
+test("a moving enemy does not replace a known ground post with an unchecked straight-line point", () => {
+  const o = observation();
+  o.home = { x: 38, y: 73 };
+  o.defenseRoute = {
+    point: { x: 34, y: 68 },
+    towards: { x: 54, y: 48 },
+    observedTick: o.tick - 147,
+  };
+  o.enemies = [
+    {
+      ref: "moving",
+      name: "MTNK",
+      type: 7,
+      x: 55,
+      y: 48,
+      hp: 300,
+      maxHp: 300,
+      weaponRange: 5,
+      observedTick: o.tick,
+    },
+  ];
+  assert.deepEqual(new DefenseSituation().observe(o).post, { x: 34, y: 68 });
+});
+
 test("GI deploys using actual subcell range and attacks immediately after deployment is observed", () => {
   const tactics = new PositionTactics(),
     o = observation();
@@ -876,6 +911,11 @@ test("a small attack on the factory draws only needed relief while the main assa
   assert.equal(new Set(refs).size, refs.length);
   o.tick += 450;
   o.enemies = [];
+  o.defenseRoute = {
+    point: { x: 77, y: 37 },
+    towards: { x: 80, y: 38 },
+    observedTick: o.tick,
+  };
   c.decide(o);
   assert.ok(
     c.controlPlan!.additionalCombat![0].destination!.x > o.home.x,

@@ -42,11 +42,7 @@ export class DefenseSituation {
     };
     const route = o.defenseRoute;
     const post =
-      route &&
-      distance2(route.towards, direction) === 0 &&
-      o.tick - route.observedTick <= 450
-        ? route.point
-        : requestedPost;
+      route && o.tick - route.observedTick <= 450 ? route.point : o.home;
     const assets = o.own.filter((u) => u.type === 2 || u.harvester);
     for (const asset of assets) {
       if (asset.hp < (this.previousHp.get(asset.ref) ?? asset.hp))
