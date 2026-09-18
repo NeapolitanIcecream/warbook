@@ -1,0 +1,35 @@
+{
+  "purpose": "Compare simultaneous full infantry cohorts with the original pressure route and an otherwise identical shared-code control",
+  "subjects": {
+    "pressure-013": {
+      "ref": "36a7f72",
+      "mode": "pressure"
+    },
+    "shared-control": {
+      "ref": "c53cebb",
+      "mode": "pressure"
+    },
+    "cohort-waves": {
+      "ref": "551abac",
+      "mode": "pressure"
+    }
+  },
+  "opponents": {
+    "published-012": {
+      "ref": "f8f491e",
+      "mode": "bastion"
+    },
+    "defender-014": {
+      "ref": "c53cebb",
+      "mode": "bastion"
+    }
+  },
+  "maps": [
+    "mp06t2.map",
+    "mp29u2.map"
+  ],
+  "rounds": 1,
+  "decision": {
+    "budget": "12 complete games. Require actual concurrent infantry pressure or preservation of force; wins alone do not establish mechanism."
+  }
+}

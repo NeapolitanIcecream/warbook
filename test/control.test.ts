@@ -1212,6 +1212,42 @@ test("defending infantry do not chase a distant visitor away from the protected 
   assert.equal(tactics.control(o, mission, []).intents[0].kind, "deploy");
 });
 
+test("defending armor brings the nearby rear rank into the same fight", () => {
+  const tactics = new PositionTactics(),
+    o = observation();
+  o.own = [
+    { ...tank("front", 0, 0), weaponRange: 5 },
+    { ...tank("rear", 0, 3), weaponRange: 5 },
+  ];
+  o.enemies = [
+    {
+      ref: "attacker",
+      name: "MTNK",
+      type: 7,
+      x: 0,
+      y: -5,
+      hp: 300,
+      maxHp: 300,
+      weaponRange: 5,
+      observedTick: o.tick,
+    },
+  ];
+  const m: CombatMission = {
+    id: "armor",
+    revision: 1,
+    kind: "defend",
+    units: ["front", "rear"],
+    destination: { x: 0, y: 2 },
+    objective: "protect-base",
+    engagement: { allowCrush: true },
+  };
+  const attacks = tactics
+    .control(o, m, [])
+    .intents.flatMap((i) => (i.kind === "attack" ? [i] : []));
+  assert.deepEqual(attacks.flatMap((i) => i.refs).sort(), ["front", "rear"]);
+  assert(attacks.every((i) => i.target === "attacker"));
+});
+
 test("guards move into range to support a nearby defending tank, then deploy", () => {
   const tactics = new PositionTactics(),
     o = observation();
