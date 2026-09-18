@@ -1,0 +1,40 @@
+{
+  "purpose": "Bounded preview verification after separating infantry, miner and fort protection responsibilities",
+  "subjects": {
+    "published-0112": {
+      "ref": "f8f491e",
+      "mode": "bastion"
+    },
+    "preview-0113": {
+      "ref": "6ec57d7",
+      "mode": "bastion"
+    }
+  },
+  "opponents": {
+    "pressure-specialist": {
+      "ref": "36a7f72",
+      "mode": "pressure"
+    },
+    "old-defense": {
+      "ref": "b3a1f7ce69ed140fbafb82799f6d2b14d487c052",
+      "mode": "bastion"
+    },
+    "old-main": {
+      "ref": "8326311288ec685c3da43b1d182071dc36938fe8",
+      "mode": "factory-exit"
+    },
+    "supalosa": {
+      "native": "supalosa"
+    }
+  },
+  "maps": [
+    "mp29u2.map",
+    "mp08t2.map",
+    "mp06t2.map",
+    "mp03t4.map"
+  ],
+  "rounds": 1,
+  "decision": {
+    "budget": "32 ordinary full games, one case per map/opponent/policy cell, 16 per defender. Same four opponents, maps and evaluator for both. This is a bounded preview check, with limited start/execution-slot coverage, not confirmation of strength or default promotion. Preserve all failures/caps. The maintained default stays 0.1.12 because earlier expanded candidates regressed; the preview and original pressure specialist get separate playable entries."
+  }
+}
