@@ -606,25 +606,49 @@ test("the offensive cohort funds its first force before expanding the economy", 
   assert.equal(c.controlPlan!.production.vehicles.harvesters, 4);
 });
 
-test("four-tank economic expansion keeps the six-tank blind exploration requirement", () => {
+test("refinery investment keeps the vehicle queue on armor until the free miner arrives", () => {
   const c = new Commander("bastion"),
     o = observation();
   o.own = o.own.filter((u) => u.name !== "MTNK");
   o.own.push(
-    ...Array.from({ length: 3 }, (_, i) => tank(`wave-${i}`, 68 + i, 42)),
+    ...Array.from({ length: 6 }, (_, i) => tank(`wave-${i}`, 68 + (i % 3), 42)),
+    ...Array.from({ length: 2 }, (_, i) => ({
+      ...tank(`miner-${i}`),
+      name: "CMIN",
+      harvester: true,
+      combat: false,
+    })),
   );
-  c.decide(o);
-  assert.equal(c.controlPlan!.production.vehicles.harvesters, 2);
-  o.own.push(tank("fourth", 68, 43));
+  o.queues[0] = {
+    type: 0,
+    status: 1,
+    size: 1,
+    items: [{ name: "GAREFN", quantity: 1 }],
+  };
+  let intents = c.decide(o);
+  assert.equal(c.controlPlan!.production.vehicles.harvesters, 3);
+  assert(intents.some((i) => i.kind === "queue" && i.product.name === "MTNK"));
+  assert(!intents.some((i) => i.kind === "queue" && i.product.name === "CMIN"));
+  o.queues[0] = { type: 0, status: 0, size: 0, items: [] };
+  const second = {
+    ...building("second-refinery", "GAREFN", 65, 46),
+    buildStatus: 0,
+  };
+  o.own.push(second);
   o.tick += 3;
   c.decide(o);
-  assert.equal(c.controlPlan!.production.vehicles.harvesters, 4);
-  assert.equal(c.controlPlan!.combat.kind, "assemble");
-  o.own.push(tank("fifth", 69, 43), tank("sixth", 70, 43));
+  assert.equal(c.controlPlan!.production.vehicles.harvesters, 3);
+  second.buildStatus = 1;
+  o.own.push({
+    ...tank("free-miner"),
+    name: "CMIN",
+    harvester: true,
+    combat: false,
+  });
   o.tick += 3;
-  c.decide(o);
+  intents = c.decide(o);
   assert.equal(c.controlPlan!.production.vehicles.harvesters, 4);
-  assert.equal(c.controlPlan!.combat.kind, "advance");
+  assert(intents.some((i) => i.kind === "queue" && i.product.name === "CMIN"));
 });
 
 test("extra combat tasks keep separate ownership and receive only their own feedback", () => {

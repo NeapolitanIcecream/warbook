@@ -72,10 +72,7 @@ export class BastionStrategy implements StrategicController {
   ): StrategicPlan {
     const base = this.opening.plan(o, assessment);
     const { unitType: armor, factoryType: factory } = this.assessmentRequest(o);
-    if (
-      assessment.observedArmor >=
-      (this.doctrine === "bastion" ? 4 : this.launchSize)
-    )
+    if (assessment.observedArmor >= this.launchSize)
       this.firstForceFunded = true;
     const scouts = assessment.army.filter(isScout);
     const infantry = assessment.army.filter((u) => u.type === 3 && !isScout(u));
@@ -283,6 +280,17 @@ export class BastionStrategy implements StrategicController {
         },
       ],
     };
+    // Let the second refinery supply the third miner before buying a fourth.
+    // The vehicle queue can keep reinforcing the first force during that investment.
+    if (
+      this.doctrine === "bastion" &&
+      !mobilizing &&
+      o.own.filter((u) => u.name === refinery && u.buildStatus !== 0).length < 2
+    )
+      economy.vehicles = {
+        ...economy.vehicles,
+        harvesters: Math.min(3, economy.vehicles.harvesters),
+      };
     const { revision: _oldRevision, ...productionDescription } = economy;
     const production = {
       ...economy,
