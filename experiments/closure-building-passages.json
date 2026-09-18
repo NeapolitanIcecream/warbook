@@ -1,0 +1,30 @@
+{
+  "purpose": "Apply the intended one-tile building gap to all existing footprints, preserving foot paths through the compound",
+  "subjects": {
+    "packed-base": {
+      "ref": "174b1862b1eccabd8607db4d9610b1a09be0647a",
+      "mode": "bastion"
+    },
+    "clear-passages": {
+      "ref": "e9bc1b48059249a92ab44f7146aced0bb3ff3dd3",
+      "mode": "bastion"
+    }
+  },
+  "opponents": {
+    "old-defense": {
+      "ref": "b3a1f7ce69ed140fbafb82799f6d2b14d487c052",
+      "mode": "bastion"
+    },
+    "supalosa": {
+      "native": "supalosa"
+    }
+  },
+  "maps": [
+    "mp06t2.map",
+    "mp03t4.map"
+  ],
+  "rounds": 2,
+  "decision": {
+    "budget": "16 ordinary full games. Verify actual building spacing, no construction deadlock, infantry response/fire and completed outcomes. No unrelated tactic or evaluation changes."
+  }
+}

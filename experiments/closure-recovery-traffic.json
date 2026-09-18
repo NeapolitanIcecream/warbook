@@ -1,0 +1,30 @@
+{
+  "purpose": "Keep recovery as an independent task and use native Scatter to yield when a reserve blocks returning tanks in a one-tile passage",
+  "subjects": {
+    "global-recovery-gate": {
+      "ref": "e9bc1b48059249a92ab44f7146aced0bb3ff3dd3",
+      "mode": "bastion"
+    },
+    "independent-recovery": {
+      "ref": "4e1bdbac554f3ffcb0721982a2fa5b4da2d31e55",
+      "mode": "bastion"
+    }
+  },
+  "opponents": {
+    "old-defense": {
+      "ref": "b3a1f7ce69ed140fbafb82799f6d2b14d487c052",
+      "mode": "bastion"
+    },
+    "supalosa": {
+      "native": "supalosa"
+    }
+  },
+  "maps": [
+    "mp06t2.map",
+    "mp03t4.map"
+  ],
+  "rounds": 2,
+  "decision": {
+    "budget": "16 ordinary full games, all outcomes retained. Check attack opportunities during recovery, actual yield motion and recovery completion; no attack/crush from recovering units."
+  }
+}

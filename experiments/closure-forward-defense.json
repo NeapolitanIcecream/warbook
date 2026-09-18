@@ -1,0 +1,30 @@
+{
+  "purpose": "Replace rear route-turning guard posts with reachable forward positions, align the pillbox, and keep withdrawal at a separate near-home rally",
+  "subjects": {
+    "route-prefix": {
+      "ref": "a507f15",
+      "mode": "bastion"
+    },
+    "forward-defense": {
+      "ref": "382e54ad8c8677eda48e7dea858d92d6f2ff5dcf",
+      "mode": "bastion"
+    }
+  },
+  "opponents": {
+    "old-defense": {
+      "ref": "b3a1f7ce69ed140fbafb82799f6d2b14d487c052",
+      "mode": "bastion"
+    },
+    "supalosa": {
+      "native": "supalosa"
+    }
+  },
+  "maps": [
+    "mp06t2.map",
+    "mp03t4.map"
+  ],
+  "rounds": 2,
+  "decision": {
+    "budget": "16 ordinary full games. Compare defense arrival/fire during the barracks attack, retained buildings, independent withdrawal, and all normal/failed/timeout outcomes; verify replay matches."
+  }
+}

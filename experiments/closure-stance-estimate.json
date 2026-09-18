@@ -1,0 +1,30 @@
+{
+  "purpose": "Distinguish visibly deployed GI firepower when deciding whether a supported attack can beat defenders, while preserving the prior bounded crush tactic",
+  "subjects": {
+    "prior-recovery": {
+      "ref": "4e1bdba",
+      "mode": "bastion"
+    },
+    "stance-aware": {
+      "ref": "7a42d2ad1d4794daee2ca42735771f5bd1783eb6",
+      "mode": "bastion"
+    }
+  },
+  "opponents": {
+    "old-defense": {
+      "ref": "b3a1f7ce69ed140fbafb82799f6d2b14d487c052",
+      "mode": "bastion"
+    },
+    "supalosa": {
+      "native": "supalosa"
+    }
+  },
+  "maps": [
+    "mp06t2.map",
+    "mp03t4.map"
+  ],
+  "rounds": 2,
+  "decision": {
+    "budget": "16 ordinary full games; compare fortified-defense attacks, waiting and all terminal outcomes. Deployed GI weighting is grounded in pinned nominal anti-tank damage, not an exact combat simulator."
+  }
+}

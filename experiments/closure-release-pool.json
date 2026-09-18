@@ -1,0 +1,36 @@
+{
+  "purpose": "Release-pool check after independent recovery, native traffic yielding, cleared production belief and visible deployed-GI estimates",
+  "subjects": {
+    "published-0110": {
+      "ref": "f70eb3b",
+      "mode": "bastion"
+    },
+    "closure-candidate": {
+      "ref": "7a42d2a",
+      "mode": "bastion"
+    }
+  },
+  "opponents": {
+    "old-defense": {
+      "ref": "b3a1f7ce69ed140fbafb82799f6d2b14d487c052",
+      "mode": "bastion"
+    },
+    "supalosa": {
+      "native": "supalosa"
+    },
+    "old-main": {
+      "ref": "8326311288ec685c3da43b1d182071dc36938fe8",
+      "mode": "factory-exit"
+    }
+  },
+  "maps": [
+    "mp06t2.map",
+    "mp03t4.map",
+    "mp29u2.map",
+    "mp08t2.map"
+  ],
+  "rounds": 2,
+  "decision": {
+    "budget": "48 ordinary full games on previously used development maps, 24 per subject; all outcomes retained. Review losses/timeouts and a success with defense, independent scouting and a nearby construction opportunity. Spawn positions are recorded, never assumed matched. No held-out or human-strength claim."
+  }
+}

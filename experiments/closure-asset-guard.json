@@ -1,0 +1,30 @@
+{
+  "purpose": "Stage infantry on foot-accessible ground beside exposed economic buildings, let native movement group them, and retain a separate vehicle rally",
+  "subjects": {
+    "route-prefix": {
+      "ref": "a507f15",
+      "mode": "bastion"
+    },
+    "asset-guard": {
+      "ref": "174b1862b1eccabd8607db4d9610b1a09be0647a",
+      "mode": "bastion"
+    }
+  },
+  "opponents": {
+    "old-defense": {
+      "ref": "b3a1f7ce69ed140fbafb82799f6d2b14d487c052",
+      "mode": "bastion"
+    },
+    "supalosa": {
+      "native": "supalosa"
+    }
+  },
+  "maps": [
+    "mp06t2.map",
+    "mp03t4.map"
+  ],
+  "rounds": 2,
+  "decision": {
+    "budget": "16 ordinary full games. Main decision: early barracks defense participation and loss, not total win count alone. Retain all negative results and replay-validate selected cases."
+  }
+}

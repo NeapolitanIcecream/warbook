@@ -1,0 +1,34 @@
+{
+  "purpose": "Separate the cleared-factory production belief correction from preserving bounded infantry crushing near light static defenses",
+  "subjects": {
+    "prior-recovery": {
+      "ref": "4e1bdba",
+      "mode": "bastion"
+    },
+    "production-belief": {
+      "ref": "a8327f7",
+      "mode": "bastion"
+    },
+    "light-defense-crush": {
+      "ref": "a788d4fad0cef6b1937eb18346a788814233ba6e",
+      "mode": "bastion"
+    }
+  },
+  "opponents": {
+    "old-defense": {
+      "ref": "b3a1f7ce69ed140fbafb82799f6d2b14d487c052",
+      "mode": "bastion"
+    },
+    "supalosa": {
+      "native": "supalosa"
+    }
+  },
+  "maps": [
+    "mp06t2.map",
+    "mp03t4.map"
+  ],
+  "rounds": 2,
+  "decision": {
+    "budget": "24 ordinary full games; all outcomes retained. Inspect late-game waiting, factory clearance and infantry-screen combat. The three versions separate belief and tactical changes."
+  }
+}
