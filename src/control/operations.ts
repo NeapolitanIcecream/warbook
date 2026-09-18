@@ -28,6 +28,10 @@ const distance = (a: Point, b: Point) => Math.sqrt(distance2(a, b));
 
 /** Operational estimates from observed contacts, not engine truth or a battle simulator. */
 export class Operations {
+  constructor(
+    private readonly launchMargin = 1.2,
+    private readonly continueMargin = 1.05,
+  ) {}
   private known = new Map<string, Contact>();
   private pressured = false;
   private lastPressureTick = -Infinity;
@@ -184,7 +188,8 @@ export class Operations {
       const estimate = this.opposition(o, target, center, tanks.length);
       const { defenders, productionArrivals, travelSeconds } = estimate;
       const uncertainty = visible ? 0 : 1;
-      const required = (defenders + productionArrivals + uncertainty) * 1.2;
+      const required =
+        (defenders + productionArrivals + uncertainty) * this.launchMargin;
       if (required < lowestRequired) {
         lowestRequired = required;
         this.decision = {
@@ -245,7 +250,8 @@ export class Operations {
       .sort((a, b) => distance2(a, center) - distance2(b, center));
     if (this.pressured && tanks.length >= 4 && nearby[0]) {
       const estimate = this.opposition(o, nearby[0], center, tanks.length);
-      const required = (estimate.defenders + estimate.productionArrivals) * 1.2;
+      const required =
+        (estimate.defenders + estimate.productionArrivals) * this.launchMargin;
       this.decision = {
         operationReason: "local-support-risk",
         formedTanks: tanks.length,
@@ -294,7 +300,9 @@ export class Operations {
       // cancelling a viable fight at exactly the stricter launch threshold.
       if (
         !finishNow &&
-        power < (estimate.defenders + estimate.productionArrivals) * 1.05
+        power <
+          (estimate.defenders + estimate.productionArrivals) *
+            this.continueMargin
       ) {
         this.active = this.consider(o, force);
         if (!this.active)

@@ -1,0 +1,26 @@
+{
+  "purpose": "Verify prepared forts actually cover observed approaches before freezing the defense candidate",
+  "subjects": {
+    "prepared-f3": {
+      "ref": "567f688",
+      "mode": "bastion"
+    }
+  },
+  "opponents": {
+    "supalosa": {
+      "native": "supalosa"
+    },
+    "pressure-p0": {
+      "ref": "f42a0de",
+      "mode": "pressure"
+    }
+  },
+  "maps": [
+    "mp06t2.map",
+    "mp03t4.map"
+  ],
+  "rounds": 2,
+  "decision": {
+    "budget": "Eight ordinary full games, inspect placement timing, actual fort firing and guard participation. Not a paired component-effect estimate. Retain all failures and caps; use the same baseline pool later for release comparison."
+  }
+}

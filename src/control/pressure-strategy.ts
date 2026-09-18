@@ -5,6 +5,7 @@ import {
   type Unit,
 } from "../model.js";
 import { BastionStrategy } from "./bastion-strategy.js";
+import { Operations } from "./operations.js";
 import {
   TaskRevision,
   type CombatMission,
@@ -15,8 +16,10 @@ import {
 
 /** Independent pressure route: two infantry groups attack separate economic targets. */
 export class PressureStrategy implements StrategicController {
-  readonly id = "two-front-pressure-v1";
-  private readonly base = new BastionStrategy("cohort");
+  readonly id = "two-front-pressure-v2";
+  // Pressure accepts a near-parity engagement; the defender keeps its larger
+  // margin. Both still assess legal enemy contacts, reinforcements and health.
+  private readonly base = new BastionStrategy("cohort", new Operations(1, 0.9));
   private readonly revisions = new Map<string, TaskRevision>();
   private readonly productionRevision = new TaskRevision();
   private readonly groups = [new Set<string>(), new Set<string>()];
