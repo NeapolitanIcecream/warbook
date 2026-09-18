@@ -153,7 +153,6 @@ test("pressure assigns distinct economic targets and preserves a home guard", ()
   const refs = [plan.combat, ...plan.additionalCombat!].flatMap((m) => m.units);
   assert.equal(new Set(refs).size, refs.length);
   assert.equal(plan.production.infantry.count, 10);
-  assert.equal(plan.production.spending.infantryAbove, 250);
   o.tick += 3;
   o.enemies.push({
     ref: "miner",
@@ -178,6 +177,18 @@ test("pressure assigns distinct economic targets and preserves a home guard", ()
     c.controlPlan!.additionalCombat!.find((m) => m.id === "pressure-1")!.target,
     "miner",
     "no object-target attack on an unseen miner",
+  );
+  o.tick += 3;
+  o.credits = 400;
+  o.queues = o.queues.map((q) =>
+    q.type === 3
+      ? { ...q, status: 1, size: 1, items: [{ name: "MTNK", quantity: 1 }] }
+      : q,
+  );
+  const replacements = c.decide(o);
+  assert(
+    replacements.some((i) => i.kind === "queue" && i.product.name === "E1"),
+    "active armor production must not prevent affordable infantry replacements",
   );
 });
 

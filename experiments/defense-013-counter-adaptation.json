@@ -1,0 +1,31 @@
+{
+  "purpose": "Counter-adaptation after F2: exposed-miner targets and sustained infantry replenishment",
+  "subjects": {
+    "pressure-shared": {
+      "ref": "151e10d",
+      "mode": "pressure"
+    },
+    "pressure-miners": {
+      "ref": "bcf4916",
+      "mode": "pressure"
+    },
+    "pressure-sustained": {
+      "ref": "ba0ffbd",
+      "mode": "pressure"
+    }
+  },
+  "opponents": {
+    "guard-fort-f2": {
+      "ref": "151e10d",
+      "mode": "bastion"
+    }
+  },
+  "maps": [
+    "mp06t2.map",
+    "mp03t4.map"
+  ],
+  "rounds": 2,
+  "decision": {
+    "budget": "12 ordinary complete games. Independent policy packages. Inspect actual separated contacts, miner HP loss or disrupted mining, and complete outcomes. Do not count different target IDs alone as different fronts; preserve every cap and failure."
+  }
+}

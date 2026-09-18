@@ -9,7 +9,11 @@ import {
 } from "@chronodivide/game-api";
 import { baseRally, defenseRoute, guardPost } from "./defense-route.js";
 import { refinerySite } from "./refinery-site.js";
-import { defenseSite } from "./defense-placement.js";
+import {
+  defenseSite,
+  defenseThreats,
+  incomingFirePoints,
+} from "./defense-placement.js";
 import { LocalGroundMap } from "./local-ground-map.js";
 import { combatCapabilities } from "./unit-capabilities.js";
 import { Commander, type PolicyMode } from "./policy.js";
@@ -57,6 +61,7 @@ export class WarbookBot extends Bot {
   private stagingRoute?: Observation["stagingRoute"];
   private lastDefenseRouteTick = -150;
   private defenseRequestIds = "";
+  private lastFortSiteTick = -30;
   public trace?: (event: Trace) => void;
   public autoTick = false;
   public observation?: Observation;
@@ -304,6 +309,19 @@ export class WarbookBot extends Bot {
     )) {
       const name = q.items[0]?.name;
       if (!name) continue;
+      const buildingRules = this.game.rules.getBuilding(name);
+      // Keep a prepared fort in its native queue until a real approach is seen.
+      // This also avoids scanning placement sites every tick while waiting.
+      if (
+        buildingRules.isBaseDefense &&
+        buildingRules.primary &&
+        !defenseThreats(own, enemies).length
+      )
+        continue;
+      if (buildingRules.isBaseDefense && buildingRules.primary) {
+        if (tick - this.lastFortSiteTick < 30) continue;
+        this.lastFortSiteTick = tick;
+      }
       const { foundation } = this.game.getBuildingPlacementData(name);
       const candidates = new Map<string, { x: number; y: number }>();
       const buildings = own.filter((u) => u.type === ObjectType.Building);
@@ -348,7 +366,6 @@ export class WarbookBot extends Bot {
         const tile = this.game.map.getTile(p.x, p.y);
         return !!tile && this.player.canPlaceBuilding(name, tile);
       };
-      const buildingRules = this.game.rules.getBuilding(name);
       if (buildingRules.isBaseDefense && buildingRules.primary) {
         const foot = this.game.rules.getObject(
           data.country!.side === 0 ? "E1" : "E2",
@@ -371,6 +388,7 @@ export class WarbookBot extends Bot {
             [...candidates.values()].filter(legal),
             foundation,
             this.game.rules.getWeapon(buildingRules.primary).range,
+            incomingFirePoints(navigation, own, enemies),
           );
           if (site) {
             buildSites.push({ name, ...site.point });
@@ -383,6 +401,7 @@ export class WarbookBot extends Bot {
             continue;
           }
         }
+        continue;
       }
       if (["GAREFN", "NAREFN"].includes(name)) {
         const miner = name === "GAREFN" ? "CMIN" : "HARV";
