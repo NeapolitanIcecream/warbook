@@ -83,53 +83,6 @@ function observation(): Observation {
 const economic = (intents: readonly Intent[]) =>
   intents.filter((i) => ["queue", "place", "deploy"].includes(i.kind));
 
-test("losing sight of an army does not create a counterattack window after thirty seconds", () => {
-  const operations = new Operations(),
-    o = observation();
-  o.tick = 0;
-  o.home = { x: 0, y: 0 };
-  o.own = Array.from({ length: 6 }, (_, i) => tank(`own-${i}`, i % 3, 0));
-  const factory = {
-    ref: "enemy-factory",
-    name: "GAWEAP",
-    type: 2,
-    x: 30,
-    y: 0,
-    hp: 1000,
-    maxHp: 1000,
-    observedTick: 0,
-    weaponRange: 0,
-  };
-  o.enemies = [
-    factory,
-    ...Array.from({ length: 8 }, (_, i) => ({
-      ref: `enemy-${i}`,
-      name: "MTNK",
-      type: 7,
-      x: 25 + (i % 3),
-      y: 2,
-      hp: 300,
-      maxHp: 300,
-      observedTick: 0,
-      weaponRange: 5,
-    })),
-  ];
-  operations.observe(o, []);
-  assert.equal(operations.consider(o, o.own), undefined);
-  o.tick = 465;
-  o.enemies = [{ ...factory, observedTick: o.tick }];
-  operations.observe(o, []);
-  assert.equal(operations.consider(o, o.own), undefined);
-  assert(Number(operations.decision.defenders) > 7);
-  o.tick = 1815;
-  o.enemies = [{ ...factory, observedTick: o.tick }];
-  operations.observe(o, []);
-  assert(
-    operations.consider(o, o.own),
-    "stale evidence must not block operations forever",
-  );
-});
-
 test("bastion keeps infantry at home and releases reinforcements as a separate batch", () => {
   const c = new Commander("bastion");
   const o = observation();
@@ -706,7 +659,7 @@ test("the offensive cohort funds its first force before expanding the economy", 
   assert.equal(c.controlPlan!.production.vehicles.harvesters, 4);
 });
 
-test("refinery investment keeps the vehicle queue on armor until the free miner arrives", () => {
+test("one replacement tank bridges expansion, then miner investment resumes despite later losses", () => {
   const c = new Commander("bastion"),
     o = observation();
   o.own = o.own.filter((u) => u.name !== "MTNK");
@@ -728,27 +681,17 @@ test("refinery investment keeps the vehicle queue on armor until the free miner 
   let intents = c.decide(o);
   assert.equal(c.controlPlan!.production.vehicles.harvesters, 3);
   assert(intents.some((i) => i.kind === "queue" && i.product.name === "MTNK"));
-  assert(!intents.some((i) => i.kind === "queue" && i.product.name === "CMIN"));
-  o.queues[0] = { type: 0, status: 0, size: 0, items: [] };
-  const second = {
-    ...building("second-refinery", "GAREFN", 65, 46),
-    buildStatus: 0,
-  };
-  o.own.push(second);
   o.tick += 3;
-  c.decide(o);
-  assert.equal(c.controlPlan!.production.vehicles.harvesters, 3);
-  second.buildStatus = 1;
-  o.own.push({
-    ...tank("free-miner"),
-    name: "CMIN",
-    harvester: true,
-    combat: false,
-  });
-  o.tick += 3;
+  // The first new tank replaces a casualty, so the live count never reaches seven.
+  o.own = o.own.filter((u) => u.ref !== "wave-0");
+  o.own.push(tank("reinforcement", 75, 40));
   intents = c.decide(o);
   assert.equal(c.controlPlan!.production.vehicles.harvesters, 4);
   assert(intents.some((i) => i.kind === "queue" && i.product.name === "CMIN"));
+  o.tick += 3;
+  o.own = o.own.filter((u) => u.ref !== "reinforcement");
+  c.decide(o);
+  assert.equal(c.controlPlan!.production.vehicles.harvesters, 4);
 });
 
 test("extra combat tasks keep separate ownership and receive only their own feedback", () => {
@@ -891,21 +834,6 @@ test("a cancelled attack keeps withdrawing until arrival, without renewed crushi
     ),
   );
   o.tick += 3;
-  // Fresh evidence puts the opposing armor out of reach; invisibility alone
-  // must not make this an uncontested opportunity for the new reserve.
-  o.enemies.push(
-    ...Array.from({ length: 8 }, (_, i) => ({
-      ref: `enemy-${i}`,
-      name: "MTNK",
-      type: 7,
-      x: 200 + i,
-      y: 200,
-      hp: 300,
-      maxHp: 300,
-      weaponRange: 5,
-      observedTick: o.tick,
-    })),
-  );
   c.decide(o);
   assert.equal(
     c.controlPlan!.combat.kind,

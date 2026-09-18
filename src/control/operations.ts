@@ -64,7 +64,7 @@ export class Operations {
       if (
         e.type === 2
           ? o.own.some((u) => distance2(u, e) <= 6 ** 2)
-          : o.tick - e.observedTick > 1800
+          : o.tick - e.observedTick > 450
       )
         this.known.delete(ref);
     }
@@ -107,7 +107,7 @@ export class Operations {
       )
         continue;
       const speed = e.type === 2 ? 0 : e.type === 3 ? 0.45 : 0.8;
-      const age = Math.max(0, (o.tick - e.observedTick) / 15);
+      const age = Math.min(30, (o.tick - e.observedTick) / 15);
       const reach = 7 + speed * (horizon + age);
       // An enemy can meet us on the way; it need not return to the objective
       // before our estimated arrival to take part in the battle.
@@ -122,10 +122,7 @@ export class Operations {
             : e.name === "FV"
               ? 0.6
               : 1;
-      // Losing sight is not a kill. Keep recent mobile forces in the risk
-      // estimate, then fade stale evidence instead of deleting an army at 30s.
-      const confidence = e.type === 2 ? 1 : Math.min(1, (120 - age) / 90);
-      defenders += value * Math.sqrt(e.hp / e.maxHp) * Math.max(0, confidence);
+      defenders += value * Math.sqrt(e.hp / e.maxHp);
     }
     // A factory last seen under fog is still a possible source of reinforcements.
     const sources: Point[] = [...this.known.values()].filter(factory);

@@ -1,0 +1,38 @@
+{
+  "purpose": "Disentangle short-map regression: finishing alone versus economic sequencing, then fading memory of unseen armor",
+  "subjects": {
+    "published-0111": {
+      "ref": "7a42d2a",
+      "mode": "bastion"
+    },
+    "finish-only": {
+      "ref": "1d1f0cc",
+      "mode": "bastion"
+    },
+    "economy-finish": {
+      "ref": "d4000e5",
+      "mode": "bastion"
+    },
+    "fading-risk": {
+      "ref": "9cecd27",
+      "mode": "bastion"
+    }
+  },
+  "opponents": {
+    "old-defense": {
+      "ref": "b3a1f7ce69ed140fbafb82799f6d2b14d487c052",
+      "mode": "bastion"
+    },
+    "supalosa": {
+      "native": "supalosa"
+    }
+  },
+  "maps": [
+    "mp06t2.map",
+    "mp29u2.map"
+  ],
+  "rounds": 2,
+  "decision": {
+    "budget": "32 complete ordinary games, 8 per subject. Same evaluator and legal observations; starts not controlled. Preserve all failures and caps. Fading risk is a hypothesis, not a kill detector; check that real favorable attacks remain possible."
+  }
+}
