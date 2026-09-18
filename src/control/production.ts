@@ -14,7 +14,7 @@ const harvesterRefineries = new Set(["GAREFN", "NAREFN"]);
 
 /** Executes inventory goals and credit gates. It does not choose economic expansion policy. */
 export class QueueProduction implements ProductionController {
-  readonly id = "queue-production-v2";
+  readonly id = "queue-production-v3";
   private lastDeploy = new Map<string, number>();
   private lastScoutsSatisfied = -Infinity;
   private lastScoutRequested = -Infinity;
