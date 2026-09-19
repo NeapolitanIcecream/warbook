@@ -19,7 +19,12 @@ export class LocalCombat implements TacticalController {
     const name = request.unitType;
     const factory = request.factoryType;
     const army = o.own.filter(
-      (u) => u.combat && (u.mobile || u.deployed) && !u.harvester && !u.mcv,
+      (u) =>
+        u.combat &&
+        !["ENGINEER", "SENGINEER"].includes(u.name) &&
+        (u.mobile || u.deployed) &&
+        !u.harvester &&
+        !u.mcv,
     );
     const factories = o.own.filter((b) => b.type === 2 && b.name === factory);
     return {

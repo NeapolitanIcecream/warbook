@@ -6,6 +6,11 @@ import {
   type Point,
 } from "../model.js";
 import { LocalCombat } from "./tactics.js";
+import {
+  localArmorTarget,
+  supportedTarget,
+  rotationPost,
+} from "./combat-targets.js";
 import { StrikeTactics } from "./strike-tactics.js";
 import { ScoutTactics } from "./reconnaissance.js";
 import {
@@ -54,6 +59,50 @@ export class PositionTactics extends LocalCombat {
     this.prepareMission(mission);
     if (mission.kind === "scout")
       return this.scouts.control(o, mission, evidence);
+    if (mission.kind === "capture") {
+      const intents: Intent[] = [];
+      const target = o.techBuildings?.find((b) => b.ref === mission.target);
+      for (const ref of mission.units) {
+        const unit = o.own.find((u) => u.ref === ref);
+        if (!unit) continue;
+        const danger = o.enemies.some(
+          (e) =>
+            (e.weaponRange ?? 0) > 0 &&
+            distance2(e, unit) <= ((e.weaponRange ?? 5) + 2) ** 2,
+        );
+        const signature = danger ? "capture-retreat" : `capture:${target?.ref}`;
+        const old = this.lastPositionOrders.get(ref);
+        if (!old || old.key !== signature || o.tick - old.tick >= 180) {
+          intents.push(
+            danger || !target
+              ? { kind: "move", refs: [ref], ...o.home, task: mission.id }
+              : {
+                  kind: "capture",
+                  refs: [ref],
+                  target: target!.ref,
+                  task: mission.id,
+                },
+          );
+          this.lastPositionOrders.set(ref, { key: signature, tick: o.tick });
+        }
+      }
+      return {
+        origin: {
+          id: mission.id,
+          revision: mission.revision,
+          controller: "tactics",
+        },
+        intents,
+        report: {
+          task: mission,
+          status: "active",
+          reason: "capture-visible-income",
+          proposedIntents: intents.length,
+          facts: { assignedUnits: mission.units.length },
+          executionEvidence: currentEvidence(mission, evidence),
+        },
+      };
+    }
     const infantryAdvance =
       mission.kind === "advance" &&
       mission.units.length > 0 &&
@@ -95,27 +144,9 @@ export class PositionTactics extends LocalCombat {
       const u = owns.get(ref);
       return u?.type === 7 && u.combat && !u.harvester ? [u] : [];
     });
-    const coveringGuns = (enemy: Observation["enemies"][number]) =>
-      armor.filter(
-        (u) => weaponDistance2(u, enemy) <= ((u.weaponRange ?? 5) + 1) ** 2,
-      ).length;
     const sharedTarget =
       base && mission.kind !== "withdraw"
-        ? o.enemies
-            .filter(
-              (e) =>
-                e.type === 7 &&
-                !e.airborne &&
-                (e.weaponRange ?? 0) > 0 &&
-                distance2(e, base) <= 12 ** 2,
-            )
-            .map((enemy) => ({ enemy, guns: coveringGuns(enemy) }))
-            .filter((t) => t.guns > 0)
-            .sort(
-              (a, b) =>
-                b.guns - a.guns ||
-                a.enemy.hp / a.enemy.maxHp - b.enemy.hp / b.enemy.maxHp,
-            )[0]?.enemy
+        ? supportedTarget(o.enemies, armor, base)
         : undefined;
     let stationed = 0,
       deployed = 0,
@@ -262,19 +293,17 @@ export class PositionTactics extends LocalCombat {
           );
           continue;
         }
-        const localTarget = close.sort(
-          (a, b) =>
-            (unit.antiAir ? Number(!!b.airborne) - Number(!!a.airborne) : 0) ||
-            Number(b.type === 7) - Number(a.type === 7) ||
-            a.hp / a.maxHp - b.hp / b.maxHp ||
-            distance2(a, unit) - distance2(b, unit),
-        )[0];
-        const target =
-          unit.antiAir && localTarget?.airborne
-            ? localTarget
-            : sharedTarget && weaponDistance2(sharedTarget, unit) <= 9 ** 2
-              ? sharedTarget
-              : localTarget;
+        const target = localArmorTarget(unit, close, sharedTarget);
+        const rotation = rotationPost(unit, armor, close);
+        if (rotation) {
+          issue(
+            ref,
+            `rotate:${rotation.x}:${rotation.y}`,
+            { kind: "move", refs: [ref], ...rotation, task: mission.id },
+            90,
+          );
+          continue;
+        }
         if (target) {
           engaging++;
           issue(

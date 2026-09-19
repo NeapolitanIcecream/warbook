@@ -123,6 +123,15 @@ export class QueueProduction implements ProductionController {
     const infantry = o.own.filter((u) =>
       plan.scouts ? u.name === plan.infantry.product : u.type === 3 && u.combat,
     ).length;
+    if (
+      plan.engineers &&
+      infantry >= 2 &&
+      count(plan.engineers.product) < plan.engineers.count &&
+      o.credits >=
+        (o.products.find((p) => p.name === plan.engineers!.product)?.cost ??
+          Infinity)
+    )
+      queue(plan.engineers.product);
     if (plan.scouts && count(plan.scouts.product) >= plan.scouts.count)
       this.lastScoutsSatisfied = o.tick;
     if (

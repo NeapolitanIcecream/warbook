@@ -14,6 +14,7 @@ import {
   defenseThreats,
   incomingFirePoints,
 } from "./defense-placement.js";
+import { MapPrior } from "./map-prior.js";
 import { LocalGroundMap } from "./local-ground-map.js";
 import { combatCapabilities } from "./unit-capabilities.js";
 import { Commander, type PolicyMode } from "./policy.js";
@@ -30,7 +31,7 @@ import {
   type Point,
 } from "./model.js";
 
-export const OBSERVATION_PROTOCOL = "api-shroud-v0-visible-placement-frontier";
+export const OBSERVATION_PROTOCOL = "api-shroud-v1-pregame-map-prior";
 export interface Trace {
   tick: number;
   actor: string;
@@ -41,6 +42,9 @@ export interface Trace {
 /** The only module that can query the engine or submit actions for this actor. */
 export class WarbookBot extends Bot {
   private readonly commander: Commander;
+  private mapPrior?: MapPrior;
+  private routes: NonNullable<Observation["routes"]> = [];
+  private lastRoutesTick = -150;
   private nativeToRef = new Map<number, string>();
   private currentRefs = new Map<string, number>();
   private sequence = 0;
@@ -73,6 +77,9 @@ export class WarbookBot extends Bot {
   ) {
     super(name, country);
     this.commander = new Commander(mode);
+  }
+  override onGameInit(game: GameApi): void {
+    this.mapPrior = MapPrior.readPregame(game);
   }
   override onGameTick(game: GameApi): void {
     if (
@@ -121,6 +128,7 @@ export class WarbookBot extends Bot {
       for (let x = 4; x < size.width; x += 8)
         for (let y = 4; y < size.height; y += 8) {
           const tile = this.game.map.getTile(x, y);
+          if (this.mapPrior && !this.mapPrior.closest({ x, y }, 0)) continue;
           // Static map domain and our own shroud only, without unseen terrain or occupancy queries.
           if (tile && !this.game.map.isVisibleTile(tile, this.name))
             points.push(Object.freeze({ x, y }));
@@ -199,6 +207,53 @@ export class WarbookBot extends Bot {
         ...combatCapabilities(u),
       }),
     );
+    if (tick - this.lastRoutesTick >= 90 && this.mapPrior) {
+      const plan = this.commander.controlPlan;
+      this.routes = [plan?.combat, ...(plan?.additionalCombat ?? [])].flatMap(
+        (mission) => {
+          if (
+            !mission?.destination ||
+            !mission.units.length ||
+            !["advance", "scout"].includes(mission.kind)
+          )
+            return [];
+          const units = own.filter((u) => mission.units.includes(u.ref));
+          if (!units.length) return [];
+          const center = {
+            x: Math.round(units.reduce((s, u) => s + u.x, 0) / units.length),
+            y: Math.round(units.reduce((s, u) => s + u.y, 0) / units.length),
+          };
+          const path = this.mapPrior!.path(center, mission.destination);
+          return path.length
+            ? [
+                {
+                  task: mission.id,
+                  towards: mission.destination,
+                  waypoint: path[Math.min(12, path.length - 1)],
+                  distance: path
+                    .slice(1)
+                    .reduce(
+                      (d, p, i) => d + Math.sqrt(distance2(p, path[i])),
+                      0,
+                    ),
+                },
+              ]
+            : [];
+        },
+      );
+      this.lastRoutesTick = tick;
+    }
+    const techBuildings = this.sorted(
+      this.player.getVisibleUnits(
+        "hostile",
+        (r) => r.capturable && r.produceCashAmount > 0,
+      ),
+    ).map((u) => ({
+      ref: this.ref(u),
+      name: u.name,
+      x: u.tile.rx,
+      y: u.tile.ry,
+    }));
     const towards = this.commander.controlPlan?.additionalCombat?.find(
       (m) => m.approach,
     )?.approach;
@@ -472,6 +527,8 @@ export class WarbookBot extends Bot {
         .map((p) => ({ x: p.x, y: p.y })),
       own,
       enemies,
+      routes: this.routes,
+      techBuildings,
       products,
       queues,
       buildSites,
@@ -604,6 +661,11 @@ export class WarbookBot extends Bot {
         !visible.has(intent.target)
       )
         throw new Error("Target is no longer visible");
+      if (
+        intent.kind === "capture" &&
+        !o.techBuildings?.some((b) => b.ref === intent.target)
+      )
+        throw new Error("Capture target is no longer visible");
       if ("x" in intent && !this.game.map.getTile(intent.x, intent.y)) continue;
       if (intent.kind === "queue") {
         if (changedQueues.has(intent.product.queue))
@@ -640,6 +702,13 @@ export class WarbookBot extends Bot {
               this.player.actions.toggleRepairWrench(
                 this.currentRefs.get(intent.ref)!,
               );
+            break;
+          case "capture":
+            this.player.actions.orderUnits(
+              ids,
+              OrderType.Capture,
+              this.currentRefs.get(intent.target)!,
+            );
             break;
           case "attack":
           case "crush":

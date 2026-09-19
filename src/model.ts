@@ -85,8 +85,22 @@ export interface Observation {
   }[];
   baseRally?: Point;
   stagingRoute?: { towards: Point; point: Point; observedTick: number };
+  /** Static-map routes, refreshed from own positions; dynamic enemies are separate. */
+  routes?: readonly {
+    task: string;
+    towards: Point;
+    waypoint: Point;
+    distance: number;
+  }[];
   own: Unit[];
   enemies: Contact[];
+  /** Currently visible, unowned capturable cash structures, including neutral ones. */
+  techBuildings?: readonly {
+    ref: string;
+    name: string;
+    x: number;
+    y: number;
+  }[];
   products: Product[];
   queues: Queue[];
   /** Placement checks are restricted to completely explored footprints around our own base. */
@@ -98,7 +112,7 @@ export type Intent = (
   | { kind: "scatter"; refs: string[] }
   | { kind: "queue"; product: Product }
   | { kind: "place"; name: string; x: number; y: number }
-  | { kind: "attack" | "crush"; refs: string[]; target: string }
+  | { kind: "attack" | "crush" | "capture"; refs: string[]; target: string }
   | { kind: "attackMove" | "move"; refs: string[]; x: number; y: number }
   | { kind: "repair"; ref: string }
 ) & { task?: string };

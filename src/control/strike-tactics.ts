@@ -14,6 +14,11 @@ import {
 } from "./contracts.js";
 import { formedUnits, rendezvous } from "./formation.js";
 import { LocalCombat } from "./tactics.js";
+import {
+  supportedTarget,
+  localArmorTarget,
+  rotationPost,
+} from "./combat-targets.js";
 import { canFinishNearby } from "./finishing.js";
 
 const armor = (u: Unit) => ["MTNK", "HTNK"].includes(u.name);
@@ -34,7 +39,6 @@ export class StrikeTactics extends LocalCombat {
   handoff(ref: string, mission: string) {
     this.lastOrders.delete(ref);
     this.retreats.delete(ref);
-    this.waits.delete(mission);
   }
 
   override control(
@@ -42,6 +46,13 @@ export class StrikeTactics extends LocalCombat {
     mission: CombatMission,
     evidence: readonly ExecutionEvidence[],
   ): ControlResult {
+    const route = o.routes?.find(
+      (r) =>
+        r.task === mission.id &&
+        mission.destination &&
+        distance2(r.towards, mission.destination) < 4 ** 2,
+    );
+    const march = route?.waypoint ?? mission.destination;
     const members = o.own.filter((u) => mission.units.includes(u.ref));
     const tanks = members.filter(armor);
     if (!mission.destination || !tanks.length)
@@ -72,17 +83,18 @@ export class StrikeTactics extends LocalCombat {
     const inContact = core.some((u) =>
       o.enemies.some((e) => !e.airborne && distance2(u, e) <= 8 ** 2),
     );
-    if (lagging.length && !inContact && !core.some((u) => u.onBridge)) {
+    if (
+      core.length < Math.min(4, Math.ceil(tanks.length * 0.65)) &&
+      !inContact &&
+      !core.some((u) => u.onBridge)
+    ) {
       if (!this.waits.has(mission.id)) this.waits.set(mission.id, o.tick);
     } else this.waits.delete(mission.id);
     const wait = this.waits.get(mission.id);
     const regroup = wait !== undefined && o.tick - wait < 450;
-    const dangerous = nearby.sort(
-      (a, b) =>
-        Number(b.type === 7) - Number(a.type === 7) ||
-        a.hp / a.maxHp - b.hp / b.maxHp ||
-        distance2(a, rally) - distance2(b, rally),
-    )[0];
+    const dangerous =
+      supportedTarget(nearby, core, rally, 14) ??
+      nearby.sort((a, b) => distance2(a, rally) - distance2(b, rally))[0];
     const target = finishNow
       ? preferred
       : (dangerous ??
@@ -136,6 +148,16 @@ export class StrikeTactics extends LocalCombat {
         );
         continue;
       }
+      const rotation = rotationPost(u, core, o.enemies);
+      if (rotation) {
+        issue(u, `rotate:${rotation.x}:${rotation.y}`, {
+          kind: "move",
+          refs: [u.ref],
+          ...rotation,
+          task: mission.id,
+        });
+        continue;
+      }
       if (armor(u) && !coreIds.has(u.ref)) {
         const point = core.every((a) => a.onBridge)
           ? mission.destination
@@ -186,18 +208,21 @@ export class StrikeTactics extends LocalCombat {
           target: crush.ref,
           task: mission.id,
         });
-      else if (target)
-        issue(u, `attack:${target.ref}`, {
+      else if (target) {
+        const personal = finishNow
+          ? target
+          : (localArmorTarget(u, o.enemies, dangerous) ?? target);
+        issue(u, `attack:${personal.ref}`, {
           kind: "attack",
           refs: [u.ref],
-          target: target.ref,
+          target: personal.ref,
           task: mission.id,
         });
-      else
-        issue(u, `march:${mission.destination.x}:${mission.destination.y}`, {
+      } else
+        issue(u, `march:${march!.x}:${march!.y}`, {
           kind: "attackMove",
           refs: [u.ref],
-          ...mission.destination,
+          ...march!,
           task: mission.id,
         });
     }

@@ -39,6 +39,8 @@ export function observedEffect(
   o: Observation,
 ): string | undefined {
   const i = p.intent;
+  if (i.kind === "capture" && o.own.some((u) => u.ref === i.target))
+    return "captured_building_owned";
   if (
     i.kind === "repair" &&
     o.own.some((u) => u.ref === i.ref && u.hasWrenchRepair)

@@ -9,6 +9,7 @@ import { DefenseAssignments } from "./defense-assignments.js";
 import { DefenseSituation } from "./defense-situation.js";
 import { DefenseRelief } from "./defense-relief.js";
 import { isScout, Reconnaissance } from "./reconnaissance.js";
+import { NeutralEconomy } from "./neutral-economy.js";
 import { Operations } from "./operations.js";
 import { formedUnits, rendezvous } from "./formation.js";
 import {
@@ -27,6 +28,7 @@ export class BastionStrategy implements StrategicController {
   private readonly defense = new DefenseAssignments();
   private readonly situation = new DefenseSituation();
   private readonly relief = new DefenseRelief();
+  private readonly neutral = new NeutralEconomy();
   private readonly recon = new Reconnaissance();
   private readonly operations = new Operations();
   private readonly revisions = new Map<string, TaskRevision>();
@@ -189,7 +191,25 @@ export class BastionStrategy implements StrategicController {
       assault = [];
       this.nextLaunchTick = o.tick + 450;
     }
+    if (
+      this.operations.active?.reason === "formed-advance" &&
+      !this.operations.hasKnownBase &&
+      base.combat.destination
+    )
+      this.operations.active.point = base.combat.destination;
     let operation = this.operations.target(o, assault);
+    // Clearing one area starts the next search from the army's current position.
+    // It is a task completion, not evidence that the expedition was defeated.
+    if (assault.length && !operation && base.combat.destination) {
+      operation = {
+        point: base.combat.destination,
+        reason: "formed-advance",
+        defenders: 0,
+        productionArrivals: 0,
+        travelSeconds: 0,
+      };
+      this.operations.active = operation;
+    }
     if (assault.length && !operation) {
       beginWithdrawal();
       this.assault.clear();
@@ -264,8 +284,13 @@ export class BastionStrategy implements StrategicController {
     const fort = o.side === 0 ? "GAPILL" : "NALASR";
     const refinery = o.side === 0 ? "GAREFN" : "NAREFN";
     const mobilizing = !this.firstForceFunded;
+    const income = this.neutral.plan(o);
     const economy = {
       ...base.production,
+      engineers: {
+        product: o.side === 0 ? "ENGINEER" : "SENGINEER",
+        count: income.demand,
+      },
       scouts: {
         product: o.side === 0 ? "ADOG" : "DOG",
         count: o.starts.length > 2 ? 2 : 1,
@@ -399,6 +424,8 @@ export class BastionStrategy implements StrategicController {
           engagement: { allowCrush: false },
         }),
       );
+    if (income.mission)
+      additionalCombat.push(this.mission(income.mission.id, income.mission));
     for (const scout of scouts) {
       const id = `recon-${scout.ref}`;
       additionalCombat.push(

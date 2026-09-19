@@ -85,8 +85,14 @@ const watchReplay = watchResult
   : undefined;
 if (
   watchResult &&
-  (!watchResult.cleanCompletionVerified ||
-    watchResult.stopState?.status !== "Ended" ||
+  ((!(
+    watchResult.cleanCompletionVerified &&
+    watchResult.stopState?.status === "Ended"
+  ) &&
+    !(
+      watchResult.stopReason === "runner_limit" &&
+      watchResult.stopState?.status === "Started"
+    )) ||
     watchResult.stopState?.turnManagerError !== false ||
     CLIENT_VERSION !== PINNED_CLIENT.version ||
     watchResult.replay.engineVersion !== "0.83" ||
@@ -94,7 +100,7 @@ if (
       watchResult.replay.sha256)
 )
   throw new Error(
-    "WATCH_MATCH must specialist a verified, compatible full game",
+    "WATCH_MATCH must specify a compatible completed or deliberately capped replay",
   );
 
 const clipPlan: ReplayClipPlan | undefined = process.env.REPLAY_CLIP_PLAN

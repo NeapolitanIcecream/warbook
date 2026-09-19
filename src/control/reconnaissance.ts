@@ -192,7 +192,13 @@ export class ScoutTactics {
         if (!trail.length || distance2(trail[trail.length - 1], unit) >= 4 ** 2)
           this.safe.set(ref, [...trail.slice(-7), { x: unit.x, y: unit.y }]);
       } else avoiding++;
-      const goal = retreat?.point ?? mission.destination;
+      const route = o.routes?.find(
+        (r) =>
+          r.task === mission.id &&
+          mission.destination &&
+          distance2(r.towards, mission.destination) < 4 ** 2,
+      );
+      const goal = retreat?.point ?? route?.waypoint ?? mission.destination;
       if (!goal) continue;
       const previous = this.orders.get(ref),
         signature = key(goal);

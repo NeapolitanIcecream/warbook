@@ -201,7 +201,7 @@ export async function install(): Promise<void> {
     bar.style.bottom = isReplay ? "38px" : "8px";
     const bot = session.bots[0];
     bar.textContent = isReplay
-      ? "Warbook · 完整对局回放"
+      ? "Warbook · 对局回放"
       : bot?.observation
         ? `Warbook · ${policyLabel} · ${POLICY_VERSION} · 对战中`
         : `Warbook · ${policyLabel} · ${POLICY_VERSION} · 点击「本地对战」开局`;
