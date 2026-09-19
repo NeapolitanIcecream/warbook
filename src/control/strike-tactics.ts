@@ -107,7 +107,37 @@ export class StrikeTactics extends LocalCombat {
             : 0;
       return n + antiArmorPower(e) * coverage;
     }, 0);
-    const ownPower = core.reduce((n, u) => n + Math.sqrt(u.hp / u.maxHp), 0);
+    const supportPower = o.own
+      .filter(
+        (u) =>
+          !coreIds.has(u.ref) &&
+          ((u.type === 2 && (u.weaponRange ?? 0) > 0) ||
+            (u.type === 3 && (u.deployed || (u.attackState ?? 0) >= 3))),
+      )
+      .filter((u) =>
+        contactThreats.some(
+          (e) =>
+            weaponDistance2(u, e) <=
+            (u.deployed
+              ? (u.deployedWeaponRange ?? u.weaponRange ?? 0)
+              : (u.weaponRange ?? 0)) **
+              2,
+        ),
+      )
+      .reduce(
+        (n, u) =>
+          n +
+          antiArmorPower({
+            ...u,
+            observedTick: o.tick,
+            weaponRange: u.deployed
+              ? (u.deployedWeaponRange ?? u.weaponRange)
+              : u.weaponRange,
+          }),
+        0,
+      );
+    const ownPower =
+      supportPower + core.reduce((n, u) => n + Math.sqrt(u.hp / u.maxHp), 0);
     const overwhelmed =
       !finishNow && enemyPower > Math.max(1.5, ownPower * (held ? 0.95 : 1.1));
     if (overwhelmed && !held) {
@@ -312,6 +342,7 @@ export class StrikeTactics extends LocalCombat {
           visibleHardTargets: nearby.length,
           localEnemyPower: enemyPower,
           localOwnPower: ownPower,
+          supportingFirePower: supportPower,
           holdingContact: this.heldContacts.has(mission.id),
         },
         executionEvidence: currentEvidence(mission, evidence),
