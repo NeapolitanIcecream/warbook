@@ -302,13 +302,30 @@ export class WarbookBot extends Bot {
             post ?? mission.destination,
             danger,
           );
+          const waypoint =
+            path
+              .slice(1, danger.length ? 7 : 13)
+              .reverse()
+              .find((p) => {
+                const tile = this.game.map.getTile(p.x, p.y);
+                return (
+                  tile &&
+                  (!this.game.map.isVisibleTile(tile, this.name) ||
+                    (speed !== undefined &&
+                      this.game.map.isPassableTile(
+                        tile,
+                        speed,
+                        !!p.onBridge,
+                        units[0].type === 3,
+                      )))
+                );
+              }) ?? path[path.length - 1];
           return path.length
             ? [
                 {
                   task: mission.id,
                   towards: mission.destination,
-                  waypoint:
-                    path[Math.min(danger.length ? 6 : 12, path.length - 1)],
+                  waypoint,
                   post: post
                     ? {
                         x: post.x,

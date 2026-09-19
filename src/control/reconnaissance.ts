@@ -210,7 +210,7 @@ export class ScoutTactics {
       const goal = retreat?.point ?? route?.waypoint ?? mission.destination;
       if (!goal) continue;
       const previous = this.orders.get(ref),
-        signature = key(goal);
+        signature = `${key(goal)}:${Boolean(goal.onBridge)}`;
       if (
         !previous ||
         (signature !== previous.goal && o.tick - previous.tick >= 30) ||

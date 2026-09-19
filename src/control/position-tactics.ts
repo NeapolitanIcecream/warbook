@@ -108,7 +108,7 @@ export class PositionTactics extends LocalCombat {
         },
         intents,
         report: {
-          task: mission,
+          task: { id: mission.id, revision: mission.revision },
           status: "active",
           reason: "screen-supported-force",
           proposedIntents: intents.length,
@@ -152,7 +152,7 @@ export class PositionTactics extends LocalCombat {
         },
         intents,
         report: {
-          task: mission,
+          task: { id: mission.id, revision: mission.revision },
           status: "active",
           reason: "capture-visible-income",
           proposedIntents: intents.length,

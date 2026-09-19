@@ -270,7 +270,7 @@ export class StrikeTactics extends LocalCombat {
           task: mission.id,
         });
       } else
-        issue(u, `march:${march!.x}:${march!.y}`, {
+        issue(u, `march:${march!.x}:${march!.y}:${Boolean(march!.onBridge)}`, {
           kind: "attackMove",
           refs: [u.ref],
           ...march!,
