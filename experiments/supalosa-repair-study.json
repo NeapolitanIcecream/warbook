@@ -1,0 +1,31 @@
+{
+  "purpose": "Test the isolated building-repair omission found by auditing Supalosa; policy, income goals, battle logic and scoring otherwise unchanged",
+  "subjects": {
+    "baseline-014": {
+      "ref": "v0.1.14",
+      "mode": "bastion"
+    },
+    "repair-study": {
+      "ref": "a1d45e5d47b2caa2fdf168054bfcd6224a2c69f4",
+      "mode": "bastion"
+    }
+  },
+  "opponents": {
+    "pressure-014": {
+      "ref": "v0.1.14",
+      "mode": "pressure"
+    },
+    "old-defense": {
+      "ref": "b3a1f7c",
+      "mode": "bastion"
+    },
+    "supalosa": {
+      "native": "supalosa"
+    }
+  },
+  "maps": ["mp29u2.map", "mp06t2.map"],
+  "rounds": 1,
+  "decision": {
+    "budget": "12 complete ordinary games, 6 per subject. Small screening only; record actual wrench/HP effects and spending tradeoffs, retain all failures and caps. No default promotion from this screen alone."
+  }
+}
