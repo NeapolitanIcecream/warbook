@@ -5,6 +5,7 @@ import {
   type Point,
   type Unit,
 } from "../model.js";
+import { antiArmorPower } from "./combat-targets.js";
 
 export interface Operation {
   point: Point;
@@ -112,17 +113,7 @@ export class Operations {
       // An enemy can meet us on the way; it need not return to the objective
       // before our estimated arrival to take part in the battle.
       if (distance(e, target) > reach && distance(e, center) > reach) continue;
-      const value =
-        e.type === 2
-          ? 0.45
-          : e.type === 3
-            ? e.name === "E1" && e.deployed
-              ? 0.37
-              : 0.12
-            : e.name === "FV"
-              ? 0.6
-              : 1;
-      defenders += value * Math.sqrt(e.hp / e.maxHp);
+      defenders += antiArmorPower(e);
     }
     // A factory last seen under fog is still a possible source of reinforcements.
     const sources: Point[] = [...this.known.values()].filter(factory);

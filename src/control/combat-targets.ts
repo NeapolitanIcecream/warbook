@@ -6,6 +6,23 @@ import {
   type Unit,
 } from "../model.js";
 
+/** A shared operational estimate, not a damage simulator. */
+export function antiArmorPower(e: Contact): number {
+  if (e.airborne || !(e.weaponRange ?? 0) || e.canThreatenVehicles === false)
+    return 0;
+  const value =
+    e.type === 2
+      ? 0.45
+      : e.type === 3
+        ? e.name === "E1" && e.deployed
+          ? 0.37
+          : 0.12
+        : e.name === "FV"
+          ? 0.6
+          : 1;
+  return value * Math.sqrt(e.hp / e.maxHp);
+}
+
 /** Both attack and defense concentrate guns that can actually join this contact. */
 export function supportedTarget(
   enemies: readonly Contact[],
@@ -30,6 +47,7 @@ export function supportedTarget(
     .filter((t) => t.guns > 0)
     .sort(
       (a, b) =>
+        Number(b.enemy.type === 7) - Number(a.enemy.type === 7) ||
         b.guns - a.guns ||
         a.enemy.hp / a.enemy.maxHp - b.enemy.hp / b.enemy.maxHp,
     )[0]?.enemy;

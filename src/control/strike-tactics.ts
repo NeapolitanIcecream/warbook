@@ -18,6 +18,7 @@ import {
   supportedTarget,
   localArmorTarget,
   rotationPost,
+  antiArmorPower,
 } from "./combat-targets.js";
 import { canFinishNearby } from "./finishing.js";
 
@@ -35,6 +36,7 @@ export class StrikeTactics extends LocalCombat {
   private trails = new Map<string, Point[]>();
   private retreats = new Map<string, { point: Point; until: number }>();
   private waits = new Map<string, number>();
+  private heldContacts = new Map<string, { point: Point; goal: Point }>();
 
   handoff(ref: string, mission: string) {
     this.lastOrders.delete(ref);
@@ -66,8 +68,9 @@ export class StrikeTactics extends LocalCombat {
     this.leaders.set(mission.id, leader.ref);
     const rally = rendezvous(core);
     const hard = o.enemies.filter(hardTarget);
+    const threats = o.enemies.filter((e) => antiArmorPower(e) > 0);
     for (const u of members)
-      if (!u.onBridge && !hard.some((e) => distance2(u, e) <= 10 ** 2)) {
+      if (!u.onBridge && !threats.some((e) => distance2(u, e) <= 10 ** 2)) {
         const trail = this.trails.get(u.ref) ?? [];
         if (!trail.length || distance2(trail[trail.length - 1], u) >= 3 ** 2)
           this.trails.set(u.ref, [...trail.slice(-7), { x: u.x, y: u.y }]);
@@ -77,8 +80,33 @@ export class StrikeTactics extends LocalCombat {
     );
     const preferred = o.enemies.find((e) => e.ref === mission.target);
     const finishNow = canFinishNearby(preferred, core);
+    let held = this.heldContacts.get(mission.id);
+    if (held && distance2(held.goal, mission.destination) > 16 ** 2) {
+      this.heldContacts.delete(mission.id);
+      held = undefined;
+    }
+    const contactThreats = threats.filter((e) =>
+      held
+        ? distance2(e, held.point) <= 12 ** 2
+        : core.some((u) => distance2(e, u) <= 10 ** 2),
+    );
+    const enemyPower = contactThreats.reduce(
+      (n, e) => n + antiArmorPower(e),
+      0,
+    );
+    const ownPower = core.reduce((n, u) => n + Math.sqrt(u.hp / u.maxHp), 0);
     const overwhelmed =
-      nearby.length >= Math.max(2, Math.ceil(core.length * 1.5)) && !finishNow;
+      !finishNow && enemyPower > Math.max(1.5, ownPower * (held ? 0.95 : 1.1));
+    if (overwhelmed && !held) {
+      const contact = [...contactThreats].sort(
+        (a, b) => distance2(a, rally) - distance2(b, rally),
+      )[0];
+      if (contact)
+        this.heldContacts.set(mission.id, {
+          point: { x: contact.x, y: contact.y },
+          goal: mission.destination,
+        });
+    } else if (!overwhelmed) this.heldContacts.delete(mission.id);
     const lagging = tanks.filter((u) => !coreIds.has(u.ref));
     const inContact = core.some((u) =>
       o.enemies.some((e) => !e.airborne && distance2(u, e) <= 8 ** 2),
@@ -98,9 +126,13 @@ export class StrikeTactics extends LocalCombat {
     const target = finishNow
       ? preferred
       : (dangerous ??
-        preferred ??
+        (preferred && core.some((u) => distance2(u, preferred) <= 8 ** 2)
+          ? preferred
+          : undefined) ??
         o.enemies
-          .filter((e) => !e.airborne && distance2(e, rally) <= 14 ** 2)
+          .filter(
+            (e) => !e.airborne && core.some((u) => distance2(u, e) <= 8 ** 2),
+          )
           .sort((a, b) => distance2(a, rally) - distance2(b, rally))[0]);
     const proposed: Intent[] = [];
     const issue = (unit: Unit, key: string, intent: Intent, urgent = false) => {
@@ -129,7 +161,7 @@ export class StrikeTactics extends LocalCombat {
           [...(this.trails.get(u.ref) ?? [])]
             .reverse()
             .find((p) =>
-              hard.every(
+              threats.every(
                 (e) => distance2(p, e) > ((e.weaponRange ?? 5) + 4) ** 2,
               ),
             ) ?? o.home;
@@ -261,6 +293,9 @@ export class StrikeTactics extends LocalCombat {
           retreating,
           rotating,
           visibleHardTargets: nearby.length,
+          localEnemyPower: enemyPower,
+          localOwnPower: ownPower,
+          holdingContact: this.heldContacts.has(mission.id),
         },
         executionEvidence: currentEvidence(mission, evidence),
       },

@@ -2021,3 +2021,91 @@ test("scouting ownership survives changing dog positions and observation order",
   c.decide(o);
   assert.deepEqual(recon(), ["screen-b"]);
 });
+
+test("a far visible building remains a march goal rather than a direct object attack", () => {
+  const tactics = new StrikeTactics(),
+    o = observation();
+  o.own = Array.from({ length: 6 }, (_, i) =>
+    tank(`t-${i}`, 70 + (i % 3), 40 + Math.floor(i / 3)),
+  );
+  o.enemies = [
+    {
+      ref: "yard",
+      name: "GACNST",
+      type: 2,
+      x: 120,
+      y: 40,
+      hp: 1000,
+      maxHp: 1000,
+      observedTick: o.tick,
+    },
+  ];
+  const mission: CombatMission = {
+    id: "march",
+    revision: 1,
+    kind: "advance",
+    units: o.own.map((u) => u.ref),
+    destination: { x: 120, y: 40 },
+    target: "yard",
+    objective: "attack-opportunity",
+    engagement: { allowCrush: true },
+  };
+  const result = tactics.control(o, mission, []);
+  assert(result.intents.some((i) => i.kind === "attackMove"));
+  assert(!result.intents.some((i) => i.kind === "attack"));
+});
+
+test("short withdrawal counts deployed infantry and holds the contact until reinforcement", () => {
+  const tactics = new StrikeTactics(),
+    o = observation();
+  o.own = Array.from({ length: 4 }, (_, i) =>
+    tank(`t-${i}`, 70 + (i % 2), 40 + Math.floor(i / 2)),
+  );
+  const mission: CombatMission = {
+    id: "line",
+    revision: 1,
+    kind: "advance",
+    units: o.own.map((u) => u.ref),
+    destination: { x: 90, y: 40 },
+    objective: "attack-opportunity",
+    engagement: { allowCrush: true },
+  };
+  tactics.control(o, mission, []);
+  o.tick += 60;
+  o.own = o.own.map((u) => ({ ...u, x: u.x + 8 }));
+  o.enemies = Array.from({ length: 14 }, (_, i) => ({
+    ref: `gi-${i}`,
+    name: "E1",
+    type: 3,
+    x: 84 + (i % 2),
+    y: 38 + Math.floor(i / 2),
+    hp: 125,
+    maxHp: 125,
+    observedTick: o.tick,
+    weaponRange: 5,
+    deployed: true,
+  }));
+  let result = tactics.control(o, mission, []);
+  assert.equal(result.report.facts.holdingContact, true);
+  assert(result.intents.some((i) => i.kind === "move"));
+  o.tick += 300;
+  o.own = o.own.map((u) => ({ ...u, x: u.x - 8 }));
+  result = tactics.control(o, mission, []);
+  assert.equal(
+    result.report.facts.holdingContact,
+    true,
+    "distance after a short retreat is not proof the enemy defense vanished",
+  );
+  o.own.push(
+    ...Array.from({ length: 4 }, (_, i) =>
+      tank(`fresh-${i}`, 70 + (i % 2), 42 + Math.floor(i / 2)),
+    ),
+  );
+  o.tick += 100;
+  result = tactics.control(
+    o,
+    { ...mission, units: o.own.map((u) => u.ref) },
+    [],
+  );
+  assert.equal(result.report.facts.holdingContact, false);
+});
