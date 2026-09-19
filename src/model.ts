@@ -91,11 +91,14 @@ export interface Observation {
     task: string;
     towards: Point;
     waypoint: Point;
+    post?: Point;
     distance: number;
   }[];
   own: Unit[];
   enemies: Contact[];
   /** Currently visible, unowned capturable cash structures, including neutral ones. */
+  /** Former mobile contacts absent from their fully explored reachable neighborhood. Not a death event. */
+  vacatedContacts?: readonly string[];
   techBuildings?: readonly {
     ref: string;
     name: string;

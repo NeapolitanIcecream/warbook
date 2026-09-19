@@ -50,7 +50,11 @@ export interface ProductionPlan extends TaskIdentity {
   };
   readonly infantry: { readonly product: string; readonly count: number };
   readonly engineers?: { readonly product: string; readonly count: number };
-  readonly scouts?: { readonly product: string; readonly count: number };
+  readonly scouts?: {
+    readonly product: string;
+    readonly count: number;
+    readonly required?: number;
+  };
   /** Preserve the existing pay-as-you-build start gates; not a full reservation ledger. */
   readonly spending: {
     readonly queueStartFloor: number;

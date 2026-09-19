@@ -29,7 +29,7 @@ const output = await build({
         }));
         b.onLoad({ filter: /.*/, namespace: "official" }, () => ({
           contents:
-            "export const { Bot, ObjectType, OrderType, QueueStatus } = globalThis.WarbookEngineApi;",
+            "export const { Bot, ObjectType, OrderType, QueueStatus, TerrainType } = globalThis.WarbookEngineApi;",
           loader: "js",
         }));
       },

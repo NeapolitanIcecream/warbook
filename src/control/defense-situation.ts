@@ -44,7 +44,7 @@ export class DefenseSituation {
     const guardAssets = assets.filter(
       (u) =>
         u.type === 2 &&
-        !(u.weaponRange ?? 0) &&
+        (!(u.weaponRange ?? 0) || distance2(u, o.home) <= 18 ** 2) &&
         distance2(u, o.home) <= 26 ** 2,
     );
     for (const asset of assets) {
@@ -108,6 +108,7 @@ export class DefenseSituation {
     const protectNow = incursions.some(
       ({ asset }) =>
         guardAssets.includes(asset) &&
+        !(asset.weaponRange ?? 0) &&
         o.tick - (this.damagedAt.get(asset.ref) ?? -Infinity) < 150,
     );
     return {

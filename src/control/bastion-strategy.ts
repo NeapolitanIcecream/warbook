@@ -42,6 +42,7 @@ export class BastionStrategy implements StrategicController {
   private firstForceFunded = false;
   private producedArmor = new Set<string>();
   private launchedArmor = 6;
+  private transition: Record<string, number | string> = {};
 
   constructor(private readonly doctrine: "bastion" | "cohort" = "bastion") {
     this.id =
@@ -186,6 +187,10 @@ export class BastionStrategy implements StrategicController {
       assault.filter((u) => u.name === armor).length <
         Math.min(3, this.launchedArmor)
     ) {
+      this.transition = {
+        operationTransition: "force-depleted",
+        operationTransitionTick: o.tick,
+      };
       beginWithdrawal();
       this.assault.clear();
       this.joining.clear();
@@ -203,6 +208,10 @@ export class BastionStrategy implements StrategicController {
     // Clearing one area starts the next search from the army's current position.
     // It is a task completion, not evidence that the expedition was defeated.
     if (assault.length && !operation && base.combat.destination) {
+      this.transition = {
+        operationTransition: "area-cleared-continue-search",
+        operationTransitionTick: o.tick,
+      };
       operation = {
         point: base.combat.destination,
         reason: "formed-advance",
@@ -255,6 +264,10 @@ export class BastionStrategy implements StrategicController {
     ) {
       this.assault = new Set(ready.map((u) => u.ref));
       this.launchedArmor = ready.filter((u) => u.name === armor).length;
+      this.transition = {
+        operationTransition: nextOperation.reason,
+        operationTransitionTick: o.tick,
+      };
       this.operations.active = nextOperation;
       operation = nextOperation;
       assault = vehicles.filter((u) => this.assault.has(u.ref));
@@ -275,7 +288,8 @@ export class BastionStrategy implements StrategicController {
       );
       if (
         !this.joining.size &&
-        nextBatch.filter((u) => u.name === armor).length >= 4
+        nextBatch.filter((u) => u.name === armor).length >=
+          (assault.filter((u) => u.name === armor).length <= 3 ? 2 : 4)
       )
         this.joining = new Set(nextBatch.map((u) => u.ref));
     }
@@ -288,7 +302,13 @@ export class BastionStrategy implements StrategicController {
     const mobilizing = !this.firstForceFunded;
     const resourceFields = (o.oreFields ?? []).filter((f) => f.amount >= 180);
     const expand =
-      !mobilizing && resourceFields.length >= 2 && o.credits >= 1200;
+      !mobilizing &&
+      resourceFields.length >= 2 &&
+      assessment.observedArmor >= 8 &&
+      assessment.observedArmor >=
+        o.enemies.filter((e) => ["MTNK", "HTNK"].includes(e.name)).length + 3 &&
+      !protectNow &&
+      o.credits >= 2000;
     const economyStructures = base.production.structures.map((g) => ({
       ...g,
       count:
@@ -304,7 +324,7 @@ export class BastionStrategy implements StrategicController {
       structures: economyStructures,
       vehicles: {
         ...base.production.vehicles,
-        harvesters: expand ? 6 : base.production.vehicles.harvesters,
+        harvesters: expand ? 5 : base.production.vehicles.harvesters,
       },
       spending: {
         ...base.production.spending,
@@ -316,6 +336,7 @@ export class BastionStrategy implements StrategicController {
       },
       scouts: {
         product: o.side === 0 ? "ADOG" : "DOG",
+        required: o.starts.length > 2 ? 2 : 1,
         count: (o.starts.length > 2 ? 2 : 1) + (this.firstForceFunded ? 2 : 0),
       },
       ...(mobilizing
@@ -489,6 +510,12 @@ export class BastionStrategy implements StrategicController {
             assumedProduction: operation.assumedProduction ?? false,
           }
         : this.operations.decision;
-    return { tick: o.tick, combat, additionalCombat, production, decision };
+    return {
+      tick: o.tick,
+      combat,
+      additionalCombat,
+      production,
+      decision: { ...decision, ...this.transition },
+    };
   }
 }

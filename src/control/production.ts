@@ -139,10 +139,19 @@ export class QueueProduction implements ProductionController {
       infantry >= 2 &&
       count(plan.scouts.product) < plan.scouts.count &&
       o.tick - Math.max(this.lastScoutsSatisfied, this.lastScoutRequested) >=
-        150 &&
+        (count(plan.scouts.product) >=
+        (plan.scouts.required ?? plan.scouts.count)
+          ? 450
+          : 150) &&
       o.credits >=
-        (o.products.find((p) => p.name === plan.scouts!.product)?.cost ??
-          Infinity)
+        Math.max(
+          count(plan.scouts.product) >=
+            (plan.scouts.required ?? plan.scouts.count)
+            ? 1000
+            : 0,
+          o.products.find((p) => p.name === plan.scouts!.product)?.cost ??
+            Infinity,
+        )
     ) {
       queue(plan.scouts.product);
       if (

@@ -55,6 +55,7 @@ export class Operations {
         tick: o.tick,
       });
     }
+    for (const ref of o.vacatedContacts ?? []) this.known.delete(ref);
     const visible = new Set(o.enemies.map((e) => e.ref));
     for (const e of o.enemies) this.known.set(e.ref, { ...e });
     for (const [ref, e] of this.known) {

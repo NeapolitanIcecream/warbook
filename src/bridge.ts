@@ -209,6 +209,28 @@ export class WarbookBot extends Bot {
         ...combatCapabilities(u),
       }),
     );
+    const visibleRefs = new Set(enemies.map((e) => e.ref));
+    const vacatedContacts = (this.lastObservation?.enemies ?? [])
+      .filter((e) => {
+        if (
+          visibleRefs.has(e.ref) ||
+          tick - e.observedTick > 3 ||
+          !["MTNK", "HTNK", "E1", "E2", "FV", "HTK", "ADOG", "DOG"].includes(
+            e.name,
+          )
+        )
+          return false;
+        // Conservative three-tile envelope exceeds ordinary ground movement in
+        // three pinned-engine ticks. Do not consult the missing native object.
+        for (let x = e.x - 3; x <= e.x + 3; x++)
+          for (let y = e.y - 3; y <= e.y + 3; y++) {
+            const tile = this.game.map.getTile(x, y);
+            if (tile && !this.game.map.isVisibleTile(tile, this.name))
+              return false;
+          }
+        return true;
+      })
+      .map((e) => e.ref);
     if (tick - this.lastRoutesTick >= 90 && this.mapPrior) {
       const plan = this.commander.controlPlan;
       this.routes = [plan?.combat, ...(plan?.additionalCombat ?? [])].flatMap(
@@ -216,7 +238,7 @@ export class WarbookBot extends Bot {
           if (
             !mission?.destination ||
             !mission.units.length ||
-            !["advance", "scout"].includes(mission.kind)
+            ["screen", "capture"].includes(mission.kind)
           )
             return [];
           const units = own.filter((u) => mission.units.includes(u.ref));
@@ -225,13 +247,53 @@ export class WarbookBot extends Bot {
             x: Math.round(units.reduce((s, u) => s + u.x, 0) / units.length),
             y: Math.round(units.reduce((s, u) => s + u.y, 0) / units.length),
           };
-          const path = this.mapPrior!.path(center, mission.destination);
+          const speed = (
+            this.game.rules.getObject(
+              units[0].name,
+              units[0].type,
+            ) as TechnoRules
+          ).speedType;
+          const post = this.mapPrior!.points.filter(
+            (p) => distance2(p, mission.destination!) <= 8 ** 2,
+          )
+            .sort(
+              (a, b) =>
+                distance2(a, mission.destination!) -
+                distance2(b, mission.destination!),
+            )
+            .find((p) => {
+              if (
+                own.some(
+                  (b) =>
+                    b.type === 2 &&
+                    p.x >= b.x &&
+                    p.x < b.x + b.width &&
+                    p.y >= b.y &&
+                    p.y < b.y + b.height,
+                )
+              )
+                return false;
+              const tile = this.game.map.getTile(p.x, p.y);
+              return (
+                !!tile &&
+                (!this.game.map.isVisibleTile(tile, this.name) ||
+                  (speed !== undefined &&
+                    this.game.map.isPassableTile(
+                      tile,
+                      speed,
+                      p.bridge,
+                      units[0].type === 3,
+                    )))
+              );
+            });
+          const path = this.mapPrior!.path(center, post ?? mission.destination);
           return path.length
             ? [
                 {
                   task: mission.id,
                   towards: mission.destination,
                   waypoint: path[Math.min(12, path.length - 1)],
+                  post: post ? { x: post.x, y: post.y } : undefined,
                   distance: path
                     .slice(1)
                     .reduce(
@@ -560,6 +622,7 @@ export class WarbookBot extends Bot {
       enemies,
       routes: this.routes,
       techBuildings,
+      vacatedContacts,
       oreFields: this.oreFields,
       products,
       queues,

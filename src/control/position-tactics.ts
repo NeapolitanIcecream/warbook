@@ -197,7 +197,13 @@ export class PositionTactics extends LocalCombat {
         intents.push(intent);
       }
     };
-    const base = mission.destination;
+    const route = o.routes?.find(
+      (r) =>
+        r.task === mission.id &&
+        mission.destination &&
+        distance2(r.towards, mission.destination) <= 2 ** 2,
+    );
+    const base = route?.post ?? mission.destination;
     const armor = mission.units.flatMap((ref) => {
       const u = owns.get(ref);
       return u?.type === 7 && u.combat && !u.harvester ? [u] : [];

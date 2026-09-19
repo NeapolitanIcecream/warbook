@@ -145,7 +145,7 @@ export class PressureStrategy implements StrategicController {
     const updated = {
       ...production,
       infantry: { ...production.infantry, count: 10 },
-      scouts: { product: o.side === 0 ? "ADOG" : "DOG", count: 3 },
+      scouts: { product: o.side === 0 ? "ADOG" : "DOG", count: 3, required: 1 },
       structures: [
         ...production.structures,
         {
