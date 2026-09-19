@@ -43,7 +43,10 @@ export function engineHashes() {
   };
 }
 
-export async function loadBotRelease(path: string, name: string) {
+export async function loadBotRelease(
+  path: string,
+  name: string | ((release: BotRelease) => string),
+) {
   const release: BotRelease = JSON.parse(readFileSync(path, "utf8"));
   const file = resolve(dirname(path), "bot.mjs");
   if (release.format !== "warbook-bot-v1" || fileHash(file) !== release.sha256)
@@ -63,7 +66,9 @@ export async function loadBotRelease(path: string, name: string) {
     module.mode !== release.mode
   )
     throw new Error("Frozen bot metadata differs from its code");
-  const bot: DrivenBot = module.createBot(name);
+  const bot: DrivenBot = module.createBot(
+    typeof name === "function" ? name(release) : name,
+  );
   if (
     !(bot instanceof Bot) ||
     bot.autoTick !== false ||

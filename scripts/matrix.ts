@@ -129,6 +129,15 @@ for (const map of plan.maps)
           const result = JSON.parse(
             readFileSync(`${directory}/result.json`, "utf8"),
           );
+          const manifest = JSON.parse(
+            readFileSync(`${directory}/manifest.json`, "utf8"),
+          );
+          const subjectName = manifest.participants.find(
+            (p: any) => p.role === "subject",
+          ).name;
+          const opponentName = manifest.participants.find(
+            (p: any) => p.role === "opponent",
+          ).name;
           const row = {
             map,
             opponent,
@@ -139,6 +148,11 @@ for (const map of plan.maps)
             stop: result.stopReason,
             clean: result.cleanCompletionVerified,
             winner: result.outcome?.survivor,
+            subjectName,
+            opponentName,
+            subjectWon:
+              result.cleanCompletionVerified &&
+              result.outcome?.survivor === subjectName,
             tick: result.tick,
             seconds: result.wallSeconds,
             ...(result.shadow ? { shadow: result.shadow } : {}),

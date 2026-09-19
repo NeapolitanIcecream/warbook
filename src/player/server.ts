@@ -12,6 +12,7 @@ import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 import type { ReplayClipPlan } from "./replay-clips.js";
+import { policyPlayerName } from "../player-identity.js";
 import {
   CLIENT_BUILDS,
   LEGACY_CLIENT,
@@ -436,7 +437,19 @@ const clientAsset = async (c: Context) => {
   if (path.includes("/locale/")) {
     const strings = JSON.parse(asset.body.toString());
     strings["gui:demo"] = "本地对战";
-    strings["gui:aieasybeta"] = "Warbook AI";
+    const referer = c.req.header("referer") ?? "";
+    const selected =
+      referer.startsWith(`${localOrigin}/challenge/`) && challengerRelease
+        ? challengerRelease
+        : referer.startsWith(`${localOrigin}/specialist/`) && specialistRelease
+          ? specialistRelease
+          : release;
+    strings["gui:aieasybeta"] = policyPlayerName(
+      selected.version,
+      selected.mode,
+    );
+    c.header("Cache-Control", "no-store");
+    c.header("Vary", "Referer");
     return c.json(strings);
   }
   c.header("Content-Type", asset.type);

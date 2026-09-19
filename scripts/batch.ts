@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
 
@@ -100,6 +100,15 @@ for (let round = 0; round < rounds; round++)
         cleanCompletionVerified: false,
       };
     }
+    const manifest = existsSync(`${dir}/manifest.json`)
+      ? JSON.parse(readFileSync(`${dir}/manifest.json`, "utf8"))
+      : undefined;
+    const subjectName = manifest?.participants.find(
+      (p: any) => p.role === "subject",
+    ).name;
+    const opponentName = manifest?.participants.find(
+      (p: any) => p.role === "opponent",
+    ).name;
     const row = {
       round,
       mode,
@@ -109,6 +118,13 @@ for (let round = 0; round < rounds; round++)
       stopReason: outcome.stopReason,
       clean: outcome.cleanCompletionVerified,
       winner: outcome.outcome?.survivor,
+      subjectName,
+      opponentName,
+      subjectWon:
+        subjectName === undefined
+          ? undefined
+          : outcome.cleanCompletionVerified &&
+            outcome.outcome?.survivor === subjectName,
       tick: outcome.tick,
       wallSeconds: outcome.wallSeconds,
     };

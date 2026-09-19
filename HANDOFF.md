@@ -2,6 +2,12 @@
 
 > **首次实施于 2026-09-15 14:09 启动，首次阶段截止为当天 17:30；后续迭代来自用户继续授权。当前实际结果与续接事项见 [执行进展](docs/progress.md)。以下“未启动”等表述保留为规划时点记录。用户要求不复用废弃本机代码，完全本地推进。**
 
+## 观看与命名补充
+
+用户要求以后玩家名字带版本号，并观看主线输给 Supalosa 的原局。当前 `/watch` 指向 `runs/strategy-014-validation/mp29u2.map/supalosa/0-coordinated-defense`，16:00；黄色主线、红色 Supalosa，原始 SHA 未改。下面的 26:15 是此前发布展示局。
+
+后续自动局名为 `bastion 0.1.14 A` / `pressure 0.1.14 B` 等；冻结版取自身元数据，外部 Supalosa 显示实际依赖版本。不要再用 `WarbookRed` 常量判断胜负，使用 manifest 角色或批次 `subjectWon`。新两局及 513 原快照核对通过，分析器按角色正确归属一胜一负；试玩三入口的版本标签均经界面检查。策略和评分未改。
+
 ## 当前入口：2026-09-19，0.1.14 双路线更新
 
 默认 0.1.14 阵地反击，`/challenge/` 保留 0.1.12 对照，`/specialist/` 为 0.1.14 步兵压制。维护入口 `http://127.0.0.1:8642/`。详见 [迭代记录](docs/strategy-014.md)；运行身份和 GUI 记录在 `runs/player/strategy-014-release-check.json`。

@@ -1,0 +1,23 @@
+{
+  "purpose": "Validate versioned engine player names, frozen bot loading, native opponent names and role-based results without policy changes",
+  "subjects": {
+    "bastion-014": {
+      "ref": "v0.1.14",
+      "mode": "bastion"
+    }
+  },
+  "opponents": {
+    "pressure-014": {
+      "ref": "v0.1.14",
+      "mode": "pressure"
+    },
+    "supalosa": {
+      "native": "supalosa"
+    }
+  },
+  "maps": ["mp06t2.map"],
+  "rounds": 1,
+  "decision": {
+    "budget": "Two complete games for naming and replay compatibility; not a strength comparison."
+  }
+}

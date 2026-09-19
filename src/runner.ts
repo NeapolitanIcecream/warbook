@@ -17,7 +17,8 @@ import { resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { WarbookBot, OBSERVATION_PROTOCOL } from "./bridge.js";
 import { POLICY_VERSION, POLICY_MODES, type PolicyMode } from "./policy.js";
-import { SupalosaOpponent } from "./opponent.js";
+import { SupalosaOpponent, SUPALOSA_VERSION } from "./opponent.js";
+import { policyPlayerName } from "./player-identity.js";
 import { recordDestruction } from "./referee.js";
 import { createOfficialOpponent } from "./official-opponent.js";
 import { loadBotRelease, type DrivenBot } from "./bot-release.js";
@@ -64,17 +65,21 @@ async function main(): Promise<void> {
       throw new Error(`Invalid ${key}`);
   }
   const subject = values["actor-release"]
-    ? await loadBotRelease(values["actor-release"], "WarbookRed")
+    ? await loadBotRelease(values["actor-release"], (r) =>
+        policyPlayerName(r.policyVersion, r.mode, "A"),
+      )
     : {
         bot: new WarbookBot(
-          "WarbookRed",
+          policyPlayerName(POLICY_VERSION, values.mode!, "A"),
           "Americans",
           values.mode as PolicyMode,
         ),
         release: undefined,
       };
   const frozenOpponent = values["opponent-release"]
-    ? await loadBotRelease(values["opponent-release"], "WarbookBlue")
+    ? await loadBotRelease(values["opponent-release"], (r) =>
+        policyPlayerName(r.policyVersion, r.mode, "B"),
+      )
     : undefined;
   const shadow = values["shadow-release"]
     ? await loadBotRelease(values["shadow-release"], "DecisionShadow")
@@ -92,11 +97,11 @@ async function main(): Promise<void> {
   const opponent =
     frozenOpponent?.bot ??
     (values.opponent === "official"
-      ? createOfficialOpponent("OfficialBlue")
+      ? createOfficialOpponent("Supalosa official 0.84.0 B")
       : values.opponent === "supalosa"
-        ? new SupalosaOpponent("SupalosaBlue")
+        ? new SupalosaOpponent(`Supalosa ${SUPALOSA_VERSION} B`)
         : new WarbookBot(
-            "WarbookBlue",
+            policyPlayerName(POLICY_VERSION, values.opponent!, "B"),
             "Americans",
             values.opponent as PolicyMode,
           ));
@@ -171,6 +176,7 @@ async function main(): Promise<void> {
         "src/referee.ts",
         "src/engine-diagnostics.mjs",
         "src/bot-release.ts",
+        "src/player-identity.ts",
       ].map((path) => [path, sha256(path)]),
     ),
     resources: ["ra2.mix", "language.mix", "multi.mix"].map((name) => ({
