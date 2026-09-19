@@ -69,7 +69,15 @@ export class PressureStrategy implements StrategicController {
         spare -= 3;
       }
     const allocated = raiders();
-    const dogs = o.own.filter(isScout).slice(1, 3);
+    const reconRefs = new Set(
+      (plan.additionalCombat ?? [])
+        .filter((m) => m.kind === "scout")
+        .flatMap((m) => m.units),
+    );
+    const dogs = o.own
+      .filter((u) => isScout(u) && !reconRefs.has(u.ref))
+      .sort((a, b) => a.ref.localeCompare(b.ref))
+      .slice(0, 2);
     for (let i = 0; i < 2; i++)
       if (this.groups[i].size && dogs[i]) allocated.add(dogs[i].ref);
     const structures = [...this.known.values()].filter(
@@ -159,7 +167,11 @@ export class PressureStrategy implements StrategicController {
     const updated = {
       ...production,
       infantry: { ...production.infantry, count: raidingWindow ? 10 : 6 },
-      scouts: { product: o.side === 0 ? "ADOG" : "DOG", count: 3, required: 1 },
+      scouts: {
+        product: o.side === 0 ? "ADOG" : "DOG",
+        count: o.starts.length > 2 ? 4 : 3,
+        required: o.starts.length > 2 ? 2 : 1,
+      },
       structures: [
         ...production.structures,
         {

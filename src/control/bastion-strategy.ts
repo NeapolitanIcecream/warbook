@@ -44,6 +44,7 @@ export class BastionStrategy implements StrategicController {
   private launchedArmor = 6;
   private transition: Record<string, number | string> = {};
   private resourcePost?: Point;
+  private scoutRefs = new Set<string>();
 
   constructor(private readonly doctrine: "bastion" | "cohort" = "bastion") {
     this.id =
@@ -80,7 +81,14 @@ export class BastionStrategy implements StrategicController {
     for (const u of o.own) if (u.name === armor) this.producedArmor.add(u.ref);
     if (this.producedArmor.size >= this.launchSize)
       this.firstForceFunded = true;
-    const scouts = assessment.army.filter(isScout);
+    const dogs = assessment.army.filter(isScout);
+    for (const ref of this.scoutRefs)
+      if (!dogs.some((u) => u.ref === ref)) this.scoutRefs.delete(ref);
+    for (const dog of dogs) {
+      if (this.scoutRefs.size >= (o.starts.length > 2 ? 2 : 1)) break;
+      this.scoutRefs.add(dog.ref);
+    }
+    const scouts = dogs.filter((u) => this.scoutRefs.has(u.ref));
     const infantry = assessment.army.filter((u) => u.type === 3 && !isScout(u));
     const allVehicles = assessment.army.filter((u) => u.type !== 3);
     const alive = new Set(allVehicles.map((u) => u.ref));
@@ -493,7 +501,7 @@ export class BastionStrategy implements StrategicController {
       );
     if (income.mission)
       additionalCombat.push(this.mission(income.mission.id, income.mission));
-    const screen = scouts.slice(o.starts.length > 2 ? 2 : 1);
+    const screen = dogs.filter((u) => !this.scoutRefs.has(u.ref));
     if (screen.length) {
       const front = [...(assault.length ? assault : reserve)].sort(
         (a, b) =>
@@ -510,7 +518,7 @@ export class BastionStrategy implements StrategicController {
         }),
       );
     }
-    for (const scout of scouts.slice(0, o.starts.length > 2 ? 2 : 1)) {
+    for (const scout of scouts) {
       const id = `recon-${scout.ref}`;
       additionalCombat.push(
         this.mission(id, {

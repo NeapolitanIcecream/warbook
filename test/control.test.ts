@@ -1997,3 +1997,27 @@ test("scouts inspect enemy production surroundings before unrelated fog cells", 
   const goal = recon.destination(o, [dog]);
   assert.deepEqual(goal, { x: 52, y: 8 });
 });
+
+test("scouting ownership survives changing dog positions and observation order", () => {
+  const c = new Commander("bastion"),
+    o = observation();
+  o.own.push(
+    { ...tank("scout-a", 70, 40), name: "ADOG", type: 3 },
+    { ...tank("screen-b", 72, 40), name: "ADOG", type: 3 },
+  );
+  c.decide(o);
+  const recon = () =>
+    c
+      .controlPlan!.additionalCombat!.filter((m) => m.kind === "scout")
+      .flatMap((m) => m.units);
+  assert.deepEqual(recon(), ["scout-a"]);
+  o.tick += 3;
+  o.own.reverse();
+  o.own.find((u) => u.ref === "scout-a")!.x = 90;
+  c.decide(o);
+  assert.deepEqual(recon(), ["scout-a"]);
+  o.tick += 3;
+  o.own = o.own.filter((u) => u.ref !== "scout-a");
+  c.decide(o);
+  assert.deepEqual(recon(), ["screen-b"]);
+});
