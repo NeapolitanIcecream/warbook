@@ -1,0 +1,37 @@
+{
+  "purpose": "Release candidate full-package comparison against 0.1.14 on four maps and the explicitly listed fixed control pool; no paired seed or unseen-test claim.",
+  "subjects": {
+    "candidate-015": {
+      "ref": "c66f5491fe813e609dcc489fc870e79803dcf8b7",
+      "mode": "bastion"
+    },
+    "baseline-014": {
+      "ref": "v0.1.14",
+      "mode": "bastion"
+    }
+  },
+  "opponents": {
+    "pressure-evolved": {
+      "ref": "36acb74",
+      "mode": "pressure"
+    },
+    "pressure-014": {
+      "ref": "v0.1.14",
+      "mode": "pressure"
+    },
+    "old-defense": {
+      "ref": "b3a1f7c",
+      "mode": "bastion"
+    },
+    "supalosa": {
+      "native": "supalosa"
+    }
+  },
+  "maps": [
+    "mp29u2.map",
+    "mp06t2.map",
+    "mp08t2.map",
+    "mp03t4.map"
+  ],
+  "rounds": 2
+}

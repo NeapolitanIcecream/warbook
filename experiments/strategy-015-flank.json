@@ -1,0 +1,28 @@
+{
+  "purpose": "Address recorded large-army passive stalemates on short and town maps using two legal map approaches, without removing local combat withdrawal.",
+  "subjects": {
+    "bastion-flank": {
+      "ref": "dcb7d38192e12e7a286811e28367d218df383bf0",
+      "mode": "bastion"
+    },
+    "pressure-flank": {
+      "ref": "dcb7d38192e12e7a286811e28367d218df383bf0",
+      "mode": "pressure"
+    }
+  },
+  "opponents": {
+    "pressure-evolved": {
+      "ref": "36acb74",
+      "mode": "pressure"
+    },
+    "pressure-014": {
+      "ref": "v0.1.14",
+      "mode": "pressure"
+    }
+  },
+  "maps": [
+    "mp06t2.map",
+    "mp03t4.map"
+  ],
+  "rounds": 2
+}

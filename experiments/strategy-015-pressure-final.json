@@ -1,0 +1,24 @@
+{
+  "purpose": "Cross-check shared final capabilities on both evolving routes; compare current pressure with its previous successful adaptation against the current bastion.",
+  "subjects": {
+    "pressure-release": {
+      "ref": "e1fb251d65d02cb5fd5ab9e1a2e75bdefed80f25",
+      "mode": "pressure"
+    },
+    "pressure-before": {
+      "ref": "e743882",
+      "mode": "pressure"
+    }
+  },
+  "opponents": {
+    "main-release": {
+      "ref": "749fd39",
+      "mode": "bastion"
+    }
+  },
+  "maps": [
+    "mp29u2.map",
+    "mp06t2.map"
+  ],
+  "rounds": 2
+}

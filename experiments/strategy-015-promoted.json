@@ -1,0 +1,33 @@
+{
+  "purpose": "Final candidate against the same fixed four-map pool; compare with the recorded 0.1.14 rows in runs/strategy-015-validation. Ordinary independent starts, not paired seeds.",
+  "subjects": {
+    "release-015": {
+      "ref": "749fd3920b63bc5f16397029729ed9571a02692d",
+      "mode": "bastion"
+    }
+  },
+  "opponents": {
+    "pressure-evolved": {
+      "ref": "36acb74",
+      "mode": "pressure"
+    },
+    "pressure-014": {
+      "ref": "v0.1.14",
+      "mode": "pressure"
+    },
+    "old-defense": {
+      "ref": "b3a1f7c",
+      "mode": "bastion"
+    },
+    "supalosa": {
+      "native": "supalosa"
+    }
+  },
+  "maps": [
+    "mp29u2.map",
+    "mp06t2.map",
+    "mp08t2.map",
+    "mp03t4.map"
+  ],
+  "rounds": 2
+}

@@ -1,0 +1,25 @@
+{
+  "purpose": "Verify the final main keeps the evaluated 749fd39 behavior after undoing the pressure-only margin change.",
+  "subjects": {
+    "release-equivalent": {
+      "ref": "e1fb251d65d02cb5fd5ab9e1a2e75bdefed80f25",
+      "mode": "bastion"
+    }
+  },
+  "shadows": {
+    "release-equivalent": {
+      "ref": "749fd39",
+      "mode": "bastion"
+    }
+  },
+  "opponents": {
+    "supalosa": {
+      "native": "supalosa"
+    }
+  },
+  "maps": [
+    "mp06t2.map",
+    "mp29u2.map"
+  ],
+  "rounds": 1
+}
