@@ -57,3 +57,22 @@ test("bridge waypoints retain the layer and only observed destruction removes th
   prior.updateVisibleBridges(map, "self");
   assert.equal(route().length, 0);
 });
+
+test("flank planning selects a separate real passage around a central barrier", () => {
+  const cells = [];
+  for (let x = 0; x <= 40; x++)
+    for (let y = 0; y <= 30; y++)
+      if (x !== 20 || y <= 3 || y >= 27)
+        cells.push({ x, y, z: 0, bridge: false });
+  const prior = new MapPrior(cells),
+    from = { x: 3, y: 15 },
+    to = { x: 37, y: 15 };
+  const primary = prior.path(from, to),
+    flank = prior.flank(from, to);
+  assert(flank);
+  assert(
+    primary.every((p) => (p.x - flank.x) ** 2 + (p.y - flank.y) ** 2 >= 64),
+  );
+  assert(prior.path(from, flank).length > 0);
+  assert(prior.path(flank, to).length > 0);
+});

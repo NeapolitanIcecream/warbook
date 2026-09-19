@@ -87,6 +87,7 @@ export interface Observation {
   }[];
   baseRally?: Point;
   stagingRoute?: { towards: Point; point: Point; observedTick: number };
+  flankApproach?: { towards: Point; point: Point; observedTick: number };
   /** Static-map routes, refreshed from own positions; dynamic enemies are separate. */
   oreFields?: readonly { x: number; y: number; amount: number }[];
   routes?: readonly {

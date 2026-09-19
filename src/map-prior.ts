@@ -91,6 +91,23 @@ export class MapPrior {
       }));
   }
 
+  flank(from: Point, to: Point): Point | undefined {
+    const primary = this.path(from, to);
+    if (primary.length < 24) return;
+    const middle = primary[Math.floor(primary.length / 2)];
+    const alternate = this.path(from, to, [{ ...middle, radius: 12 }]);
+    if (!alternate.length || alternate.length > primary.length * 1.8 + 8)
+      return;
+    return alternate
+      .slice(Math.floor(alternate.length / 2))
+      .reverse()
+      .find(
+        (p) =>
+          distance2(p, to) >= 10 ** 2 &&
+          primary.every((q) => distance2(p, q) >= 8 ** 2),
+      );
+  }
+
   static readPregame(game: GameApi): MapPrior {
     if (game.getCurrentTick() !== 0)
       throw new Error("Map prior must be captured before simulation");

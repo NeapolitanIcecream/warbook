@@ -2163,3 +2163,49 @@ test("armor counts nearby firing support without taking ownership of those infan
     ),
   );
 });
+
+test("a large matched army can use two approaches instead of waiting indefinitely at home", () => {
+  const c = new Commander("bastion"),
+    o = observation();
+  o.own = Array.from({ length: 16 }, (_, i) =>
+    tank(`t-${i}`, 71 + (i % 4), 38 + Math.floor(i / 4)),
+  );
+  o.enemies = [
+    {
+      ref: "base",
+      name: "GAWEAP",
+      type: 2,
+      x: 96,
+      y: 37,
+      hp: 1000,
+      maxHp: 1000,
+      observedTick: o.tick,
+      weaponRange: 0,
+    },
+    ...Array.from({ length: 20 }, (_, i) => ({
+      ref: `e-${i}`,
+      name: "MTNK",
+      type: 7,
+      x: 96 + (i % 4),
+      y: 36 + Math.floor(i / 4),
+      hp: 300,
+      maxHp: 300,
+      observedTick: o.tick,
+      weaponRange: 5,
+    })),
+  ];
+  o.flankApproach = {
+    towards: { x: 96, y: 37 },
+    point: { x: 90, y: 60 },
+    observedTick: o.tick,
+  };
+  c.decide(o);
+  const p = c.controlPlan!,
+    flank = p.additionalCombat!.find((m) => m.id === "flank-force");
+  assert.equal(p.combat.kind, "advance");
+  assert.equal(p.combat.objective, "two-front-pressure");
+  assert.equal(p.combat.units.length, 8);
+  assert.equal(flank?.units.length, 8);
+  assert(flank!.units.every((ref) => !p.combat.units.includes(ref)));
+  assert.deepEqual(flank!.destination, o.flankApproach.point);
+});

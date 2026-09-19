@@ -66,6 +66,7 @@ export class WarbookBot extends Bot {
   private defensePosts: NonNullable<Observation["defensePosts"]> = [];
   private baseRally?: Point;
   private stagingRoute?: Observation["stagingRoute"];
+  private flankApproach?: Observation["flankApproach"];
   private lastDefenseRouteTick = -150;
   private defenseRequestIds = "";
   private lastFortSiteTick = -30;
@@ -439,6 +440,18 @@ export class WarbookBot extends Bot {
         const path = this.mapPrior?.path(home, goal) ?? [];
         return path[Math.min(16, path.length - 1)] ?? goal;
       };
+      if (
+        staging &&
+        this.mapPrior &&
+        (!this.flankApproach ||
+          distance2(this.flankApproach.towards, staging) > 8 ** 2 ||
+          tick - this.flankApproach.observedTick >= 900)
+      ) {
+        const flank = this.mapPrior.flank(home, staging);
+        this.flankApproach = flank
+          ? { towards: staging, point: flank, observedTick: tick }
+          : undefined;
+      }
       const point =
         towards && infantryNavigation
           ? guardPost(
@@ -674,6 +687,7 @@ export class WarbookBot extends Bot {
       defensePosts: this.defensePosts,
       baseRally: this.baseRally,
       stagingRoute: this.stagingRoute,
+      flankApproach: this.flankApproach,
     };
     if (this.lastObservation) {
       const previousContacts = new Set(

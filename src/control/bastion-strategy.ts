@@ -45,6 +45,8 @@ export class BastionStrategy implements StrategicController {
   private transition: Record<string, number | string> = {};
   private resourcePost?: Point;
   private scoutRefs = new Set<string>();
+  private flankRefs = new Set<string>();
+  private flankVia?: Point;
 
   constructor(private readonly doctrine: "bastion" | "cohort" = "bastion") {
     this.id =
@@ -266,6 +268,29 @@ export class BastionStrategy implements StrategicController {
     const opportunity = !assault.length
       ? this.operations.consider(o, ready)
       : undefined;
+    const alternative =
+      o.flankApproach &&
+      distance2(o.flankApproach.towards, stagingDirection) <= 10 ** 2
+        ? o.flankApproach.point
+        : undefined;
+    const siege =
+      !opportunity &&
+      !responding &&
+      this.operations.hasKnownBase &&
+      alternative &&
+      ready.filter((u) => u.name === armor).length >= 12 &&
+      ready.reduce((n, u) => n + Math.sqrt(u.hp / u.maxHp), 0) >=
+        Number(this.operations.decision.defenders ?? Infinity) * 0.65
+        ? {
+            point: stagingDirection,
+            reason: "two-front-pressure" as const,
+            defenders: Number(this.operations.decision.defenders ?? 0),
+            productionArrivals: Number(
+              this.operations.decision.productionArrivals ?? 0,
+            ),
+            travelSeconds: Number(this.operations.decision.travelSeconds ?? 0),
+          }
+        : undefined;
     const exploration =
       !this.operations.hasKnownBase &&
       ready.filter((u) => u.name === armor).length >= this.launchSize &&
@@ -284,7 +309,7 @@ export class BastionStrategy implements StrategicController {
     const nextOperation =
       opportunity?.reason === "local-counterattack"
         ? undefined
-        : (opportunity ?? exploration);
+        : (opportunity ?? siege ?? exploration);
     if (
       !this.assault.size &&
       !protectNow &&
@@ -299,6 +324,19 @@ export class BastionStrategy implements StrategicController {
       };
       this.operations.active = nextOperation;
       operation = nextOperation;
+      this.flankRefs.clear();
+      this.flankVia = undefined;
+      if (nextOperation.reason === "two-front-pressure" && alternative) {
+        this.flankVia = alternative;
+        this.flankRefs = new Set(
+          [...ready]
+            .sort(
+              (a, b) => distance2(a, alternative) - distance2(b, alternative),
+            )
+            .slice(0, Math.floor(ready.length / 2))
+            .map((u) => u.ref),
+        );
+      }
       assault = vehicles.filter((u) => this.assault.has(u.ref));
     }
     if (assault.length) {
@@ -396,13 +434,26 @@ export class BastionStrategy implements StrategicController {
       revision: this.productionRevision.update(productionDescription),
     };
 
+    for (const ref of this.flankRefs)
+      if (!this.assault.has(ref)) this.flankRefs.delete(ref);
+    let flank = assault.filter((u) => this.flankRefs.has(u.ref));
+    if (flank.length === assault.length) {
+      this.flankRefs.clear();
+      flank = [];
+    }
+    if (
+      !flank.length ||
+      (this.flankVia && distance2(center(flank), this.flankVia) <= 6 ** 2)
+    )
+      this.flankVia = undefined;
+    const primary = assault.filter((u) => !this.flankRefs.has(u.ref));
     const combat = this.mission("main-force", {
       kind: assault.length
         ? "advance"
         : responding || protectNow
           ? "defend"
           : "assemble",
-      units: (assault.length ? assault : reserve).map((u) => u.ref),
+      units: (assault.length ? primary : reserve).map((u) => u.ref),
       destination: assault.length ? operation?.point : musterPost,
       groundDestination: assault.length ? operation?.point : musterPost,
       objective:
@@ -458,6 +509,21 @@ export class BastionStrategy implements StrategicController {
             engagement: { allowCrush: false },
           }),
         ];
+    if (flank.length)
+      additionalCombat.push(
+        this.mission("flank-force", {
+          kind: "advance",
+          units: flank.map((u) => u.ref),
+          destination: this.flankVia ?? operation?.point,
+          objective: this.flankVia
+            ? "approach-other-entrance"
+            : "flank-defended-base",
+          ...(!this.flankVia && operation?.ref
+            ? { target: operation.ref }
+            : {}),
+          engagement: { allowCrush: true },
+        }),
+      );
     if (relief.length)
       additionalCombat.push(
         this.mission("base-relief", {

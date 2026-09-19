@@ -15,6 +15,7 @@ export interface Operation {
     | "counterattack-window"
     | "attack-opportunity"
     | "formed-advance"
+    | "two-front-pressure"
     | "local-counterattack";
   defenders: number;
   productionArrivals: number;
