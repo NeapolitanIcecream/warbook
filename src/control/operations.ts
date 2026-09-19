@@ -302,7 +302,14 @@ export class Operations {
         operationReason: "continue-committed-operation",
         formedTanks: tanks.length,
       };
-    } else if (force.some((u) => distance2(u, this.active!.point) <= 8 ** 2)) {
+    } else if (
+      !o.armySearchPoints?.some(
+        (p) =>
+          distance2(p, this.active!.point) === 0 &&
+          Boolean(p.onBridge) === Boolean(this.active!.point.onBridge),
+      ) &&
+      force.some((u) => distance2(u, this.active!.point) <= 8 ** 2)
+    ) {
       this.active = undefined;
       this.decision = {
         operationReason: "objective-area-cleared",

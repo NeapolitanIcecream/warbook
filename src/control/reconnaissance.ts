@@ -13,7 +13,7 @@ import {
   type ExecutionEvidence,
 } from "./contracts.js";
 
-const key = (p: Point) => `${p.x}:${p.y}`;
+const key = (p: Point) => `${p.x}:${p.y}:${Boolean(p.onBridge)}`;
 export const isScout = (unit: Unit) => ["ADOG", "DOG"].includes(unit.name);
 
 /** A separate scout keeps checking approaches while the army builds, defends or fights. */
@@ -68,7 +68,10 @@ export class Reconnaissance {
     const available = (p: Point) =>
       !reserved.some((q) => distance2(p, q) < 12 ** 2);
     for (const start of o.starts)
-      if (o.own.some((u) => distance2(u, start) <= 5 ** 2))
+      if (
+        o.exploredStarts === undefined &&
+        o.own.some((u) => distance2(u, start) <= 5 ** 2)
+      )
         this.visited.set(key(start), o.tick);
     if (route.goal) {
       const distance = distance2(unit, route.goal);
@@ -80,7 +83,13 @@ export class Reconnaissance {
         o.scoutPoints !== undefined &&
         !o.starts.some((p) => key(p) === key(route.goal!)) &&
         !points.some((p) => key(p) === key(route.goal!));
-      if (distance <= 4 ** 2 || revealed) {
+      if (
+        revealed ||
+        (distance <= 4 ** 2 &&
+          (o.scoutPoints === undefined ||
+            (o.exploredStarts === undefined &&
+              o.starts.some((p) => key(p) === key(route.goal!)))))
+      ) {
         this.visited.set(key(route.goal), o.tick);
         route.goal = undefined;
       } else if (avoiding || o.tick - route.progressTick >= 450) {

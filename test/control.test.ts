@@ -2250,6 +2250,25 @@ test("the army uses its own reachable search points instead of infantry-only ter
   assert.deepEqual(c.controlPlan!.combat.destination, { x: 80, y: 80 });
 });
 
+test("a scout does not declare an explicitly unrevealed nearby point explored", () => {
+  const recon = new Reconnaissance(),
+    o = observation();
+  const dog = { ...tank("dog", 70, 40), name: "ADOG", type: 3 };
+  o.own = [dog];
+  o.exploredStarts = o.starts;
+  o.scoutPoints = [
+    { x: 76, y: 40 },
+    { x: 90, y: 40 },
+  ];
+  assert.deepEqual(recon.destination(o, [dog]), { x: 76, y: 40 });
+  dog.x = 73;
+  o.tick += 3;
+  assert.deepEqual(recon.destination(o, [dog]), { x: 76, y: 40 });
+  o.scoutPoints = [{ x: 90, y: 40 }];
+  o.tick += 3;
+  assert.deepEqual(recon.destination(o, [dog]), { x: 90, y: 40 });
+});
+
 test("an available shot is not abandoned to chase the squad focus outside range", () => {
   const u = { ...tank("gun", 0, 0), weaponRange: 5 };
   const nearby = {
