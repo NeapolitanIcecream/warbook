@@ -17,6 +17,7 @@ export interface Operation {
     | "formed-advance"
     | "two-front-pressure"
     | "ranged-pressure"
+    | "formed-pressure"
     | "local-counterattack";
   defenders: number;
   productionArrivals: number;
@@ -194,15 +195,18 @@ export class Operations {
       const window = this.pressured && o.tick - this.lastPressureTick <= 1800;
       // A supported two/three-tank opportunity must not wait for an arbitrary
       // fourth tank, especially when late-game income cannot fund it promptly.
-      if (power < Math.max(1.5, required)) continue;
+      const supported = power >= Math.max(1.5, required);
+      if (!supported && tanks.length < 6) continue;
       options.push({
         point: { x: target.x, y: target.y },
         ...(visible ? { ref: target.ref } : {}),
-        reason: exposed
-          ? "exposed-construction"
-          : window
-            ? "counterattack-window"
-            : "attack-opportunity",
+        reason: !supported
+          ? "formed-pressure"
+          : exposed
+            ? "exposed-construction"
+            : window
+              ? "counterattack-window"
+              : "attack-opportunity",
         ...estimate,
         score:
           (exposed ? 100 : yard(target) ? 25 : factory(target) ? 20 : 10) -

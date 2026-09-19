@@ -47,6 +47,7 @@ export class BastionStrategy implements StrategicController {
   private scoutRefs = new Set<string>();
   private flankRefs = new Set<string>();
   private flankVia?: Point;
+  private flankAttempted = false;
   private developSiege = false;
 
   constructor(private readonly doctrine: "bastion" | "cohort" = "bastion") {
@@ -94,6 +95,18 @@ export class BastionStrategy implements StrategicController {
     const scouts = dogs.filter((u) => this.scoutRefs.has(u.ref));
     const infantry = assessment.army.filter((u) => u.type === 3 && !isScout(u));
     const allVehicles = assessment.army.filter((u) => u.type !== 3);
+    const searchOrigin =
+      allVehicles.find((u) => this.assault.has(u.ref)) ?? o.home;
+    const startsToCheck = o.starts.filter(
+      (p) =>
+        distance2(p, o.home) > 12 ** 2 &&
+        !(o.exploredStarts ?? []).some((seen) => distance2(seen, p) < 1),
+    );
+    const searchGoal = [
+      ...(startsToCheck.length ? startsToCheck : (o.scoutPoints ?? [])),
+    ].sort(
+      (a, b) => distance2(a, searchOrigin) - distance2(b, searchOrigin),
+    )[0];
     const alive = new Set(allVehicles.map((u) => u.ref));
     const hadAssault = this.assault.size > 0;
     this.assault = new Set([...this.assault].filter((ref) => alive.has(ref)));
@@ -233,19 +246,19 @@ export class BastionStrategy implements StrategicController {
     if (
       this.operations.active?.reason === "formed-advance" &&
       !this.operations.hasKnownBase &&
-      base.combat.destination
+      searchGoal
     )
-      this.operations.active.point = base.combat.destination;
+      this.operations.active.point = searchGoal;
     let operation = this.operations.target(o, assault);
     // Clearing one area starts the next search from the army's current position.
     // It is a task completion, not evidence that the expedition was defeated.
-    if (assault.length && !operation && base.combat.destination) {
+    if (assault.length && !operation && searchGoal) {
       this.transition = {
         operationTransition: "area-cleared-continue-search",
         operationTransitionTick: o.tick,
       };
       operation = {
-        point: base.combat.destination,
+        point: searchGoal,
         reason: "formed-advance",
         defenders: 0,
         productionArrivals: 0,
@@ -274,32 +287,12 @@ export class BastionStrategy implements StrategicController {
       distance2(o.flankApproach.towards, stagingDirection) <= 10 ** 2
         ? o.flankApproach.point
         : undefined;
-    const siege =
-      !opportunity &&
-      !responding &&
-      this.operations.hasKnownBase &&
-      (alternative || ready.filter((u) => u.name === "SREF").length >= 2) &&
-      ready.filter((u) => u.name === armor).length >= 12 &&
-      ready.reduce((n, u) => n + Math.sqrt(u.hp / u.maxHp), 0) >=
-        Number(this.operations.decision.defenders ?? Infinity) * 0.65
-        ? {
-            point: stagingDirection,
-            reason: alternative
-              ? ("two-front-pressure" as const)
-              : ("ranged-pressure" as const),
-            defenders: Number(this.operations.decision.defenders ?? 0),
-            productionArrivals: Number(
-              this.operations.decision.productionArrivals ?? 0,
-            ),
-            travelSeconds: Number(this.operations.decision.travelSeconds ?? 0),
-          }
-        : undefined;
     const exploration =
       !this.operations.hasKnownBase &&
       ready.filter((u) => u.name === armor).length >= this.launchSize &&
-      base.combat.destination
+      searchGoal
         ? {
-            point: base.combat.destination,
+            point: searchGoal,
             reason: "formed-advance" as const,
             defenders: 0,
             productionArrivals: 0,
@@ -312,7 +305,7 @@ export class BastionStrategy implements StrategicController {
     const nextOperation =
       opportunity?.reason === "local-counterattack"
         ? undefined
-        : (opportunity ?? siege ?? exploration);
+        : (opportunity ?? exploration);
     if (
       !this.assault.size &&
       !protectNow &&
@@ -329,7 +322,21 @@ export class BastionStrategy implements StrategicController {
       operation = nextOperation;
       this.flankRefs.clear();
       this.flankVia = undefined;
-      if (nextOperation.reason === "two-front-pressure" && alternative) {
+      this.flankAttempted = false;
+      if (
+        nextOperation.reason === "formed-pressure" &&
+        ready.filter((u) => u.name === armor).length >= 12 &&
+        alternative
+      ) {
+        this.flankAttempted = true;
+        operation = this.operations.active = {
+          ...nextOperation,
+          reason: "two-front-pressure",
+        };
+        this.transition = {
+          operationTransition: "two-front-pressure",
+          operationTransitionTick: o.tick,
+        };
         this.flankVia = alternative;
         this.flankRefs = new Set(
           [...ready]
@@ -370,17 +377,46 @@ export class BastionStrategy implements StrategicController {
     const joiners = vehicles.filter((u) => this.joining.has(u.ref));
     reserve = vehicles.filter(isReserve);
     const withdrawing = vehicles.filter((u) => this.withdrawing.has(u.ref));
+    if (
+      !this.flankAttempted &&
+      alternative &&
+      assault.filter((u) => u.name === armor).length >= 12 &&
+      feedback?.combat.facts.holdingContact
+    ) {
+      const available = assault
+        .filter((u) => u.name === armor && (u.attackState ?? 0) < 3)
+        .sort((a, b) => distance2(a, alternative) - distance2(b, alternative));
+      if (available.length >= 6) {
+        this.flankRefs = new Set(
+          available
+            .slice(
+              0,
+              Math.min(available.length, Math.floor(assault.length / 2)),
+            )
+            .map((u) => u.ref),
+        );
+        this.flankVia = alternative;
+        this.flankAttempted = true;
+        this.transition = {
+          operationTransition: "flank-blocked-contact",
+          operationTransitionTick: o.tick,
+        };
+      }
+    }
     const fort = o.side === 0 ? "GAPILL" : "NALASR";
     const refinery = o.side === 0 ? "GAREFN" : "NAREFN";
     const mobilizing = !this.firstForceFunded;
     if (
       o.side === 0 &&
-      assessment.observedArmor >= 12 &&
+      this.producedArmor.size >= 16 &&
+      assessment.observedArmor >= 8 &&
       o.credits >= 500 &&
       !responding &&
       this.operations.hasKnownBase &&
       (!operation ||
-        ["two-front-pressure", "ranged-pressure"].includes(operation.reason))
+        ["two-front-pressure", "ranged-pressure", "formed-pressure"].includes(
+          operation.reason,
+        ))
     )
       this.developSiege = true;
     const resourceFields = (o.oreFields ?? []).filter((f) => f.amount >= 180);

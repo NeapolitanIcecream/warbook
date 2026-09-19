@@ -185,7 +185,7 @@ test("a supported three-tank opportunity can finish a weak base without waiting 
   );
 });
 
-test("a field army can intercept an attack without reaching its own distant base", () => {
+test("a field army remains in the risk estimate when a formed force establishes pressure", () => {
   const o = observation([
     contact("refinery", "GAREFN", 24, 2),
     contact("factory", "GAWEAP", 32, 2),
@@ -220,9 +220,10 @@ test("a field army can intercept an attack without reaching its own distant base
     position: { ...u.position!, x: u.position!.x + 1.45 },
   }));
   planner.observe(o, []);
-  assert.equal(planner.consider(o, o.own), undefined);
+  const operation = planner.consider(o, o.own);
+  assert.equal(operation?.reason, "formed-pressure");
   assert(
-    Number(planner.decision.defenders) >= 13,
+    Number(operation?.defenders) >= 13,
     "the field army is not omitted just because its own base is far away",
   );
 });

@@ -2209,3 +2209,29 @@ test("a large matched army can use two approaches instead of waiting indefinitel
   assert(flank!.units.every((ref) => !p.combat.units.includes(ref)));
   assert.deepEqual(flank!.destination, o.flankApproach.point);
 });
+
+test("base discovery sends the army to a possible start instead of chasing a harmless dog", () => {
+  const c = new Commander("bastion"),
+    o = observation();
+  o.own = Array.from({ length: 6 }, (_, i) =>
+    tank(`t-${i}`, 71 + (i % 3), 38 + Math.floor(i / 3)),
+  );
+  o.enemies = [
+    {
+      ref: "dog",
+      name: "ADOG",
+      type: 3,
+      x: 74,
+      y: 40,
+      hp: 100,
+      maxHp: 100,
+      observedTick: o.tick,
+      weaponRange: 0,
+      canThreatenBuildings: false,
+      canThreatenVehicles: false,
+    },
+  ];
+  c.decide(o);
+  assert.equal(c.controlPlan!.combat.kind, "advance");
+  assert.deepEqual(c.controlPlan!.combat.destination, o.starts[1]);
+});
