@@ -196,7 +196,11 @@ export class Operations {
       // A supported two/three-tank opportunity must not wait for an arbitrary
       // fourth tank, especially when late-game income cannot fund it promptly.
       const supported = power >= Math.max(1.5, required);
-      if (!supported && tanks.length < 6) continue;
+      if (
+        !supported &&
+        (tanks.length < 12 || power < estimate.defenders * 0.75)
+      )
+        continue;
       options.push({
         point: { x: target.x, y: target.y },
         ...(visible ? { ref: target.ref } : {}),
