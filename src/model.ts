@@ -25,6 +25,8 @@ export interface Unit extends Point {
   refinery: boolean;
   combat: boolean;
   buildStatus?: number;
+  repairable?: boolean;
+  hasWrenchRepair?: boolean;
   deployed?: boolean;
   crusher?: boolean;
   antiAir?: boolean;
