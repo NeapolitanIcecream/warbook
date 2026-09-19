@@ -2,6 +2,8 @@
 export interface Point {
   x: number;
   y: number;
+  /** Movement on a bridge must name the bridge layer in the pinned API. */
+  onBridge?: boolean;
 }
 export interface Unit extends Point {
   /** World position in tile units: x/y ground plane, z elevation. */
@@ -117,7 +119,13 @@ export type Intent = (
   | { kind: "queue"; product: Product }
   | { kind: "place"; name: string; x: number; y: number }
   | { kind: "attack" | "crush" | "capture"; refs: string[]; target: string }
-  | { kind: "attackMove" | "move"; refs: string[]; x: number; y: number }
+  | {
+      kind: "attackMove" | "move";
+      refs: string[];
+      x: number;
+      y: number;
+      onBridge?: boolean;
+    }
   | { kind: "repair"; ref: string }
 ) & { task?: string };
 

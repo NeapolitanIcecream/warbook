@@ -190,7 +190,14 @@ export class ScoutTactics {
       if (!retreat) {
         const trail = this.safe.get(ref) ?? [];
         if (!trail.length || distance2(trail[trail.length - 1], unit) >= 4 ** 2)
-          this.safe.set(ref, [...trail.slice(-7), { x: unit.x, y: unit.y }]);
+          this.safe.set(ref, [
+            ...trail.slice(-7),
+            {
+              x: unit.x,
+              y: unit.y,
+              ...(unit.onBridge ? { onBridge: true } : {}),
+            },
+          ]);
       } else avoiding++;
       const route = o.routes?.find(
         (r) =>
@@ -212,6 +219,7 @@ export class ScoutTactics {
           refs: [ref],
           x: goal.x,
           y: goal.y,
+          ...(goal.onBridge ? { onBridge: true } : {}),
           task: mission.id,
         });
         this.orders.set(ref, { goal: signature, tick: o.tick });

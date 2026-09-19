@@ -1,6 +1,11 @@
 import createGraph from "ngraph.graph";
 import { aStar } from "ngraph.path";
-import { TerrainType, ObjectType, type GameApi } from "@chronodivide/game-api";
+import {
+  TerrainType,
+  ObjectType,
+  type GameApi,
+  type MapApi,
+} from "@chronodivide/game-api";
 import { distance2, type Point } from "./model.js";
 
 export interface MapCell extends Point {
@@ -30,6 +35,19 @@ export class MapPrior {
           Math.abs(p.z - q.data.z) <= (p.bridge || q.data.bridge ? 0 : 1)
         )
           this.graph.addLink(key(p), q.id);
+      }
+  }
+
+  updateVisibleBridges(map: MapApi, owner: string): void {
+    for (const p of this.points)
+      if (p.bridge && this.graph.hasNode(key(p))) {
+        const tile = map.getTile(p.x, p.y);
+        if (
+          tile &&
+          map.isVisibleTile(tile, owner) &&
+          !map.hasBridgeOnTile(tile)
+        )
+          this.graph.removeNode(key(p));
       }
   }
 
@@ -66,7 +84,11 @@ export class MapPrior {
     })
       .find(key(a), key(b))
       .reverse()
-      .map((n) => ({ x: n.data.x, y: n.data.y }));
+      .map((n) => ({
+        x: n.data.x,
+        y: n.data.y,
+        ...(n.data.bridge ? { onBridge: true } : {}),
+      }));
   }
 
   static readPregame(game: GameApi): MapPrior {

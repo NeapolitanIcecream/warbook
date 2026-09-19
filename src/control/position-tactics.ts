@@ -442,7 +442,11 @@ export class PositionTactics extends LocalCombat {
         { x: 2, y: -2 },
       ];
       // Ground posts are validated; arbitrary vehicle offsets can land in a cliff.
-      const desired = { x: base.x, y: base.y };
+      const desired = {
+        x: base.x,
+        y: base.y,
+        ...(base.onBridge ? { onBridge: true } : {}),
+      };
       // Only own, already observed footprints influence the fallback post.
       const free = (p: Point) =>
         !o.own.some(

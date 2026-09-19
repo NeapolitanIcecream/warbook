@@ -232,6 +232,7 @@ export class WarbookBot extends Bot {
       })
       .map((e) => e.ref);
     if (tick - this.lastRoutesTick >= 90 && this.mapPrior) {
+      this.mapPrior.updateVisibleBridges(this.game.map, this.name);
       const plan = this.commander.controlPlan;
       this.routes = [plan?.combat, ...(plan?.additionalCombat ?? [])].flatMap(
         (mission) => {
@@ -308,7 +309,13 @@ export class WarbookBot extends Bot {
                   towards: mission.destination,
                   waypoint:
                     path[Math.min(danger.length ? 6 : 12, path.length - 1)],
-                  post: post ? { x: post.x, y: post.y } : undefined,
+                  post: post
+                    ? {
+                        x: post.x,
+                        y: post.y,
+                        ...(post.bridge ? { onBridge: true } : {}),
+                      }
+                    : undefined,
                   distance: path
                     .slice(1)
                     .reduce(
@@ -839,6 +846,9 @@ export class WarbookBot extends Bot {
                 intent.kind === "move" ? OrderType.Move : OrderType.AttackMove,
                 intent.x,
                 intent.y,
+                intent.onBridge ??
+                  this.mapPrior?.closest(intent, 0)?.bridge ??
+                  false,
               );
             break;
         }
