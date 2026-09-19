@@ -82,6 +82,7 @@ export class BastionStrategy implements StrategicController {
   ): StrategicPlan {
     const base = this.opening.plan(o, assessment);
     const { unitType: armor, factoryType: factory } = this.assessmentRequest(o);
+    const combatArmor = (u: Unit) => u.name === armor || u.name === "SREF";
     for (const u of o.own) if (u.name === armor) this.producedArmor.add(u.ref);
     if (this.producedArmor.size >= this.launchSize)
       this.firstForceFunded = true;
@@ -103,7 +104,9 @@ export class BastionStrategy implements StrategicController {
         !(o.exploredStarts ?? []).some((seen) => distance2(seen, p) < 1),
     );
     const searchGoal = [
-      ...(startsToCheck.length ? startsToCheck : (o.scoutPoints ?? [])),
+      ...(startsToCheck.length
+        ? startsToCheck
+        : (o.armySearchPoints ?? o.scoutPoints ?? [])),
     ].sort(
       (a, b) => distance2(a, searchOrigin) - distance2(b, searchOrigin),
     )[0];
@@ -229,8 +232,7 @@ export class BastionStrategy implements StrategicController {
     let assault = vehicles.filter((u) => this.assault.has(u.ref));
     if (
       hadAssault &&
-      assault.filter((u) => u.name === armor).length <
-        Math.min(3, this.launchedArmor)
+      assault.filter(combatArmor).length < Math.min(3, this.launchedArmor)
     ) {
       this.transition = {
         operationTransition: "force-depleted",
@@ -289,7 +291,8 @@ export class BastionStrategy implements StrategicController {
         : undefined;
     const exploration =
       !this.operations.hasKnownBase &&
-      ready.filter((u) => u.name === armor).length >= this.launchSize &&
+      (ready.filter(combatArmor).length >= this.launchSize ||
+        (this.firstForceFunded && !scouts.length && ready.some(combatArmor))) &&
       searchGoal
         ? {
             point: searchGoal,
@@ -313,7 +316,7 @@ export class BastionStrategy implements StrategicController {
       nextOperation
     ) {
       this.assault = new Set(ready.map((u) => u.ref));
-      this.launchedArmor = ready.filter((u) => u.name === armor).length;
+      this.launchedArmor = ready.filter(combatArmor).length;
       this.transition = {
         operationTransition: nextOperation.reason,
         operationTransitionTick: o.tick,

@@ -2237,6 +2237,19 @@ test("base discovery sends the army to a possible start instead of chasing a har
   assert.deepEqual(c.controlPlan!.combat.destination, o.starts[1]);
 });
 
+test("the army uses its own reachable search points instead of infantry-only terrain", () => {
+  const c = new Commander("bastion"),
+    o = observation();
+  o.own = Array.from({ length: 6 }, (_, i) =>
+    tank(`t-${i}`, 71 + (i % 3), 38 + Math.floor(i / 3)),
+  );
+  o.exploredStarts = o.starts;
+  o.scoutPoints = [{ x: 36, y: 28 }];
+  o.armySearchPoints = [{ x: 80, y: 80 }];
+  c.decide(o);
+  assert.deepEqual(c.controlPlan!.combat.destination, { x: 80, y: 80 });
+});
+
 test("an available shot is not abandoned to chase the squad focus outside range", () => {
   const u = { ...tank("gun", 0, 0), weaponRange: 5 };
   const nearby = {

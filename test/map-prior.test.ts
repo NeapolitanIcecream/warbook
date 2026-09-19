@@ -77,3 +77,13 @@ test("flank planning selects a separate real passage around a central barrier", 
   assert(prior.path(from, flank).length > 0);
   assert(prior.path(flank, to).length > 0);
 });
+
+test("passable decorative islands are distinct from the army's reachable region", () => {
+  const prior = new MapPrior([
+    { x: 0, y: 0, z: 0, bridge: false },
+    { x: 1, y: 0, z: 0, bridge: false },
+    { x: 10, y: 0, z: 0, bridge: false },
+  ]);
+  assert.equal(prior.region({ x: 0, y: 0 }), prior.region({ x: 1, y: 0 }));
+  assert.notEqual(prior.region({ x: 0, y: 0 }), prior.region({ x: 10, y: 0 }));
+});

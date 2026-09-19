@@ -142,7 +142,9 @@ export class Operations {
   }
 
   consider(o: Observation, force: readonly Unit[]): Operation | undefined {
-    const tanks = force.filter((u) => ["MTNK", "HTNK"].includes(u.name));
+    const tanks = force.filter((u) =>
+      ["MTNK", "HTNK", "SREF"].includes(u.name),
+    );
     this.decision = {
       operationReason: "assembling-force",
       formedTanks: tanks.length,
@@ -268,7 +270,9 @@ export class Operations {
 
   target(o: Observation, force: readonly Unit[]): Operation | undefined {
     if (!this.active) return;
-    const tanks = force.filter((u) => ["MTNK", "HTNK"].includes(u.name));
+    const tanks = force.filter((u) =>
+      ["MTNK", "HTNK", "SREF"].includes(u.name),
+    );
     if (!tanks.length) return;
     const center = {
       x: tanks.reduce((s, u) => s + u.x, 0) / tanks.length,

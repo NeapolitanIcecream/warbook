@@ -21,6 +21,7 @@ const key = (p: Point & { bridge?: boolean }) =>
 export class MapPrior {
   private graph = createGraph<MapCell>();
   private openPoints: MapCell[] = [];
+  private regions = new Map<string | number, number>();
   get points(): readonly MapCell[] {
     return this.openPoints;
   }
@@ -53,6 +54,25 @@ export class MapPrior {
             this.graph.addLink(key(p), q.id);
         }
       }
+    this.regions.clear();
+    let region = 0;
+    this.graph.forEachNode((node) => {
+      if (this.regions.has(node.id)) return;
+      const id = region++,
+        pending = [node.id];
+      this.regions.set(node.id, id);
+      for (let i = 0; i < pending.length; i++)
+        this.graph.forEachLinkedNode(pending[i], (next) => {
+          if (!this.regions.has(next.id)) {
+            this.regions.set(next.id, id);
+            pending.push(next.id);
+          }
+        });
+    });
+  }
+  region(point: Point): number | undefined {
+    const node = this.closest(point);
+    return node ? this.regions.get(key(node)) : undefined;
   }
   refreshVisible(map: MapApi, owner: string) {
     let changed = false;
@@ -71,6 +91,10 @@ export class MapPrior {
   }
   closest(p: Point, radius = 8): MapCell | undefined {
     const layers = p.onBridge === undefined ? [false, true] : [p.onBridge];
+    for (const onBridge of layers) {
+      const exact = this.graph.getNode(key({ x: p.x, y: p.y, onBridge }));
+      if (exact) return exact.data;
+    }
     let best: MapCell | undefined,
       distance = radius ** 2 + 0.01;
     for (let x = Math.floor(p.x - radius); x <= p.x + radius; x++)

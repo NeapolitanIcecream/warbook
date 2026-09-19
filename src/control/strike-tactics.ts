@@ -55,6 +55,7 @@ export class StrikeTactics extends LocalCombat {
     const march = mission.destination;
     const members = o.own.filter((u) => mission.units.includes(u.ref));
     const tanks = members.filter(armor);
+    if (!tanks.length) tanks.push(...members.filter((u) => u.name === "SREF"));
     if (!mission.destination || !tanks.length)
       return super.control(o, mission, evidence);
     const previousLeader = tanks.find(

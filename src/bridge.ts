@@ -56,6 +56,7 @@ export class WarbookBot extends Bot {
   private intentSequence = 0;
   private pendingEffects: PendingEffect[] = [];
   private scoutPoints: readonly Point[] = [];
+  private armySearchPoints: readonly Point[] = [];
   private scoutRevisitPoints: readonly Point[] = [];
   private exploredStarts: readonly Point[] = [];
   private lastScoutScan = -150;
@@ -141,7 +142,35 @@ export class WarbookBot extends Bot {
     if (tick - this.lastScoutScan >= 150) {
       const size = this.game.map.getRealMapSize();
       const points: Point[] = [];
+      const armyPoints: Point[] = [];
       const revisit: Point[] = [];
+      const ownHome = { x: data.startLocation.x, y: data.startLocation.y };
+      const mainRefs = new Set(this.commander.controlPlan?.combat.units ?? []);
+      const scoutRefs = new Set(
+        (this.commander.controlPlan?.additionalCombat ?? [])
+          .filter((m) => m.kind === "scout")
+          .flatMap((m) => m.units),
+      );
+      const knownOwn = this.lastObservation?.own ?? [];
+      const regionFor = (nav: MapPrior | undefined, units: readonly Unit[]) => {
+        const counts = new Map<number, number>();
+        for (const u of units) {
+          const id = nav?.region(u);
+          if (id !== undefined) counts.set(id, (counts.get(id) ?? 0) + 1);
+        }
+        return (
+          [...counts].sort((a, b) => b[1] - a[1])[0]?.[0] ??
+          nav?.region(ownHome)
+        );
+      };
+      const vehicleRegion = regionFor(
+        this.mapPrior,
+        knownOwn.filter((u) => mainRefs.has(u.ref) && u.type === 7),
+      );
+      const footRegion = regionFor(
+        this.footPrior,
+        knownOwn.filter((u) => scoutRefs.has(u.ref)),
+      );
       const scoutSpeed = (
         this.game.rules.getObject(
           data.country!.side === 0 ? "ADOG" : "DOG",
@@ -151,10 +180,39 @@ export class WarbookBot extends Bot {
       for (let x = 4; x < size.width; x += 8)
         for (let y = 4; y < size.height; y += 8) {
           const tile = this.game.map.getTile(x, y);
-          if (this.footPrior && !this.footPrior.closest({ x, y }, 0)) continue;
+          const vehicleCell = this.mapPrior?.closest({ x, y }, 0);
+          const footCell = this.footPrior?.closest({ x, y }, 0);
+          if (
+            tile &&
+            vehicleCell &&
+            this.mapPrior!.region({
+              ...vehicleCell,
+              onBridge: vehicleCell.bridge,
+            }) === vehicleRegion &&
+            !this.game.map.isVisibleTile(tile, this.name)
+          )
+            armyPoints.push({
+              x,
+              y,
+              ...(vehicleCell.bridge ? { onBridge: true } : {}),
+            });
+          if (
+            !footCell ||
+            this.footPrior!.region({
+              ...footCell,
+              onBridge: footCell.bridge,
+            }) !== footRegion
+          )
+            continue;
           // Static map domain and our own shroud only, without unseen terrain or occupancy queries.
           if (tile && !this.game.map.isVisibleTile(tile, this.name))
-            points.push(Object.freeze({ x, y }));
+            points.push(
+              Object.freeze({
+                x,
+                y,
+                ...(footCell.bridge ? { onBridge: true } : {}),
+              }),
+            );
           else if (
             tile &&
             this.game.map.isPassableTile(tile, scoutSpeed!, false, true)
@@ -162,6 +220,7 @@ export class WarbookBot extends Bot {
             revisit.push(Object.freeze({ x, y }));
         }
       this.scoutPoints = Object.freeze(points);
+      this.armySearchPoints = Object.freeze(armyPoints);
       this.scoutRevisitPoints = Object.freeze(revisit);
       this.exploredStarts = this.game.map
         .getStartingLocations()
@@ -710,6 +769,7 @@ export class WarbookBot extends Bot {
       queues,
       buildSites,
       scoutPoints: this.scoutPoints,
+      armySearchPoints: this.armySearchPoints,
       scoutRevisitPoints: this.scoutRevisitPoints,
       exploredStarts: this.exploredStarts,
       scoutObservedTick: this.lastScoutScan,
