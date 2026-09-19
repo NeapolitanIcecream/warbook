@@ -1,0 +1,33 @@
+{
+  "purpose": "Final broad comparison after removing the duplicate launch veto and verifying radar/prism production; same fixed pool as the recorded 0.1.14 baseline.",
+  "subjects": {
+    "release-015": {
+      "ref": "e07221957686687e38e5bd1e0127868c5252eee0",
+      "mode": "bastion"
+    }
+  },
+  "opponents": {
+    "pressure-evolved": {
+      "ref": "36acb74",
+      "mode": "pressure"
+    },
+    "pressure-014": {
+      "ref": "v0.1.14",
+      "mode": "pressure"
+    },
+    "old-defense": {
+      "ref": "b3a1f7c",
+      "mode": "bastion"
+    },
+    "supalosa": {
+      "native": "supalosa"
+    }
+  },
+  "maps": [
+    "mp29u2.map",
+    "mp06t2.map",
+    "mp08t2.map",
+    "mp03t4.map"
+  ],
+  "rounds": 2
+}

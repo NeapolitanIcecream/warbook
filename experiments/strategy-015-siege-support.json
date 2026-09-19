@@ -1,0 +1,28 @@
+{
+  "purpose": "Check real advanced production and ranged fire in the recorded late fortified stalemate matchups; main and pressure both evolve.",
+  "subjects": {
+    "bastion-flank": {
+      "ref": "fcd7bf612c48782f921e01abbd2407634112bc88",
+      "mode": "bastion"
+    },
+    "pressure-flank": {
+      "ref": "fcd7bf612c48782f921e01abbd2407634112bc88",
+      "mode": "pressure"
+    }
+  },
+  "opponents": {
+    "pressure-evolved": {
+      "ref": "36acb74",
+      "mode": "pressure"
+    },
+    "pressure-014": {
+      "ref": "v0.1.14",
+      "mode": "pressure"
+    }
+  },
+  "maps": [
+    "mp06t2.map",
+    "mp03t4.map"
+  ],
+  "rounds": 2
+}

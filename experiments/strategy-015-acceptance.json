@@ -1,0 +1,37 @@
+{
+  "purpose": "Fresh final control comparison after accurate legal navigation, native full-route travel, and a scoped large-force pressure rule.",
+  "subjects": {
+    "candidate-015": {
+      "ref": "9720424491cd40be3ef5ee9cabbe7cfcdfebb289",
+      "mode": "bastion"
+    },
+    "baseline-014": {
+      "ref": "v0.1.14",
+      "mode": "bastion"
+    }
+  },
+  "opponents": {
+    "pressure-evolved": {
+      "ref": "36acb74",
+      "mode": "pressure"
+    },
+    "pressure-014": {
+      "ref": "v0.1.14",
+      "mode": "pressure"
+    },
+    "old-defense": {
+      "ref": "b3a1f7c",
+      "mode": "bastion"
+    },
+    "supalosa": {
+      "native": "supalosa"
+    }
+  },
+  "maps": [
+    "mp29u2.map",
+    "mp06t2.map",
+    "mp08t2.map",
+    "mp03t4.map"
+  ],
+  "rounds": 2
+}

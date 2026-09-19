@@ -1,0 +1,25 @@
+{
+  "purpose": "Confirm that the final pressure-only home-defense change leaves evaluated main behavior unchanged.",
+  "subjects": {
+    "main-final": {
+      "ref": "4085fba",
+      "mode": "bastion"
+    }
+  },
+  "shadows": {
+    "main-final": {
+      "ref": "6c24547",
+      "mode": "bastion"
+    }
+  },
+  "opponents": {
+    "supalosa": {
+      "native": "supalosa"
+    }
+  },
+  "maps": [
+    "mp29u2.map",
+    "mp06t2.map"
+  ],
+  "rounds": 1
+}

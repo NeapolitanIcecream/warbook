@@ -1,0 +1,23 @@
+{
+  "purpose": "Verify native whole-route travel and exact static/observed passability after the recorded urban march blockage.",
+  "subjects": {
+    "native-travel": {
+      "ref": "b821ed0e92eece9bf3aa6f61d4972895c1f73f72",
+      "mode": "bastion"
+    }
+  },
+  "opponents": {
+    "supalosa": {
+      "native": "supalosa"
+    },
+    "old-defense": {
+      "ref": "b3a1f7c",
+      "mode": "bastion"
+    }
+  },
+  "maps": [
+    "mp29u2.map",
+    "mp06t2.map"
+  ],
+  "rounds": 2
+}

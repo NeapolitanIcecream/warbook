@@ -1,0 +1,28 @@
+{
+  "purpose": "Remove the duplicate global launch veto, search real candidate base areas, and adapt at local contact using flanks and ranged support.",
+  "subjects": {
+    "bastion-flank": {
+      "ref": "e07221957686687e38e5bd1e0127868c5252eee0",
+      "mode": "bastion"
+    },
+    "pressure-flank": {
+      "ref": "e07221957686687e38e5bd1e0127868c5252eee0",
+      "mode": "pressure"
+    }
+  },
+  "opponents": {
+    "pressure-evolved": {
+      "ref": "36acb74",
+      "mode": "pressure"
+    },
+    "pressure-014": {
+      "ref": "v0.1.14",
+      "mode": "pressure"
+    }
+  },
+  "maps": [
+    "mp06t2.map",
+    "mp03t4.map"
+  ],
+  "rounds": 2
+}
