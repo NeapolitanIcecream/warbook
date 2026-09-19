@@ -2109,3 +2109,57 @@ test("short withdrawal counts deployed infantry and holds the contact until rein
   );
   assert.equal(result.report.facts.holdingContact, false);
 });
+
+test("armor counts nearby firing support without taking ownership of those infantry", () => {
+  const evaluate = (guardX: number) => {
+    const tactics = new StrikeTactics(),
+      o = observation();
+    const tanks = Array.from({ length: 4 }, (_, i) =>
+      tank(`tank-${i}`, 78 + (i % 2), 40 + Math.floor(i / 2)),
+    );
+    o.own = [
+      ...tanks,
+      ...Array.from({ length: 3 }, (_, i) => ({
+        ...tank(`guard-${i}`, guardX, 40 + i),
+        name: "E1",
+        type: 3,
+        deployed: true,
+        weaponRange: 4,
+        deployedWeaponRange: 5,
+      })),
+    ];
+    o.enemies = Array.from({ length: 14 }, (_, i) => ({
+      ref: `enemy-${i}`,
+      name: "E1",
+      type: 3,
+      x: 82 + (i % 2),
+      y: 38 + Math.floor(i / 2),
+      hp: 125,
+      maxHp: 125,
+      weaponRange: 5,
+      deployed: true,
+      observedTick: o.tick,
+    }));
+    const mission: CombatMission = {
+      id: "main",
+      revision: 1,
+      kind: "advance",
+      units: tanks.map((u) => u.ref),
+      destination: { x: 90, y: 40 },
+      objective: "attack-opportunity",
+      engagement: { allowCrush: true },
+    };
+    return tactics.control(o, mission, []);
+  };
+  const close = evaluate(80),
+    far = evaluate(30);
+  assert(Number(close.report.facts.supportingFirePower) > 1);
+  assert.equal(far.report.facts.supportingFirePower, 0);
+  assert.equal(close.report.facts.holdingContact, false);
+  assert.equal(far.report.facts.holdingContact, true);
+  assert(
+    close.intents.every(
+      (i) => !("refs" in i) || i.refs.every((ref) => ref.startsWith("tank-")),
+    ),
+  );
+});

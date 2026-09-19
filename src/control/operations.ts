@@ -28,7 +28,6 @@ const distance = (a: Point, b: Point) => Math.sqrt(distance2(a, b));
 
 /** Operational estimates from observed contacts, not engine truth or a battle simulator. */
 export class Operations {
-  constructor(private readonly launchMargin = 1.2) {}
   private known = new Map<string, Contact>();
   private pressured = false;
   private lastPressureTick = -Infinity;
@@ -176,8 +175,7 @@ export class Operations {
       const estimate = this.opposition(o, target, center, tanks.length);
       const { defenders, productionArrivals, travelSeconds } = estimate;
       const uncertainty = visible ? 0 : 1;
-      const required =
-        (defenders + productionArrivals + uncertainty) * this.launchMargin;
+      const required = (defenders + productionArrivals + uncertainty) * 1.2;
       if (required < lowestRequired) {
         lowestRequired = required;
         this.decision = {

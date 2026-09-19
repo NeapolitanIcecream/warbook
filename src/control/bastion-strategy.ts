@@ -30,7 +30,7 @@ export class BastionStrategy implements StrategicController {
   private readonly relief = new DefenseRelief();
   private readonly neutral = new NeutralEconomy();
   private readonly recon = new Reconnaissance();
-  private readonly operations: Operations;
+  private readonly operations = new Operations();
   private readonly revisions = new Map<string, TaskRevision>();
   private readonly productionRevision = new TaskRevision();
   private assault = new Set<string>();
@@ -47,7 +47,6 @@ export class BastionStrategy implements StrategicController {
   private scoutRefs = new Set<string>();
 
   constructor(private readonly doctrine: "bastion" | "cohort" = "bastion") {
-    this.operations = new Operations(doctrine === "cohort" ? 1 : 1.2);
     this.id =
       doctrine === "bastion" ? "bastion-strategy-v11" : "cohort-strategy-v6";
   }
