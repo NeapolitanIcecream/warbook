@@ -839,7 +839,7 @@ test("a defensive handoff cancels an offensive order even when the old hold key 
   );
 });
 
-test("a cancelled attack keeps withdrawing until arrival, without renewed crushing", () => {
+test("a depleted attack keeps withdrawing until arrival, without renewed crushing", () => {
   const c = new Commander("bastion"),
     o = observation();
   o.own = Array.from({ length: 6 }, (_, i) =>
@@ -861,7 +861,7 @@ test("a cancelled attack keeps withdrawing until arrival, without renewed crushi
   c.decide(o);
   assert.equal(c.controlPlan!.combat.kind, "advance");
   o.tick += 150;
-  o.own = o.own.map((u) => ({ ...u, x: u.x + 18 }));
+  o.own = o.own.slice(0, 2).map((u) => ({ ...u, x: u.x + 18 }));
   o.enemies.push(
     ...Array.from({ length: 8 }, (_, i) => ({
       ref: `enemy-${i}`,
@@ -916,7 +916,7 @@ test("a cancelled attack keeps withdrawing until arrival, without renewed crushi
     "a recovering group cannot hold a fresh formed force hostage",
   );
   assert(c.controlPlan!.combat.units.every((ref) => ref.startsWith("fresh-")));
-  assert.equal(recovery()!.units.length, 6);
+  assert.equal(recovery()!.units.length, 2);
   const outpost = building("outpost", "GAPOWR", 88, 43);
   o.own.push(outpost);
   o.tick += 3;
@@ -926,7 +926,7 @@ test("a cancelled attack keeps withdrawing until arrival, without renewed crushi
   c.decide(o);
   assert.equal(
     recovery()!.units.length,
-    6,
+    2,
     "ordinary relief does not interrupt units still recovering",
   );
   assert(
@@ -1971,4 +1971,29 @@ test("native marching groups preserve unit goals and production while keeping in
     ],
   };
   assert.deepEqual(individual.decide(contact), grouped.decide(contact));
+});
+
+test("scouts inspect enemy production surroundings before unrelated fog cells", () => {
+  const recon = new Reconnaissance();
+  const o = observation();
+  const dog = { ...tank("dog", 12, 0), name: "ADOG", type: 3 };
+  o.own.push(dog);
+  o.enemies = [
+    {
+      ref: "enemy-factory",
+      name: "GAWEAP",
+      type: 2,
+      x: 50,
+      y: 0,
+      hp: 1000,
+      maxHp: 1000,
+      observedTick: o.tick,
+    },
+  ];
+  o.scoutPoints = [
+    { x: 16, y: 16 },
+    { x: 52, y: 8 },
+  ];
+  const goal = recon.destination(o, [dog]);
+  assert.deepEqual(goal, { x: 52, y: 8 });
 });

@@ -49,6 +49,7 @@ export class WarbookBot extends Bot {
   private intentSequence = 0;
   private pendingEffects: PendingEffect[] = [];
   private scoutPoints: readonly Point[] = [];
+  private scoutRevisitPoints: readonly Point[] = [];
   private exploredStarts: readonly Point[] = [];
   private lastScoutScan = -150;
   private lastControlReportTick = -150;
@@ -110,14 +111,27 @@ export class WarbookBot extends Bot {
     if (tick - this.lastScoutScan >= 150) {
       const size = this.game.map.getRealMapSize();
       const points: Point[] = [];
+      const revisit: Point[] = [];
+      const scoutSpeed = (
+        this.game.rules.getObject(
+          data.country!.side === 0 ? "ADOG" : "DOG",
+          ObjectType.Infantry,
+        ) as TechnoRules
+      ).speedType;
       for (let x = 4; x < size.width; x += 8)
         for (let y = 4; y < size.height; y += 8) {
           const tile = this.game.map.getTile(x, y);
           // Static map domain and our own shroud only, without unseen terrain or occupancy queries.
           if (tile && !this.game.map.isVisibleTile(tile, this.name))
             points.push(Object.freeze({ x, y }));
+          else if (
+            tile &&
+            this.game.map.isPassableTile(tile, scoutSpeed!, false, true)
+          )
+            revisit.push(Object.freeze({ x, y }));
         }
       this.scoutPoints = Object.freeze(points);
+      this.scoutRevisitPoints = Object.freeze(revisit);
       this.exploredStarts = this.game.map
         .getStartingLocations()
         .filter((p) => {
@@ -462,6 +476,7 @@ export class WarbookBot extends Bot {
       queues,
       buildSites,
       scoutPoints: this.scoutPoints,
+      scoutRevisitPoints: this.scoutRevisitPoints,
       exploredStarts: this.exploredStarts,
       scoutObservedTick: this.lastScoutScan,
       defenseRoute: this.defenseRoute,

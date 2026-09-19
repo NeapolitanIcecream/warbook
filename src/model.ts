@@ -70,6 +70,8 @@ export interface Observation {
   home: Point;
   starts: Point[];
   scoutPoints?: readonly Point[];
+  /** Explored, passable observation posts for revisiting known enemy production. */
+  scoutRevisitPoints?: readonly Point[];
   /** Public start tiles that our own shroud has already revealed. */
   exploredStarts?: readonly Point[];
   scoutObservedTick?: number;

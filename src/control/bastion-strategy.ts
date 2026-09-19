@@ -42,7 +42,7 @@ export class BastionStrategy implements StrategicController {
 
   constructor(private readonly doctrine: "bastion" | "cohort" = "bastion") {
     this.id =
-      doctrine === "bastion" ? "bastion-strategy-v10" : "cohort-strategy-v6";
+      doctrine === "bastion" ? "bastion-strategy-v11" : "cohort-strategy-v6";
   }
 
   assessmentRequest(o: Observation) {
@@ -189,7 +189,8 @@ export class BastionStrategy implements StrategicController {
       assault = [];
       this.nextLaunchTick = o.tick + 450;
     }
-    if (assault.length && !this.operations.target(o, assault)) {
+    let operation = this.operations.target(o, assault);
+    if (assault.length && !operation) {
       beginWithdrawal();
       this.assault.clear();
       this.joining.clear();
@@ -202,7 +203,9 @@ export class BastionStrategy implements StrategicController {
       ),
       musterPost,
     );
-    const opportunity = this.operations.consider(o, ready);
+    const opportunity = !assault.length
+      ? this.operations.consider(o, ready)
+      : undefined;
     const exploration =
       !this.operations.hasKnownBase &&
       ready.filter((u) => u.name === armor).length >= this.launchSize &&
@@ -231,6 +234,7 @@ export class BastionStrategy implements StrategicController {
       this.assault = new Set(ready.map((u) => u.ref));
       this.launchedArmor = ready.filter((u) => u.name === armor).length;
       this.operations.active = nextOperation;
+      operation = nextOperation;
       assault = vehicles.filter((u) => this.assault.has(u.ref));
     }
     if (assault.length) {
@@ -293,7 +297,7 @@ export class BastionStrategy implements StrategicController {
       ...economy,
       revision: this.productionRevision.update(productionDescription),
     };
-    const operation = this.operations.target(o, assault);
+
     const combat = this.mission("main-force", {
       kind: assault.length
         ? "advance"

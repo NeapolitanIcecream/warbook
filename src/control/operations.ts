@@ -5,7 +5,6 @@ import {
   type Point,
   type Unit,
 } from "../model.js";
-import { canFinishNearby } from "./finishing.js";
 
 export interface Operation {
   point: Point;
@@ -267,46 +266,43 @@ export class Operations {
 
   target(o: Observation, force: readonly Unit[]): Operation | undefined {
     if (!this.active) return;
-    // Exploration serves target discovery. A newly located base or MCV must
-    // replace the old search waypoint, even if that waypoint was never reached.
-    if (
-      this.active.reason === "formed-advance" &&
-      (this.hasKnownBase || o.enemies.some(mcv))
-    ) {
-      this.active = this.consider(o, force);
-      if (!this.active) return;
-    }
-    const visible = o.enemies.find((e) => e.ref === this.active!.ref);
-    const remembered = this.active.ref
+    const tanks = force.filter((u) => ["MTNK", "HTNK"].includes(u.name));
+    if (!tanks.length) return;
+    const center = {
+      x: tanks.reduce((s, u) => s + u.x, 0) / tanks.length,
+      y: tanks.reduce((s, u) => s + u.y, 0) / tanks.length,
+    };
+    const current = this.active.ref
       ? this.known.get(this.active.ref)
       : undefined;
-    const target = visible ?? remembered;
-    const tanks = force.filter((u) => ["MTNK", "HTNK"].includes(u.name));
-    if (target && tanks.length) {
-      const center = {
-        x: tanks.reduce((s, u) => s + u.x, 0) / tanks.length,
-        y: tanks.reduce((s, u) => s + u.y, 0) / tanks.length,
+    // The launch estimate chooses whether to start an expedition. Once committed,
+    // local tactics owns engagement/short withdrawal; fog memories and hypothetical
+    // future production must not repeatedly send a viable army back across the map.
+    const target =
+      current ??
+      [...this.known.values()]
+        .filter((e) => e.type === 2 || mcv(e))
+        .sort((a, b) => distance2(a, center) - distance2(b, center))[0];
+    if (target) {
+      this.active = {
+        ...this.active,
+        point: { x: target.x, y: target.y },
+        ref: target.ref,
+        ...(this.active.reason === "formed-advance"
+          ? { reason: "attack-opportunity" as const }
+          : {}),
       };
-      const estimate = this.opposition(o, target, center, tanks.length);
-      const power = tanks.reduce((s, u) => s + Math.sqrt(u.hp / u.maxHp), 0);
-      const finishNow = canFinishNearby(visible, tanks);
-      // Re-evaluate during travel and combat. A small commitment margin avoids
-      // cancelling a viable fight at exactly the stricter launch threshold.
-      if (
-        !finishNow &&
-        power < (estimate.defenders + estimate.productionArrivals) * 1.05
-      ) {
-        this.active = this.consider(o, force);
-        if (!this.active)
-          this.decision.operationReason = "operation-no-longer-supported";
-      } else
-        this.active = {
-          ...this.active,
-          point: { x: target.x, y: target.y },
-          ...estimate,
-        };
-    } else if (force.some((u) => distance2(u, this.active!.point) <= 8 ** 2))
-      this.active = this.consider(o, force);
+      this.decision = {
+        operationReason: "continue-committed-operation",
+        formedTanks: tanks.length,
+      };
+    } else if (force.some((u) => distance2(u, this.active!.point) <= 8 ** 2)) {
+      this.active = undefined;
+      this.decision = {
+        operationReason: "objective-area-cleared",
+        formedTanks: tanks.length,
+      };
+    }
     return this.active
       ? {
           ...this.active,

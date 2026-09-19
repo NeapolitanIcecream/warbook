@@ -19,6 +19,7 @@ export const isScout = (unit: Unit) => ["ADOG", "DOG"].includes(unit.name);
 /** A separate scout keeps checking approaches while the army builds, defends or fights. */
 export class Reconnaissance {
   private visited = new Map<string, number>();
+  private bases = new Map<string, Point>();
   private postponed = new Map<string, number>();
   private routes = new Map<
     string,
@@ -40,6 +41,17 @@ export class Reconnaissance {
         (route = { bestDistance: Infinity, progressTick: o.tick }),
       );
     const points = o.scoutPoints ?? [];
+    for (const e of o.enemies)
+      if (e.type === 2) this.bases.set(e.ref, { x: e.x, y: e.y });
+    const baseDistance = (p: Point) =>
+      Math.min(...[...this.bases.values()].map((b) => distance2(p, b)));
+    const inspect = (p: Point) => baseDistance(p) <= 20 ** 2;
+    const revisits = (o.scoutRevisitPoints ?? []).filter(inspect);
+    // Freshness comes from our observer reaching a post, not from a grid cell
+    // having lost its shroud once earlier in the game.
+    for (const p of revisits)
+      if (o.own.some((u) => distance2(u, p) <= 4 ** 2))
+        this.visited.set(key(p), o.tick);
     const avoiding = feedback?.additionalCombat?.some(
       (r) => r.task.id === missionId && r.reason === "avoid-visible-threat",
     );
@@ -73,7 +85,8 @@ export class Reconnaissance {
       const revealed =
         o.scoutPoints !== undefined &&
         !o.starts.some((p) => key(p) === key(route.goal!)) &&
-        !points.some((p) => key(p) === key(route.goal!));
+        !points.some((p) => key(p) === key(route.goal!)) &&
+        !revisits.some((p) => key(p) === key(route.goal!));
       if (distance <= 4 ** 2 || revealed) {
         this.visited.set(key(route.goal), o.tick);
         route.goal = undefined;
@@ -87,21 +100,25 @@ export class Reconnaissance {
       const starts = o.starts.filter(
         (p) => distance2(p, o.home) > 12 ** 2 && !this.visited.has(key(p)),
       );
-      const candidates = [...starts, ...points];
+      const candidates = [...starts, ...points, ...revisits];
       const threats = o.enemies.filter((e) => (e.weaponRange ?? 0) > 0);
       route.goal = candidates
         .filter(
           (p) =>
             available(p) &&
             (this.postponed.get(key(p)) ?? 0) <= o.tick &&
-            o.tick - (this.visited.get(key(p)) ?? -Infinity) >= 900 &&
+            o.tick - (this.visited.get(key(p)) ?? -Infinity) >= 600 &&
             !threats.some(
-              (e) => distance2(e, p) <= ((e.weaponRange ?? 5) + 3) ** 2,
+              (e) => distance2(e, p) <= ((e.weaponRange ?? 5) + 1.5) ** 2,
             ),
         )
         .sort(
           (a, b) =>
+            Number(inspect(b)) - Number(inspect(a)) ||
             Number(starts.includes(b)) - Number(starts.includes(a)) ||
+            (inspect(a) && inspect(b)
+              ? baseDistance(a) - baseDistance(b)
+              : 0) ||
             distance2(unit, a) - distance2(unit, b) ||
             a.x - b.x ||
             a.y - b.y,
@@ -144,7 +161,7 @@ export class ScoutTactics {
       const threats = o.enemies.filter(
         (e) =>
           (e.weaponRange ?? 0) > 0 &&
-          distance2(unit, e) <= ((e.weaponRange ?? 5) + 3) ** 2,
+          distance2(unit, e) <= ((e.weaponRange ?? 5) + 1.5) ** 2,
       );
       let retreat = this.retreat.get(ref);
       if (

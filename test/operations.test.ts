@@ -56,7 +56,7 @@ test("a long attack on a partially scouted base reserves risk for unknown produc
   assert(Number(planner.decision.productionArrivals) > 0);
 });
 
-test("discovering a base replaces an unreached exploration waypoint and checks its defenders", () => {
+test("discovering a base replaces exploration while local tactics owns defender response", () => {
   const o = observation([]),
     planner = new Operations();
   const searching = {
@@ -82,9 +82,9 @@ test("discovering a base replaces an unreached exploration waypoint and checks i
   );
   planner.observe(o, []);
   assert.equal(
-    planner.target(o, o.own),
-    undefined,
-    "discovery is not permission to attack a stronger defense",
+    planner.target(o, o.own)?.ref,
+    "new-base",
+    "discovery preserves the mission; tactics can retreat locally without cancelling it",
   );
 });
 
@@ -128,7 +128,7 @@ test("a lead tank crossing the home boundary does not hide its supporting group"
   );
 });
 
-test("newly revealed defenders invalidate an ongoing attack before the force is lost", () => {
+test("newly revealed defenders do not cause a second strategic withdrawal veto", () => {
   const target = contact("target", "GAREFN", 30, 2);
   const o = observation([target, contact("factory", "GAWEAP", 100, 2)]);
   const planner = new Operations();
@@ -143,7 +143,7 @@ test("newly revealed defenders invalidate an ongoing attack before the force is 
     ),
   );
   planner.observe(o, []);
-  assert.equal(planner.target(o, o.own), undefined);
+  assert.equal(planner.target(o, o.own)?.ref, target.ref);
 
   target.hp = 20;
   planner.active = {
