@@ -5,6 +5,40 @@ import type { ProductionPlan } from "../src/control/contracts.js";
 import type { Observation, Unit } from "../src/model.js";
 import { observedEffect, rememberIntent } from "../src/effects.js";
 
+test("planned siege technology reserves new armor spending and then produces its ranged unit", () => {
+  const { o, plan } = fixture();
+  const p = {
+    ...plan,
+    structures: [
+      { product: "GAAIRC", count: 1 },
+      { product: "GATECH", count: 1 },
+    ],
+    vehicles: {
+      ...plan.vehicles,
+      harvesters: 3,
+      siege: { product: "SREF", count: 3 },
+    },
+  };
+  o.products.push({ name: "GAAIRC", cost: 1000, type: 2, queue: 0 });
+  const production = new QueueProduction();
+  let result = production.control(o, p, []);
+  assert(
+    result.intents.some(
+      (i) => i.kind === "queue" && i.product.name === "GAAIRC",
+    ),
+  );
+  assert(
+    !result.intents.some(
+      (i) => i.kind === "queue" && i.product.name === "MTNK",
+    ),
+  );
+  o.products.push({ name: "SREF", cost: 1200, type: 7, queue: 3 });
+  result = production.control(o, p, []);
+  assert(
+    result.intents.some((i) => i.kind === "queue" && i.product.name === "SREF"),
+  );
+});
+
 const unit = (name: string, ref: string, buildStatus?: number): Unit => ({
   name,
   ref,

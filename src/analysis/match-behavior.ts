@@ -3,7 +3,7 @@ import type { StrategicPlan } from "../control/contracts.js";
 import { combatSignals } from "./combat-signals.js";
 
 const distance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
-export const isArmor = (name: string) => ["MTNK", "HTNK"].includes(name);
+export const isArmor = (name: string) => ["MTNK", "HTNK", "SREF"].includes(name);
 export const clockTime = (tick: number) =>
   `${Math.floor(tick / 900)}:${String(Math.floor((tick % 900) / 15)).padStart(2, "0")}`;
 

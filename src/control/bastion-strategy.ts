@@ -47,6 +47,7 @@ export class BastionStrategy implements StrategicController {
   private scoutRefs = new Set<string>();
   private flankRefs = new Set<string>();
   private flankVia?: Point;
+  private developSiege = false;
 
   constructor(private readonly doctrine: "bastion" | "cohort" = "bastion") {
     this.id =
@@ -277,13 +278,15 @@ export class BastionStrategy implements StrategicController {
       !opportunity &&
       !responding &&
       this.operations.hasKnownBase &&
-      alternative &&
+      (alternative || ready.filter((u) => u.name === "SREF").length >= 2) &&
       ready.filter((u) => u.name === armor).length >= 12 &&
       ready.reduce((n, u) => n + Math.sqrt(u.hp / u.maxHp), 0) >=
         Number(this.operations.decision.defenders ?? Infinity) * 0.65
         ? {
             point: stagingDirection,
-            reason: "two-front-pressure" as const,
+            reason: alternative
+              ? ("two-front-pressure" as const)
+              : ("ranged-pressure" as const),
             defenders: Number(this.operations.decision.defenders ?? 0),
             productionArrivals: Number(
               this.operations.decision.productionArrivals ?? 0,
@@ -356,7 +359,10 @@ export class BastionStrategy implements StrategicController {
       if (
         !this.joining.size &&
         nextBatch.filter((u) => u.name === armor).length >=
-          (assault.filter((u) => u.name === armor).length <= 3 ? 2 : 4)
+          (assault.filter((u) => u.name === armor).length <= 3 ||
+          nextBatch.some((u) => u.name === "SREF")
+            ? 2
+            : 4)
       )
         this.joining = new Set(nextBatch.map((u) => u.ref));
     }
@@ -367,6 +373,16 @@ export class BastionStrategy implements StrategicController {
     const fort = o.side === 0 ? "GAPILL" : "NALASR";
     const refinery = o.side === 0 ? "GAREFN" : "NAREFN";
     const mobilizing = !this.firstForceFunded;
+    if (
+      o.side === 0 &&
+      assessment.observedArmor >= 12 &&
+      o.credits >= 500 &&
+      !responding &&
+      this.operations.hasKnownBase &&
+      (!operation ||
+        ["two-front-pressure", "ranged-pressure"].includes(operation.reason))
+    )
+      this.developSiege = true;
     const resourceFields = (o.oreFields ?? []).filter((f) => f.amount >= 180);
     const expand =
       !mobilizing &&
@@ -385,6 +401,11 @@ export class BastionStrategy implements StrategicController {
             : g.count
           : g.count,
     }));
+    if (this.developSiege)
+      economyStructures.push(
+        { product: "GAAIRC", count: 1 },
+        { product: "GATECH", count: 1 },
+      );
     const income = this.neutral.plan(o);
     const economy = {
       ...base.production,
@@ -392,6 +413,9 @@ export class BastionStrategy implements StrategicController {
       vehicles: {
         ...base.production.vehicles,
         harvesters: expand ? 5 : base.production.vehicles.harvesters,
+        ...(this.developSiege && assessment.observedArmor >= 8
+          ? { siege: { product: "SREF", count: 3 } }
+          : {}),
       },
       spending: {
         ...base.production.spending,

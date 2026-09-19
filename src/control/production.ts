@@ -113,12 +113,26 @@ export class QueueProduction implements ProductionController {
       ).length;
     const committedHarvesters =
       liveHarvesters + queuedHarvesters + refineryHarvesters;
+    const fundingSiege =
+      v.siege &&
+      !o.products.some((p) => p.name === v.siege!.product) &&
+      plan.structures.some(
+        (g) =>
+          ["GAAIRC", "GATECH"].includes(g.product) &&
+          count(g.product) < g.count,
+      );
     queue(
       o.own.filter((u) => u.antiAir && u.mobile).length < v.mobileAntiAir
         ? v.antiAir
         : committedHarvesters < v.harvesters
           ? v.harvester
-          : v.armor,
+          : v.siege &&
+              count(v.siege.product) < v.siege.count &&
+              o.products.some((p) => p.name === v.siege!.product)
+            ? v.siege.product
+            : fundingSiege
+              ? undefined
+              : v.armor,
     );
     const infantry = o.own.filter((u) =>
       plan.scouts ? u.name === plan.infantry.product : u.type === 3 && u.combat,

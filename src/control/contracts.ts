@@ -47,6 +47,7 @@ export interface ProductionPlan extends TaskIdentity {
     readonly harvesters: number;
     readonly antiAir: string;
     readonly mobileAntiAir: number;
+    readonly siege?: { readonly product: string; readonly count: number };
   };
   readonly infantry: { readonly product: string; readonly count: number };
   readonly engineers?: { readonly product: string; readonly count: number };

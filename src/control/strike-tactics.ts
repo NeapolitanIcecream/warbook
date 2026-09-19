@@ -193,9 +193,41 @@ export class StrikeTactics extends LocalCombat {
         proposed.push(intent);
       }
     };
-    let retreating = 0,
+    let rangedEngaging = 0,
+      retreating = 0,
       rotating = 0;
     for (const u of members) {
+      if (
+        (u.weaponRange ?? 0) >= 8 &&
+        threats.every(
+          (e) => weaponDistance2(u, e) > ((e.weaponRange ?? 5) + 2) ** 2,
+        )
+      ) {
+        const rangedTarget = o.enemies
+          .filter(
+            (e) =>
+              !e.airborne &&
+              (e.weaponRange ?? 0) + 2 < u.weaponRange! &&
+              distance2(e, rally) <= 18 ** 2 &&
+              weaponDistance2(u, e) <= (u.weaponRange! + 5) ** 2,
+          )
+          .sort(
+            (a, b) =>
+              Number(b.type === 2 && (b.weaponRange ?? 0) > 0) -
+                Number(a.type === 2 && (a.weaponRange ?? 0) > 0) ||
+              weaponDistance2(u, a) - weaponDistance2(u, b),
+          )[0];
+        if (rangedTarget) {
+          rangedEngaging++;
+          issue(u, `siege:${rangedTarget.ref}`, {
+            kind: "attack",
+            refs: [u.ref],
+            target: rangedTarget.ref,
+            task: mission.id,
+          });
+          continue;
+        }
+      }
       const close = hard.filter(
         (e) => distance2(u, e) <= ((e.weaponRange ?? 5) + 1) ** 2,
       );
@@ -339,6 +371,7 @@ export class StrikeTactics extends LocalCombat {
           stragglers: lagging.length,
           retreating,
           rotating,
+          rangedEngaging,
           visibleHardTargets: nearby.length,
           localEnemyPower: enemyPower,
           localOwnPower: ownPower,
