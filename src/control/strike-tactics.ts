@@ -20,6 +20,7 @@ import {
   localArmorTarget,
   rotationPost,
   antiArmorPower,
+  rangedFallback,
 } from "./combat-targets.js";
 import { canFinishNearby } from "./finishing.js";
 
@@ -194,6 +195,17 @@ export class StrikeTactics extends LocalCombat {
       retreating = 0,
       rotating = 0;
     for (const u of members) {
+      const screen = rangedFallback(u, tanks, o.enemies);
+      if (screen) {
+        retreating++;
+        issue(u, `screen:${screen.x}:${screen.y}`, {
+          kind: "move",
+          refs: [u.ref],
+          ...screen,
+          task: mission.id,
+        });
+        continue;
+      }
       if (
         (u.weaponRange ?? 0) >= 8 &&
         threats.every(
@@ -216,7 +228,7 @@ export class StrikeTactics extends LocalCombat {
           )[0];
         if (rangedTarget) {
           rangedEngaging++;
-          issue(u, `siege:${rangedTarget.ref}`, {
+          issue(u, `attack:${rangedTarget.ref}`, {
             kind: "attack",
             refs: [u.ref],
             target: rangedTarget.ref,
@@ -300,6 +312,7 @@ export class StrikeTactics extends LocalCombat {
         mission.engagement.allowCrush &&
         !(preferred && mission.objective === "exposed-construction") &&
         u.crusher &&
+        (u.weaponRange ?? 0) < 8 &&
         !hard.some((e) => distance2(e, u) <= 10 ** 2)
           ? o.enemies
               .filter(

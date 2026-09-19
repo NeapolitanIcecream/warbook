@@ -106,3 +106,31 @@ export function rotationPost(
     .sort((a, b) => nearest(b) - nearest(a))[0];
   return peer ? { x: peer.x, y: peer.y } : undefined;
 }
+
+/** Long-range, fragile vehicles keep an armored screen between themselves and a closing enemy. */
+export function rangedFallback(
+  unit: Unit,
+  force: readonly Unit[],
+  enemies: readonly Contact[],
+): Point | undefined {
+  if ((unit.weaponRange ?? 0) < 8 || unit.onBridge) return;
+  const close = enemies.filter(
+    (e) =>
+      antiArmorPower(e) > 0 &&
+      weaponDistance2(unit, e) <= ((e.weaponRange ?? 5) + 3) ** 2,
+  );
+  if (!close.length) return;
+  const separation = (u: Unit) =>
+    Math.min(...close.map((e) => weaponDistance2(u, e)));
+  const cover = force
+    .filter(
+      (u) =>
+        u.ref !== unit.ref &&
+        !u.onBridge &&
+        (u.weaponRange ?? 0) < 8 &&
+        distance2(u, unit) <= 9 ** 2 &&
+        separation(u) > separation(unit) + 4,
+    )
+    .sort((a, b) => separation(b) - separation(a))[0];
+  return cover ? { x: cover.x, y: cover.y } : undefined;
+}

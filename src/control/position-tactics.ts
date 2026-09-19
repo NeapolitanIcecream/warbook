@@ -10,6 +10,7 @@ import {
   localArmorTarget,
   supportedTarget,
   rotationPost,
+  rangedFallback,
 } from "./combat-targets.js";
 import { StrikeTactics } from "./strike-tactics.js";
 import { ScoutTactics } from "./reconnaissance.js";
@@ -319,6 +320,16 @@ export class PositionTactics extends LocalCombat {
         }
         this.targets.delete(ref);
       } else if (mission.kind !== "withdraw") {
+        const screen = rangedFallback(unit, armor, o.enemies);
+        if (screen) {
+          issue(
+            ref,
+            `screen:${screen.x}:${screen.y}`,
+            { kind: "move", refs: [ref], ...screen, task: mission.id },
+            90,
+          );
+          continue;
+        }
         const close = o.enemies.filter(
           (e) =>
             (!e.airborne || unit.antiAir) &&
@@ -330,7 +341,10 @@ export class PositionTactics extends LocalCombat {
           this.lastPositionOrders.delete(ref);
         }
         const infantry =
-          unit.crusher && mission.engagement.allowCrush && !sharedTarget
+          unit.crusher &&
+          (unit.weaponRange ?? 0) < 8 &&
+          mission.engagement.allowCrush &&
+          !sharedTarget
             ? close
                 .filter(
                   (e) =>
