@@ -76,6 +76,32 @@ function fixture(soviet = false): { o: Observation; plan: ProductionPlan } {
 const vehicleOrder = (result: ReturnType<QueueProduction["control"]>) =>
   result.intents.find((i) => i.kind === "queue" && i.product.queue === 3);
 
+test("building repair enables a damaged owned building without toggling an active repair off", () => {
+  const { o, plan } = fixture();
+  const controller = new QueueProduction();
+  const building = o.own.find((u) => u.refinery)!;
+  building.repairable = true;
+  building.hasWrenchRepair = false;
+  building.hp = 400;
+  o.credits = 100;
+  const repairs = () =>
+    controller.control(o, plan, []).intents.filter((i) => i.kind === "repair");
+  assert.equal(repairs().length, 1);
+  o.tick += 3;
+  assert.equal(repairs().length, 0);
+  o.tick += 30;
+  building.hasWrenchRepair = true;
+  assert.equal(repairs().length, 0);
+  o.tick += 30;
+  building.hasWrenchRepair = false;
+  building.hp = building.maxHp;
+  assert.equal(repairs().length, 0);
+  o.tick += 30;
+  building.hp = 400;
+  o.credits = 0;
+  assert.equal(repairs().length, 0);
+});
+
 test("one surviving scout does not prevent building or replacing a second scout", () => {
   const { o, plan: basePlan } = fixture();
   const controller = new QueueProduction();

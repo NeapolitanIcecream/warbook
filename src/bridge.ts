@@ -154,6 +154,8 @@ export class WarbookBot extends Bot {
         refinery: u.rules.refinery,
         combat: u.rules.isSelectableCombatant,
         buildStatus: u.buildStatus,
+        repairable: u.rules.repairable,
+        hasWrenchRepair: u.hasWrenchRepair,
         deployed: u.stance === 3,
         crusher: u.rules.crusher,
         antiAir: combatCapabilities(u).antiAir,

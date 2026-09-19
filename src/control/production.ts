@@ -14,16 +14,29 @@ const harvesterRefineries = new Set(["GAREFN", "NAREFN"]);
 
 /** Executes inventory goals and credit gates. It does not choose economic expansion policy. */
 export class QueueProduction implements ProductionController {
-  readonly id = "queue-production-v3";
+  readonly id = "queue-production-v4-repair-study";
   private lastDeploy = new Map<string, number>();
   private lastScoutsSatisfied = -Infinity;
   private lastScoutRequested = -Infinity;
+  private lastRepairCheck = -Infinity;
   control(
     o: Observation,
     plan: ProductionPlan,
     evidence: readonly ExecutionEvidence[],
   ): ControlResult {
     const intents: Intent[] = [];
+    if (o.credits > 0 && o.tick - this.lastRepairCheck >= 30) {
+      this.lastRepairCheck = o.tick;
+      for (const unit of o.own)
+        if (
+          unit.type === 2 &&
+          unit.repairable &&
+          !unit.hasWrenchRepair &&
+          unit.hp > 0 &&
+          unit.hp < unit.maxHp
+        )
+          intents.push({ kind: "repair", ref: unit.ref });
+    }
     const count = (name: string) => o.own.filter((u) => u.name === name).length;
     const blocked: Record<string, number> = {
       unavailable: 0,
