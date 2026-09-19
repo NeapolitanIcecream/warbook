@@ -286,13 +286,28 @@ export class WarbookBot extends Bot {
                     )))
               );
             });
-          const path = this.mapPrior!.path(center, post ?? mission.destination);
+          const danger =
+            mission.kind === "scout" || mission.id.startsWith("pressure-")
+              ? enemies
+                  .filter((e) => !e.airborne && (e.weaponRange ?? 0) > 0)
+                  .map((e) => ({
+                    x: e.x,
+                    y: e.y,
+                    radius: (e.weaponRange ?? 5) + 2,
+                  }))
+              : [];
+          const path = this.mapPrior!.path(
+            center,
+            post ?? mission.destination,
+            danger,
+          );
           return path.length
             ? [
                 {
                   task: mission.id,
                   towards: mission.destination,
-                  waypoint: path[Math.min(12, path.length - 1)],
+                  waypoint:
+                    path[Math.min(danger.length ? 6 : 12, path.length - 1)],
                   post: post ? { x: post.x, y: post.y } : undefined,
                   distance: path
                     .slice(1)

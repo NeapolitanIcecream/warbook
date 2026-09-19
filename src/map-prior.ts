@@ -50,12 +50,18 @@ export class MapPrior {
     return best;
   }
 
-  path(from: Point, to: Point): Point[] {
+  path(
+    from: Point,
+    to: Point,
+    danger: readonly (Point & { radius: number })[] = [],
+  ): Point[] {
     const a = this.closest(from),
       b = this.closest(to);
     if (!a || !b) return [];
     return aStar(this.graph, {
-      distance: (a, b) => Math.sqrt(distance2(a.data, b.data)),
+      distance: (a, b) =>
+        Math.sqrt(distance2(a.data, b.data)) *
+        (danger.some((e) => distance2(b.data, e) <= e.radius ** 2) ? 30 : 1),
       heuristic: (a, b) => Math.sqrt(distance2(a.data, b.data)),
     })
       .find(key(a), key(b))

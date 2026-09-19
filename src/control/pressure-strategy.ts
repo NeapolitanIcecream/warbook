@@ -16,7 +16,7 @@ import {
 
 /** Independent pressure route: two infantry groups attack separate economic targets. */
 export class PressureStrategy implements StrategicController {
-  readonly id = "two-front-pressure-v3";
+  readonly id = "two-front-pressure-v4";
   private readonly base = new BastionStrategy("cohort");
   private readonly revisions = new Map<string, TaskRevision>();
   private readonly productionRevision = new TaskRevision();
@@ -85,6 +85,14 @@ export class PressureStrategy implements StrategicController {
         Number(b.name.endsWith("POWR")) - Number(a.name.endsWith("POWR")) ||
         distance2(a, o.home) - distance2(b, o.home),
     );
+    const raidingWindow =
+      structures.some(
+        (e) => exposed(e) === 0 && o.enemies.some((v) => v.ref === e.ref),
+      ) || plan.combat.kind === "advance";
+    if (!raidingWindow) {
+      for (const group of this.groups) group.clear();
+      allocated.clear();
+    }
     const first = structures[0];
     const second = first
       ? [...structures]
@@ -105,7 +113,13 @@ export class PressureStrategy implements StrategicController {
     this.groups.forEach((group, i) => {
       if (!group.size) return;
       const target = i ? (second ?? first) : first;
-      const goal = target ?? starts[i % starts.length];
+      const armorFront =
+        target && exposed(target) > 0 && plan.combat.kind === "advance"
+          ? o.own
+              .filter((u) => plan.combat.units.includes(u.ref) && u.type === 7)
+              .sort((a, b) => distance2(a, target) - distance2(b, target))[0]
+          : undefined;
+      const goal = armorFront ?? target ?? starts[i % starts.length];
       const destination = goal ? { x: goal.x, y: goal.y } : undefined;
       if (dogs[i] && destination) {
         const front = gi
@@ -144,7 +158,7 @@ export class PressureStrategy implements StrategicController {
     const { revision: _old, ...production } = plan.production;
     const updated = {
       ...production,
-      infantry: { ...production.infantry, count: 10 },
+      infantry: { ...production.infantry, count: raidingWindow ? 10 : 6 },
       scouts: { product: o.side === 0 ? "ADOG" : "DOG", count: 3, required: 1 },
       structures: [
         ...production.structures,
