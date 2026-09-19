@@ -50,11 +50,12 @@ test("bridge waypoints retain the layer and only observed destruction removes th
     getTile: () => ({}),
     isVisibleTile: () => visible,
     hasBridgeOnTile: () => false,
+    isPassableTile: () => true,
   } as unknown as MapApi;
-  prior.updateVisibleBridges(map, "self");
+  prior.refreshVisible(map, "self");
   assert.equal(route().length, 3, "unseen bridge state cannot change planning");
   visible = true;
-  prior.updateVisibleBridges(map, "self");
+  prior.refreshVisible(map, "self");
   assert.equal(route().length, 0);
 });
 

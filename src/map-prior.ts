@@ -1,73 +1,90 @@
 import createGraph from "ngraph.graph";
 import { aStar } from "ngraph.path";
 import {
-  TerrainType,
   ObjectType,
   type GameApi,
   type MapApi,
+  type SpeedType,
 } from "@chronodivide/game-api";
 import { distance2, type Point } from "./model.js";
 
 export interface MapCell extends Point {
   z: number;
   bridge: boolean;
+  passable?: boolean;
 }
-const key = (p: Point) => `${p.x}:${p.y}`;
+const key = (p: Point & { bridge?: boolean }) =>
+  `${p.x}:${p.y}:${(p.bridge ?? p.onBridge) ? 1 : 0}`;
 
-/** A pregame map, frozen before the first simulation step. No player objects,
- * remaining resources, live occupancy or engine path caches enter this graph. */
+/** Static terrain at tick zero, then only explored passability updates. The pinned
+ * getPassableSpeed query ignores mobile units and does not touch engine path caches. */
 export class MapPrior {
   private graph = createGraph<MapCell>();
-  readonly points: readonly MapCell[];
-  constructor(cells: readonly MapCell[]) {
-    this.points = cells;
-    for (const cell of cells) this.graph.addNode(key(cell), cell);
-    for (const p of cells)
+  private openPoints: MapCell[] = [];
+  get points(): readonly MapCell[] {
+    return this.openPoints;
+  }
+  constructor(
+    private cells: MapCell[],
+    private speed: SpeedType = 1,
+    private subCell = false,
+  ) {
+    this.rebuild();
+  }
+  private rebuild() {
+    this.graph = createGraph<MapCell>();
+    this.openPoints = this.cells.filter((p) => p.passable !== false);
+    for (const p of this.openPoints) this.graph.addNode(key(p), p);
+    for (const p of this.openPoints)
       for (const [dx, dy] of [
         [-1, 0],
         [-1, -1],
         [0, -1],
         [1, -1],
       ]) {
-        const q = this.graph.getNode(key({ x: p.x + dx, y: p.y + dy }));
-        if (
-          q &&
-          Math.abs(p.z - q.data.z) <= (p.bridge || q.data.bridge ? 0 : 1)
-        )
-          this.graph.addLink(key(p), q.id);
-      }
-  }
-
-  updateVisibleBridges(map: MapApi, owner: string): void {
-    for (const p of this.points)
-      if (p.bridge && this.graph.hasNode(key(p))) {
-        const tile = map.getTile(p.x, p.y);
-        if (
-          tile &&
-          map.isVisibleTile(tile, owner) &&
-          !map.hasBridgeOnTile(tile)
-        )
-          this.graph.removeNode(key(p));
-      }
-  }
-
-  closest(p: Point, radius = 8): MapCell | undefined {
-    const exact = this.graph.getNode(key(p));
-    if (exact) return exact.data;
-    let best: MapCell | undefined,
-      d = radius ** 2 + 0.01;
-    for (let x = Math.floor(p.x - radius); x <= p.x + radius; x++)
-      for (let y = Math.floor(p.y - radius); y <= p.y + radius; y++) {
-        const node = this.graph.getNode(key({ x, y }));
-        const next = node ? distance2(p, node.data) : Infinity;
-        if (next < d) {
-          best = node!.data;
-          d = next;
+        for (const onBridge of [false, true]) {
+          const q = this.graph.getNode(
+            key({ x: p.x + dx, y: p.y + dy, onBridge }),
+          );
+          if (
+            q &&
+            Math.abs(p.z - q.data.z) <= (p.bridge || q.data.bridge ? 0 : 1)
+          )
+            this.graph.addLink(key(p), q.id);
         }
       }
+  }
+  refreshVisible(map: MapApi, owner: string) {
+    let changed = false;
+    for (const p of this.cells) {
+      const tile = map.getTile(p.x, p.y);
+      if (!tile || !map.isVisibleTile(tile, owner)) continue;
+      const passable =
+        (!p.bridge || map.hasBridgeOnTile(tile)) &&
+        map.isPassableTile(tile, this.speed, p.bridge, this.subCell);
+      if (passable !== (p.passable !== false)) {
+        p.passable = passable;
+        changed = true;
+      }
+    }
+    if (changed) this.rebuild();
+  }
+  closest(p: Point, radius = 8): MapCell | undefined {
+    const layers = p.onBridge === undefined ? [false, true] : [p.onBridge];
+    let best: MapCell | undefined,
+      distance = radius ** 2 + 0.01;
+    for (let x = Math.floor(p.x - radius); x <= p.x + radius; x++)
+      for (let y = Math.floor(p.y - radius); y <= p.y + radius; y++)
+        for (const onBridge of layers) {
+          const node = this.graph.getNode(key({ x, y, onBridge }));
+          const next = node ? distance2(p, node.data) : Infinity;
+          if (next < distance) {
+            best = node!.data;
+            distance = next;
+          }
+        }
     return best;
   }
-
   path(
     from: Point,
     to: Point,
@@ -90,7 +107,6 @@ export class MapPrior {
         ...(n.data.bridge ? { onBridge: true } : {}),
       }));
   }
-
   flank(from: Point, to: Point): Point | undefined {
     const primary = this.path(from, to);
     if (primary.length < 24) return;
@@ -106,55 +122,49 @@ export class MapPrior {
       .reverse()
       .find(
         (p) =>
-          distance2(p, to) >= 10 ** 2 &&
-          primary.every((q) => distance2(p, q) >= 8 ** 2),
+          distance2(p, to) >= 100 &&
+          primary.every((q) => distance2(p, q) >= 64),
       );
   }
-
-  static readPregame(game: GameApi): MapPrior {
+  static readPregame(
+    game: GameApi,
+    speed: SpeedType = 1,
+    subCell = false,
+  ): MapPrior {
     if (game.getCurrentTick() !== 0)
       throw new Error("Map prior must be captured before simulation");
     const map = game.map,
       size = map.getRealMapSize(),
-      blocked = new Set<string>();
-    // Neutral structures are fixed map scenery at initialization; no combatant query.
-    for (const id of game.getNeutralUnits(
-      (r) => r.type === ObjectType.Building,
-    )) {
-      const b = game.getUnitData(id)!;
-      for (let x = b.tile.rx; x < b.tile.rx + b.foundation.width; x++)
-        for (let y = b.tile.ry; y < b.tile.ry + b.foundation.height; y++)
-          blocked.add(key({ x, y }));
-    }
-    const cells: MapCell[] = [];
+      cells: MapCell[] = [];
     for (let x = 0; x < size.width; x++)
       for (let y = 0; y < size.height; y++) {
         const tile = map.getTile(x, y);
-        if (!tile || blocked.has(key({ x, y }))) continue;
-        const bridge = map.hasBridgeOnTile(tile);
-        if (
-          !bridge &&
-          [
-            TerrainType.Water,
-            TerrainType.Cliff,
-            TerrainType.Rock1,
-            TerrainType.Rock2,
-          ].includes(tile.terrainType)
-        )
-          continue;
-        // Elevation is read only from initial static bridge overlays, never units.
-        const elevation = bridge
-          ? Math.max(
-              0,
-              ...map
-                .getObjectsOnTile(tile)
-                .map((id) => game.getGameObjectData(id))
-                .filter((o) => o?.type === ObjectType.Overlay)
-                .map((o) => o!.tileElevation),
-            )
-          : 0;
-        cells.push({ x, y, z: tile.z + elevation, bridge });
+        if (!tile) continue;
+        cells.push({
+          x,
+          y,
+          z: tile.z,
+          bridge: false,
+          passable: map.isPassableTile(tile, speed, false, subCell),
+        });
+        if (map.hasBridgeOnTile(tile)) {
+          const elevation = Math.max(
+            0,
+            ...map
+              .getObjectsOnTile(tile)
+              .map((id) => game.getGameObjectData(id))
+              .filter((o) => o?.type === ObjectType.Overlay)
+              .map((o) => o!.tileElevation),
+          );
+          cells.push({
+            x,
+            y,
+            z: tile.z + elevation,
+            bridge: true,
+            passable: map.isPassableTile(tile, speed, true, subCell),
+          });
+        }
       }
-    return new MapPrior(cells);
+    return new MapPrior(cells, speed, subCell);
   }
 }

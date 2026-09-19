@@ -43,6 +43,7 @@ export interface Trace {
 export class WarbookBot extends Bot {
   private readonly commander: Commander;
   private mapPrior?: MapPrior;
+  private footPrior?: MapPrior;
   private routes: NonNullable<Observation["routes"]> = [];
   private lastRoutesTick = -150;
   private oreFields: NonNullable<Observation["oreFields"]> = [];
@@ -82,7 +83,26 @@ export class WarbookBot extends Bot {
     this.commander = new Commander(mode);
   }
   override onGameInit(game: GameApi): void {
-    this.mapPrior = MapPrior.readPregame(game);
+    const side = this.player.getPlayerData().country!.side;
+    this.mapPrior = MapPrior.readPregame(
+      game,
+      (
+        game.rules.getObject(
+          side === 0 ? "MTNK" : "HTNK",
+          ObjectType.Vehicle,
+        ) as TechnoRules
+      ).speedType!,
+    );
+    this.footPrior = MapPrior.readPregame(
+      game,
+      (
+        game.rules.getObject(
+          side === 0 ? "E1" : "E2",
+          ObjectType.Infantry,
+        ) as TechnoRules
+      ).speedType!,
+      true,
+    );
   }
   override onGameTick(game: GameApi): void {
     if (
@@ -131,7 +151,7 @@ export class WarbookBot extends Bot {
       for (let x = 4; x < size.width; x += 8)
         for (let y = 4; y < size.height; y += 8) {
           const tile = this.game.map.getTile(x, y);
-          if (this.mapPrior && !this.mapPrior.closest({ x, y }, 0)) continue;
+          if (this.footPrior && !this.footPrior.closest({ x, y }, 0)) continue;
           // Static map domain and our own shroud only, without unseen terrain or occupancy queries.
           if (tile && !this.game.map.isVisibleTile(tile, this.name))
             points.push(Object.freeze({ x, y }));
@@ -235,7 +255,8 @@ export class WarbookBot extends Bot {
       })
       .map((e) => e.ref);
     if (tick - this.lastRoutesTick >= 90 && this.mapPrior) {
-      this.mapPrior.updateVisibleBridges(this.game.map, this.name);
+      this.mapPrior.refreshVisible(this.game.map, this.name);
+      this.footPrior?.refreshVisible(this.game.map, this.name);
       const plan = this.commander.controlPlan;
       this.routes = [plan?.combat, ...(plan?.additionalCombat ?? [])].flatMap(
         (mission) => {
@@ -247,19 +268,25 @@ export class WarbookBot extends Bot {
             return [];
           const units = own.filter((u) => mission.units.includes(u.ref));
           if (!units.length) return [];
+          if (mission.kind === "advance" && units.every((u) => u.type !== 3))
+            return [];
           const center = {
             x: Math.round(units.reduce((s, u) => s + u.x, 0) / units.length),
             y: Math.round(units.reduce((s, u) => s + u.y, 0) / units.length),
           };
+          const navigation =
+            units[0].type === 3 ? this.footPrior! : this.mapPrior!;
+          const origin = [...units].sort(
+            (a, b) => distance2(a, center) - distance2(b, center),
+          )[0];
           const speed = (
             this.game.rules.getObject(
               units[0].name,
               units[0].type,
             ) as TechnoRules
           ).speedType;
-          const post = this.mapPrior!.points.filter(
-            (p) => distance2(p, mission.destination!) <= 8 ** 2,
-          )
+          const post = navigation.points
+            .filter((p) => distance2(p, mission.destination!) <= 8 ** 2)
             .sort(
               (a, b) =>
                 distance2(a, mission.destination!) -
@@ -300,8 +327,8 @@ export class WarbookBot extends Bot {
                     radius: (e.weaponRange ?? 5) + 2,
                   }))
               : [];
-          const path = this.mapPrior!.path(
-            center,
+          const path = navigation.path(
+            { x: origin.x, y: origin.y, onBridge: origin.onBridge },
             post ?? mission.destination,
             danger,
           );

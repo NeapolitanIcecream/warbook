@@ -49,13 +49,9 @@ export class StrikeTactics extends LocalCombat {
     mission: CombatMission,
     evidence: readonly ExecutionEvidence[],
   ): ControlResult {
-    const route = o.routes?.find(
-      (r) =>
-        r.task === mission.id &&
-        mission.destination &&
-        distance2(r.towards, mission.destination) < 4 ** 2,
-    );
-    const march = route?.waypoint ?? mission.destination;
+    // The engine owns complete unit travel. Map planning chooses an approach;
+    // intermediate vehicle waypoints can compete with native obstacle handling.
+    const march = mission.destination;
     const members = o.own.filter((u) => mission.units.includes(u.ref));
     const tanks = members.filter(armor);
     if (!mission.destination || !tanks.length)
