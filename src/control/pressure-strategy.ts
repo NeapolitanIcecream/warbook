@@ -172,6 +172,12 @@ export class PressureStrategy implements StrategicController {
     const { revision: _old, ...production } = plan.production;
     const updated = {
       ...production,
+      defenses: production.defenses?.map((g) => ({
+        ...g,
+        count: this.groups.some((group) => group.size)
+          ? Math.max(1, g.count)
+          : g.count,
+      })),
       infantry: { ...production.infantry, count: raidingWindow ? 10 : 6 },
       scouts: {
         product: o.side === 0 ? "ADOG" : "DOG",
