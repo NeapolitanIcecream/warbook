@@ -16,12 +16,12 @@ export function formedUnits(units: readonly Unit[], near: Point): Unit[] {
 }
 
 /** Native movement needs a real occupied ground tile, not an average that may fall in a cliff. */
-export function rendezvous(units: readonly Unit[]): Point {
+export function rendezvous(units: readonly Unit[], allowBridge = false): Point {
   const center = {
     x: units.reduce((s, u) => s + u.x, 0) / units.length,
     y: units.reduce((s, u) => s + u.y, 0) / units.length,
   };
-  const available = units.filter((u) => !u.onBridge);
+  const available = units.filter((u) => allowBridge || !u.onBridge);
   const unit = [...(available.length ? available : units)].sort(
     (a, b) => distance2(a, center) - distance2(b, center),
   )[0];

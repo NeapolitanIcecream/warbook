@@ -57,7 +57,6 @@ export class WarbookBot extends Bot {
   private pendingEffects: PendingEffect[] = [];
   private scoutPoints: readonly Point[] = [];
   private armySearchPoints: readonly Point[] = [];
-  private scoutRevisitPoints: readonly Point[] = [];
   private exploredStarts: readonly Point[] = [];
   private lastScoutScan = -150;
   private lastControlReportTick = -150;
@@ -140,10 +139,6 @@ export class WarbookBot extends Bot {
     const data = this.player.getPlayerData();
     const tick = this.game.getCurrentTick();
     if (tick - this.lastScoutScan >= 150) {
-      const size = this.game.map.getRealMapSize();
-      const points: Point[] = [];
-      const armyPoints: Point[] = [];
-      const revisit: Point[] = [];
       const ownHome = { x: data.startLocation.x, y: data.startLocation.y };
       const mainRefs = new Set(this.commander.controlPlan?.combat.units ?? []);
       const scoutRefs = new Set(
@@ -171,57 +166,13 @@ export class WarbookBot extends Bot {
         this.footPrior,
         knownOwn.filter((u) => scoutRefs.has(u.ref)),
       );
-      const scoutSpeed = (
-        this.game.rules.getObject(
-          data.country!.side === 0 ? "ADOG" : "DOG",
-          ObjectType.Infantry,
-        ) as TechnoRules
-      ).speedType;
-      for (let x = 4; x < size.width; x += 8)
-        for (let y = 4; y < size.height; y += 8) {
-          const tile = this.game.map.getTile(x, y);
-          const vehicleCell = this.mapPrior?.closest({ x, y }, 0);
-          const footCell = this.footPrior?.closest({ x, y }, 0);
-          if (
-            tile &&
-            vehicleCell &&
-            this.mapPrior!.region({
-              ...vehicleCell,
-              onBridge: vehicleCell.bridge,
-            }) === vehicleRegion &&
-            !this.game.map.isVisibleTile(tile, this.name)
-          )
-            armyPoints.push({
-              x,
-              y,
-              ...(vehicleCell.bridge ? { onBridge: true } : {}),
-            });
-          if (
-            !footCell ||
-            this.footPrior!.region({
-              ...footCell,
-              onBridge: footCell.bridge,
-            }) !== footRegion
-          )
-            continue;
-          // Static map domain and our own shroud only, without unseen terrain or occupancy queries.
-          if (tile && !this.game.map.isVisibleTile(tile, this.name))
-            points.push(
-              Object.freeze({
-                x,
-                y,
-                ...(footCell.bridge ? { onBridge: true } : {}),
-              }),
-            );
-          else if (
-            tile &&
-            this.game.map.isPassableTile(tile, scoutSpeed!, false, true)
-          )
-            revisit.push(Object.freeze({ x, y }));
-        }
-      this.scoutPoints = Object.freeze(points);
-      this.armySearchPoints = Object.freeze(armyPoints);
-      this.scoutRevisitPoints = Object.freeze(revisit);
+      this.scoutPoints = Object.freeze(
+        this.footPrior?.unexplored(this.game.map, this.name, footRegion) ?? [],
+      );
+      this.armySearchPoints = Object.freeze(
+        this.mapPrior?.unexplored(this.game.map, this.name, vehicleRegion) ??
+          [],
+      );
       this.exploredStarts = this.game.map
         .getStartingLocations()
         .filter((p) => {
@@ -770,7 +721,6 @@ export class WarbookBot extends Bot {
       buildSites,
       scoutPoints: this.scoutPoints,
       armySearchPoints: this.armySearchPoints,
-      scoutRevisitPoints: this.scoutRevisitPoints,
       exploredStarts: this.exploredStarts,
       scoutObservedTick: this.lastScoutScan,
       defenseRoute: this.defenseRoute,

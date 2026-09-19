@@ -3,7 +3,8 @@ import type { StrategicPlan } from "../control/contracts.js";
 import { combatSignals } from "./combat-signals.js";
 
 const distance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
-export const isArmor = (name: string) => ["MTNK", "HTNK", "SREF"].includes(name);
+export const isArmor = (name: string) =>
+  ["MTNK", "HTNK", "SREF"].includes(name);
 export const clockTime = (tick: number) =>
   `${Math.floor(tick / 900)}:${String(Math.floor((tick % 900) / 15)).padStart(2, "0")}`;
 
@@ -26,6 +27,9 @@ export class JournalBehavior {
   advanceCombatOrders = 0;
   firstEnemyBuilding?: number;
   firstEnemyMcv?: number;
+  firstEnemyFactory?: number;
+  lastNewEnemyBuilding?: number;
+  private buildingContacts = new Set<string>();
   firstScoutOrder?: number;
   private contactEvents = false;
   private waiting?: {
@@ -95,7 +99,24 @@ export class JournalBehavior {
     if (this.waiting) this.waiting.reason = this.decisionReason;
   }
 
-  onContact(tick: number, contacts: readonly { type: number; name: string }[]) {
+  private recordBuildings(
+    tick: number,
+    contacts: readonly { ref?: string; type: number; name: string }[],
+  ) {
+    for (const c of contacts) {
+      if (["GAWEAP", "NAWEAP"].includes(c.name))
+        this.firstEnemyFactory ??= tick;
+      if (c.type === 2 && c.ref && !this.buildingContacts.has(c.ref)) {
+        this.buildingContacts.add(c.ref);
+        this.lastNewEnemyBuilding = tick;
+      }
+    }
+  }
+  onContact(
+    tick: number,
+    contacts: readonly { ref?: string; type: number; name: string }[],
+  ) {
+    this.recordBuildings(tick, contacts);
     this.contactEvents = true;
     if (contacts.some((e) => e.type === 2)) this.firstEnemyBuilding ??= tick;
     if (contacts.some((e) => ["AMCV", "SMCV"].includes(e.name)))
@@ -128,6 +149,7 @@ export class JournalBehavior {
   }
 
   onObservation(o: Observation) {
+    this.recordBuildings(o.tick, o.enemies);
     const mission = this.plan?.combat;
     if (o.enemies.some((u) => u.type === 2)) this.firstEnemyBuilding ??= o.tick;
     if (o.enemies.some((u) => ["AMCV", "SMCV"].includes(u.name)))
@@ -215,6 +237,8 @@ export class JournalBehavior {
     this.finishWait();
     return {
       firstEnemyBuilding: this.firstEnemyBuilding,
+      firstEnemyFactory: this.firstEnemyFactory,
+      lastNewEnemyBuilding: this.lastNewEnemyBuilding,
       firstEnemyMcv: this.firstEnemyMcv,
       firstScoutOrder: this.firstScoutOrder,
       contactTiming: this.contactEvents ? "contact-events" : "periodic-samples",
@@ -573,6 +597,10 @@ export function renderBehavior(b: ReturnType<ReplayBehavior["finish"]>) {
       `- 实际位移：${clockTime(b.firstAdvanceOutsideHome)} 已采样到进攻主力坦克离开基地 12 格范围；这不等于已攻击敌方基地。`,
     );
   const waiting = b.longestQuietWait;
+  if (b.firstEnemyFactory !== undefined || b.lastNewEnemyBuilding !== undefined)
+    lines.push(
+      `- 建筑情报：重工首次记录 ${b.firstEnemyFactory === undefined ? "未发现" : clockTime(b.firstEnemyFactory)}；最后一次新增建筑接触 ${b.lastNewEnemyBuilding === undefined ? "未记录" : clockTime(b.lastNewEnemyBuilding)}。后者可能是新建或迟发现，需要回放区分。`,
+    );
   if (waiting)
     lines.push(
       `- 未推进时段：${clockTime(waiting.fromTick)}–${clockTime(waiting.toTick)}，持有 ${waiting.minArmor}–${waiting.maxArmor} 辆坦克，未记录近处建筑/矿车威胁；侦察移动指令 ${waiting.scoutMoveOrders} 条，最近决策理由 ${waiting.reason}。需检查集结、情报与风险，不能单凭等待判错。`,

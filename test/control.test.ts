@@ -583,7 +583,7 @@ test("scouts retreat from visible weapons without turning scouting into an attac
   o.enemies = [];
   assert.equal(
     tactics.control(o, mission, []).report.reason,
-    "reveal-and-revisit",
+    "reveal-base-and-routes",
   );
 });
 

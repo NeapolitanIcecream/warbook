@@ -46,12 +46,6 @@ export class Reconnaissance {
     const baseDistance = (p: Point) =>
       Math.min(...[...this.bases.values()].map((b) => distance2(p, b)));
     const inspect = (p: Point) => baseDistance(p) <= 20 ** 2;
-    const revisits = (o.scoutRevisitPoints ?? []).filter(inspect);
-    // Freshness comes from our observer reaching a post, not from a grid cell
-    // having lost its shroud once earlier in the game.
-    for (const p of revisits)
-      if (o.own.some((u) => distance2(u, p) <= 4 ** 2))
-        this.visited.set(key(p), o.tick);
     const avoiding = feedback?.additionalCombat?.some(
       (r) => r.task.id === missionId && r.reason === "avoid-visible-threat",
     );
@@ -85,8 +79,7 @@ export class Reconnaissance {
       const revealed =
         o.scoutPoints !== undefined &&
         !o.starts.some((p) => key(p) === key(route.goal!)) &&
-        !points.some((p) => key(p) === key(route.goal!)) &&
-        !revisits.some((p) => key(p) === key(route.goal!));
+        !points.some((p) => key(p) === key(route.goal!));
       if (distance <= 4 ** 2 || revealed) {
         this.visited.set(key(route.goal), o.tick);
         route.goal = undefined;
@@ -100,7 +93,7 @@ export class Reconnaissance {
       const starts = o.starts.filter(
         (p) => distance2(p, o.home) > 12 ** 2 && !this.visited.has(key(p)),
       );
-      const candidates = [...starts, ...points, ...revisits];
+      const candidates = [...starts, ...points];
       const threats = o.enemies.filter((e) => (e.weaponRange ?? 0) > 0);
       route.goal = candidates
         .filter(
@@ -122,20 +115,6 @@ export class Reconnaissance {
             distance2(unit, a) - distance2(unit, b) ||
             a.x - b.x ||
             a.y - b.y,
-        )[0];
-      // Once explored, periodically revisit known base areas; stale visibility is not fresh intelligence.
-      route.goal ??= o.starts
-        .filter(
-          (p) =>
-            available(p) &&
-            distance2(p, o.home) > 12 ** 2 &&
-            (this.postponed.get(key(p)) ?? 0) <= o.tick &&
-            o.tick - (this.visited.get(key(p)) ?? -Infinity) >= 1800,
-        )
-        .sort(
-          (a, b) =>
-            (this.visited.get(key(a)) ?? -Infinity) -
-            (this.visited.get(key(b)) ?? -Infinity),
         )[0];
       route.bestDistance = route.goal ? distance2(unit, route.goal) : Infinity;
       route.progressTick = o.tick;
@@ -237,7 +216,7 @@ export class ScoutTactics {
       report: {
         task: { id: mission.id, revision: mission.revision },
         status: mission.units.length ? "active" : "idle",
-        reason: avoiding ? "avoid-visible-threat" : "reveal-and-revisit",
+        reason: avoiding ? "avoid-visible-threat" : "reveal-base-and-routes",
         proposedIntents: intents.length,
         facts: { assignedUnits: mission.units.length, avoiding },
         executionEvidence: currentEvidence(mission, evidence),

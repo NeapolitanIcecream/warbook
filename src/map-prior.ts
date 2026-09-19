@@ -74,11 +74,30 @@ export class MapPrior {
     const node = this.closest(point);
     return node ? this.regions.get(key(node)) : undefined;
   }
+  unexplored(map: MapApi, owner: string, region: number | undefined): Point[] {
+    const blocks = new Map<string, Point>();
+    if (region === undefined) return [];
+    for (const p of this.openPoints) {
+      if (this.regions.get(key(p)) !== region) continue;
+      const tile = map.getTile(p.x, p.y);
+      if (!tile || map.isVisibleTile(tile, owner, Math.max(0, p.z - tile.z)))
+        continue;
+      const block = `${Math.floor(p.x / 8)}:${Math.floor(p.y / 8)}:${p.bridge}`;
+      if (!blocks.has(block))
+        blocks.set(block, {
+          x: p.x,
+          y: p.y,
+          ...(p.bridge ? { onBridge: true } : {}),
+        });
+    }
+    return [...blocks.values()];
+  }
   refreshVisible(map: MapApi, owner: string) {
     let changed = false;
     for (const p of this.cells) {
       const tile = map.getTile(p.x, p.y);
-      if (!tile || !map.isVisibleTile(tile, owner)) continue;
+      if (!tile || !map.isVisibleTile(tile, owner, Math.max(0, p.z - tile.z)))
+        continue;
       const passable =
         (!p.bridge || map.hasBridgeOnTile(tile)) &&
         map.isPassableTile(tile, this.speed, p.bridge, this.subCell);

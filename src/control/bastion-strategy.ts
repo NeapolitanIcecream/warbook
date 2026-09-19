@@ -96,8 +96,12 @@ export class BastionStrategy implements StrategicController {
     const scouts = dogs.filter((u) => this.scoutRefs.has(u.ref));
     const infantry = assessment.army.filter((u) => u.type === 3 && !isScout(u));
     const allVehicles = assessment.army.filter((u) => u.type !== 3);
-    const searchOrigin =
-      allVehicles.find((u) => this.assault.has(u.ref)) ?? o.home;
+    const searchForce = allVehicles.filter(
+      (u) => this.assault.has(u.ref) && !this.flankRefs.has(u.ref),
+    );
+    const searchOrigin = searchForce.length
+      ? rendezvous(searchForce, true)
+      : o.home;
     const startsToCheck = o.starts.filter(
       (p) =>
         distance2(p, o.home) > 12 ** 2 &&

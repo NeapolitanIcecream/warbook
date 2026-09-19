@@ -87,3 +87,25 @@ test("passable decorative islands are distinct from the army's reachable region"
   assert.equal(prior.region({ x: 0, y: 0 }), prior.region({ x: 1, y: 0 }));
   assert.notEqual(prior.region({ x: 0, y: 0 }), prior.region({ x: 10, y: 0 }));
 });
+
+test("a revealed grid center cannot hide an unexplored pocket in the same block", () => {
+  const cells = [];
+  for (let x = 0; x < 8; x++)
+    for (let y = 0; y < 8; y++) cells.push({ x, y, z: 0, bridge: false });
+  const prior = new MapPrior(cells);
+  let complete = false;
+  const map = {
+    getTile: (rx: number, ry: number) => ({ rx, ry, z: 0 }),
+    isVisibleTile: (t: { rx: number; ry: number }) =>
+      complete || t.rx !== 7 || t.ry !== 7,
+  } as unknown as MapApi;
+  assert.deepEqual(
+    prior.unexplored(map, "self", prior.region({ x: 0, y: 0 })),
+    [{ x: 7, y: 7 }],
+  );
+  complete = true;
+  assert.deepEqual(
+    prior.unexplored(map, "self", prior.region({ x: 0, y: 0 })),
+    [],
+  );
+});
