@@ -94,8 +94,11 @@ export class MapPrior {
   flank(from: Point, to: Point): Point | undefined {
     const primary = this.path(from, to);
     if (primary.length < 24) return;
-    const middle = primary[Math.floor(primary.length / 2)];
-    const alternate = this.path(from, to, [{ ...middle, radius: 12 }]);
+    const corridor = primary
+      .slice(Math.max(0, primary.length - 36), -10)
+      .filter((_, i) => i % 6 === 0)
+      .map((p) => ({ ...p, radius: 8 }));
+    const alternate = this.path(from, to, corridor);
     if (!alternate.length || alternate.length > primary.length * 1.8 + 8)
       return;
     return alternate

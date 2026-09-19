@@ -175,14 +175,22 @@ export class PressureStrategy implements StrategicController {
       infantry: { ...production.infantry, count: raidingWindow ? 10 : 6 },
       scouts: {
         product: o.side === 0 ? "ADOG" : "DOG",
-        count: o.starts.length > 2 ? 4 : 3,
+        count:
+          (o.starts.length > 2 ? 2 : 1) +
+          (assessment.observedArmor >= 4 ? 2 : 0),
         required: o.starts.length > 2 ? 2 : 1,
       },
       structures: [
         ...production.structures,
         {
           product: o.side === 0 ? "GAPILE" : "NAHAND",
-          count: o.credits >= 1800 && gi.length >= 8 ? 2 : 1,
+          count:
+            assessment.observedArmor >= 6 &&
+            raidingWindow &&
+            o.credits >= 2500 &&
+            gi.length >= 8
+              ? 2
+              : 1,
         },
       ],
     };
