@@ -11,6 +11,7 @@ import { DefenseSituation } from "../src/control/defense-situation.js";
 import { Reconnaissance, ScoutTactics } from "../src/control/reconnaissance.js";
 import { Operations } from "../src/control/operations.js";
 import { formedUnits } from "../src/control/formation.js";
+import { localArmorTarget } from "../src/control/combat-targets.js";
 import { StrikeTactics } from "../src/control/strike-tactics.js";
 import type {
   CombatMission,
@@ -2234,4 +2235,26 @@ test("base discovery sends the army to a possible start instead of chasing a har
   c.decide(o);
   assert.equal(c.controlPlan!.combat.kind, "advance");
   assert.deepEqual(c.controlPlan!.combat.destination, o.starts[1]);
+});
+
+test("an available shot is not abandoned to chase the squad focus outside range", () => {
+  const u = { ...tank("gun", 0, 0), weaponRange: 5 };
+  const nearby = {
+    ref: "near",
+    name: "MTNK",
+    type: 7,
+    x: 4,
+    y: 0,
+    hp: 300,
+    maxHp: 300,
+    observedTick: 0,
+    weaponRange: 5,
+  };
+  const focus = { ...nearby, ref: "focus", x: 8, hp: 40 };
+  assert.equal(localArmorTarget(u, [nearby, focus], focus)?.ref, "near");
+  assert.equal(
+    localArmorTarget(u, [focus], focus)?.ref,
+    "focus",
+    "a rear gun still joins when it has no shot available",
+  );
 });

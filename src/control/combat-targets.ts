@@ -69,11 +69,16 @@ export function localArmorTarget(
         a.hp / a.maxHp - b.hp / b.maxHp ||
         distance2(a, unit) - distance2(b, unit),
     );
-  return unit.antiAir && close[0]?.airborne
-    ? close[0]
-    : shared && weaponDistance2(shared, unit) <= 9 ** 2
-      ? shared
-      : close[0];
+  if (unit.antiAir && close[0]?.airborne) return close[0];
+  const range = unit.weaponRange ?? 5;
+  if (shared && weaponDistance2(shared, unit) <= range ** 2) return shared;
+  const firingTarget = close.find(
+    (e) => weaponDistance2(e, unit) <= range ** 2,
+  );
+  return (
+    firingTarget ??
+    (shared && weaponDistance2(shared, unit) <= 9 ** 2 ? shared : close[0])
+  );
 }
 
 /** A wounded front tank rotates behind a healthy firing peer, not all the way home.
