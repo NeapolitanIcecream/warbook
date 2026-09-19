@@ -177,6 +177,7 @@ export class WarbookBot extends Bot {
         mcv: !!u.rules.deploysInto && !u.rules.harvester,
         yard: u.rules.constructionYard,
         refinery: u.rules.refinery,
+        radar: u.rules.radar,
         combat: u.rules.isSelectableCombatant,
         buildStatus: u.buildStatus,
         repairable: u.rules.repairable,
@@ -511,6 +512,7 @@ export class WarbookBot extends Bot {
       type: p.type,
       cost: p.cost,
       queue: this.player.production.getQueueTypeForObject(p),
+      radar: p.radar,
     }));
     const queues = [0, 1, 2, 3, 4, 5]
       .map((type) => this.player.production.getQueueData(type))

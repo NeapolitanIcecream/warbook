@@ -118,7 +118,8 @@ export class QueueProduction implements ProductionController {
       !o.products.some((p) => p.name === v.siege!.product) &&
       plan.structures.some(
         (g) =>
-          ["GAAIRC", "GATECH"].includes(g.product) &&
+          (g.product === "GATECH" ||
+            o.products.some((p) => p.name === g.product && p.radar)) &&
           count(g.product) < g.count,
       );
     queue(

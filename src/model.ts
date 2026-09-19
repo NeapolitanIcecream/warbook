@@ -25,6 +25,7 @@ export interface Unit extends Point {
   mcv: boolean;
   yard: boolean;
   refinery: boolean;
+  radar?: boolean;
   combat: boolean;
   buildStatus?: number;
   repairable?: boolean;
@@ -57,6 +58,7 @@ export interface Product {
   type: number;
   cost: number;
   queue: number;
+  radar?: boolean;
 }
 export interface Queue {
   type: number;

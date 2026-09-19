@@ -401,9 +401,11 @@ export class BastionStrategy implements StrategicController {
             : g.count
           : g.count,
     }));
-    if (this.developSiege)
+    const radar =
+      o.own.find((u) => u.radar)?.name ?? o.products.find((p) => p.radar)?.name;
+    if (this.developSiege && radar)
       economyStructures.push(
-        { product: "GAAIRC", count: 1 },
+        { product: radar, count: 1 },
         { product: "GATECH", count: 1 },
       );
     const income = this.neutral.plan(o);
