@@ -33,6 +33,7 @@ export interface Unit extends Point {
   deployed?: boolean;
   crusher?: boolean;
   antiAir?: boolean;
+  canThreatenVehicles?: boolean;
   /** Current own weapon data, used to decide whether deploying can provide fire. */
   weaponRange?: number;
   deployedWeaponRange?: number;

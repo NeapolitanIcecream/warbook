@@ -185,6 +185,7 @@ export class WarbookBot extends Bot {
         deployed: u.stance === 3,
         crusher: u.rules.crusher,
         antiAir: combatCapabilities(u).antiAir,
+        canThreatenVehicles: combatCapabilities(u).canThreatenVehicles,
         weaponRange: u.primaryWeapon?.maxRange,
         deployedWeaponRange: u.secondaryWeapon?.rules.neverUse
           ? undefined

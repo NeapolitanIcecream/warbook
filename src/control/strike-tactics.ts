@@ -112,6 +112,7 @@ export class StrikeTactics extends LocalCombat {
         (u) =>
           !coreIds.has(u.ref) &&
           ((u.type === 2 && (u.weaponRange ?? 0) > 0) ||
+            (u.type === 7 && (u.weaponRange ?? 0) >= 8) ||
             (u.type === 3 && (u.deployed || (u.attackState ?? 0) >= 3))),
       )
       .filter((u) =>
