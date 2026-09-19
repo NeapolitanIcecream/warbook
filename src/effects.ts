@@ -40,6 +40,11 @@ export function observedEffect(
 ): string | undefined {
   const i = p.intent;
   if (
+    i.kind === "repair" &&
+    o.own.some((u) => u.ref === i.ref && u.hasWrenchRepair)
+  )
+    return "repair_wrench_enabled";
+  if (
     i.kind === "queue" &&
     o.queues.some(
       (q) =>

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { QueueProduction } from "../src/control/production.js";
 import type { ProductionPlan } from "../src/control/contracts.js";
 import type { Observation, Unit } from "../src/model.js";
+import { observedEffect, rememberIntent } from "../src/effects.js";
 
 const unit = (name: string, ref: string, buildStatus?: number): Unit => ({
   name,
@@ -92,6 +93,13 @@ test("building repair enables a damaged owned building without toggling an activ
   o.tick += 30;
   building.hasWrenchRepair = true;
   assert.equal(repairs().length, 0);
+  assert.equal(
+    observedEffect(
+      rememberIntent("repair", { kind: "repair", ref: building.ref }, o),
+      o,
+    ),
+    "repair_wrench_enabled",
+  );
   o.tick += 30;
   building.hasWrenchRepair = false;
   building.hp = building.maxHp;
