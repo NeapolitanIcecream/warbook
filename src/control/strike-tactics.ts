@@ -1,5 +1,6 @@
 import {
   distance2,
+  weaponDistance2,
   type Contact,
   type Intent,
   type Observation,
@@ -90,10 +91,22 @@ export class StrikeTactics extends LocalCombat {
         ? distance2(e, held.point) <= 12 ** 2
         : core.some((u) => distance2(e, u) <= 10 ** 2),
     );
-    const enemyPower = contactThreats.reduce(
-      (n, e) => n + antiArmorPower(e),
-      0,
-    );
+    // Only guns covering the contact line count fully. Deployed rear infantry
+    // cannot project all its damage through the front rank or across the base.
+    const firingPositions = held ? [held.point] : core;
+    const enemyPower = contactThreats.reduce((n, e) => {
+      const range = e.weaponRange ?? 5;
+      const distance = Math.min(
+        ...firingPositions.map((u) => weaponDistance2(u, e)),
+      );
+      const coverage =
+        distance <= (range + 1.5) ** 2
+          ? 1
+          : e.type === 7 && distance <= (range + 4) ** 2
+            ? 0.5
+            : 0;
+      return n + antiArmorPower(e) * coverage;
+    }, 0);
     const ownPower = core.reduce((n, u) => n + Math.sqrt(u.hp / u.maxHp), 0);
     const overwhelmed =
       !finishNow && enemyPower > Math.max(1.5, ownPower * (held ? 0.95 : 1.1));
@@ -101,11 +114,15 @@ export class StrikeTactics extends LocalCombat {
       const contact = [...contactThreats].sort(
         (a, b) => distance2(a, rally) - distance2(b, rally),
       )[0];
-      if (contact)
+      if (contact) {
+        const front = [...core].sort(
+          (a, b) => distance2(a, contact) - distance2(b, contact),
+        )[0];
         this.heldContacts.set(mission.id, {
-          point: { x: contact.x, y: contact.y },
+          point: { x: front.x, y: front.y },
           goal: mission.destination,
         });
+      }
     } else if (!overwhelmed) this.heldContacts.delete(mission.id);
     const lagging = tanks.filter((u) => !coreIds.has(u.ref));
     const inContact = core.some((u) =>

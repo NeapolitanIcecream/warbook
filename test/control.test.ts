@@ -2077,7 +2077,7 @@ test("short withdrawal counts deployed infantry and holds the contact until rein
     ref: `gi-${i}`,
     name: "E1",
     type: 3,
-    x: 84 + (i % 2),
+    x: 82 + (i % 2),
     y: 38 + Math.floor(i / 2),
     hp: 125,
     maxHp: 125,
