@@ -52,15 +52,25 @@ export class DefenseRelief {
       enemyPower * 1.2 -
       guards.reduce((n, u) => n + 0.2 * hp(u), 0) -
       forts.reduce((n, u) => n + 0.45 * hp(u), 0);
-    const available = [...vehicles].sort(
-      (a, b) =>
-        Math.sqrt(distance2(a, point)) +
-        (assault.has(a.ref) ? 8 : 0) -
-        (this.selected.has(a.ref) ? 4 : 0) -
-        (Math.sqrt(distance2(b, point)) +
-          (assault.has(b.ref) ? 8 : 0) -
-          (this.selected.has(b.ref) ? 4 : 0)),
-    );
+    const available = vehicles
+      .filter(
+        (u) =>
+          !assault.has(u.ref) ||
+          !o.enemies.some(
+            (e) =>
+              (e.weaponRange ?? 0) > 0 &&
+              weaponDistance2(u, e) <= ((e.weaponRange ?? 5) + 1) ** 2,
+          ),
+      )
+      .sort(
+        (a, b) =>
+          Math.sqrt(distance2(a, point)) +
+          (assault.has(a.ref) ? 8 : 0) -
+          (this.selected.has(a.ref) ? 4 : 0) -
+          (Math.sqrt(distance2(b, point)) +
+            (assault.has(b.ref) ? 8 : 0) -
+            (this.selected.has(b.ref) ? 4 : 0)),
+      );
     const selected: Unit[] = [];
     for (const u of available) {
       if (deficit <= 0) break;

@@ -42,7 +42,10 @@ export class DefenseSituation {
     // not new anchors that may drag the whole garrison out of the base.
     const assets = o.own.filter((u) => u.harvester || u.type === 2);
     const guardAssets = assets.filter(
-      (u) => u.type === 2 && !(u.weaponRange ?? 0),
+      (u) =>
+        u.type === 2 &&
+        !(u.weaponRange ?? 0) &&
+        distance2(u, o.home) <= 26 ** 2,
     );
     for (const asset of assets) {
       if (asset.hp < (this.previousHp.get(asset.ref) ?? asset.hp))
@@ -104,7 +107,7 @@ export class DefenseSituation {
     const vehiclePost = this.responsePost ?? post;
     const protectNow = incursions.some(
       ({ asset }) =>
-        asset.type === 2 &&
+        guardAssets.includes(asset) &&
         o.tick - (this.damagedAt.get(asset.ref) ?? -Infinity) < 150,
     );
     return {

@@ -45,6 +45,8 @@ export class WarbookBot extends Bot {
   private mapPrior?: MapPrior;
   private routes: NonNullable<Observation["routes"]> = [];
   private lastRoutesTick = -150;
+  private oreFields: NonNullable<Observation["oreFields"]> = [];
+  private lastOreTick = -300;
   private nativeToRef = new Map<number, string>();
   private currentRefs = new Map<string, number>();
   private sequence = 0;
@@ -332,9 +334,18 @@ export class WarbookBot extends Bot {
               : [];
           })
         : [];
+      const localApproach = (goal: Point) => {
+        const path = this.mapPrior?.path(home, goal) ?? [];
+        return path[Math.min(16, path.length - 1)] ?? goal;
+      };
       const point =
         towards && infantryNavigation
-          ? guardPost(infantryNavigation, home, towards, occupied)
+          ? guardPost(
+              infantryNavigation,
+              home,
+              localApproach(towards),
+              occupied,
+            )
           : undefined;
       this.defenseRoute =
         point && towards ? { towards, point, observedTick: tick } : undefined;
@@ -344,7 +355,7 @@ export class WarbookBot extends Bot {
               this.game.map,
               this.name,
               home,
-              staging,
+              localApproach(staging),
               speed,
               navigation,
               occupied,
@@ -356,6 +367,30 @@ export class WarbookBot extends Bot {
           : undefined;
       this.lastDefenseRouteTick = tick;
       this.defenseRequestIds = requestIds;
+    }
+    if (tick - this.lastOreTick >= 300) {
+      const fields: { x: number; y: number; amount: number }[] = [];
+      for (
+        let x = data.startLocation.x - 45;
+        x <= data.startLocation.x + 45;
+        x++
+      )
+        for (
+          let y = data.startLocation.y - 45;
+          y <= data.startLocation.y + 45;
+          y++
+        ) {
+          const tile = this.game.map.getTile(x, y);
+          if (!tile || !this.game.map.isVisibleTile(tile, this.name)) continue;
+          const r = this.game.map.getTileResourceData(tile),
+            amount = (r?.ore ?? 0) + 2 * (r?.gems ?? 0);
+          if (!amount) continue;
+          const field = fields.find((p) => distance2(p, { x, y }) < 10 ** 2);
+          if (field) field.amount += amount;
+          else fields.push({ x, y, amount });
+        }
+      this.oreFields = fields;
+      this.lastOreTick = tick;
     }
     const products = this.player.production.getAvailableObjects().map((p) => ({
       name: p.name,
@@ -381,14 +416,6 @@ export class WarbookBot extends Bot {
       const name = q.items[0]?.name;
       if (!name) continue;
       const buildingRules = this.game.rules.getBuilding(name);
-      // Keep a prepared fort in its native queue until a real approach is seen.
-      // This also avoids scanning placement sites every tick while waiting.
-      if (
-        buildingRules.isBaseDefense &&
-        buildingRules.primary &&
-        !defenseThreats(own, enemies).length
-      )
-        continue;
       if (buildingRules.isBaseDefense && buildingRules.primary) {
         if (tick - this.lastFortSiteTick < 30) continue;
         this.lastFortSiteTick = tick;
@@ -459,7 +486,11 @@ export class WarbookBot extends Bot {
             [...candidates.values()].filter(legal),
             foundation,
             this.game.rules.getWeapon(buildingRules.primary).range,
-            incomingFirePoints(navigation, own, enemies),
+            defenseThreats(own, enemies).length
+              ? incomingFirePoints(navigation, own, enemies)
+              : this.defenseRoute
+                ? [this.defenseRoute.point]
+                : [],
           );
           if (site) {
             buildSites.push({ name, ...site.point });
@@ -529,6 +560,7 @@ export class WarbookBot extends Bot {
       enemies,
       routes: this.routes,
       techBuildings,
+      oreFields: this.oreFields,
       products,
       queues,
       buildSites,

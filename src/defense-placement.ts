@@ -127,7 +127,9 @@ export function defenseSite(
         : 0;
       return {
         point,
-        weight: (value * (1 + pressure)) / (approaches.length * (1 + support)),
+        weight:
+          (value * (1 + pressure) * (1 + Math.min(3, support) / 3)) /
+          approaches.length,
       };
     });
   });

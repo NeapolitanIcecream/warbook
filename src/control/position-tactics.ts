@@ -59,6 +59,64 @@ export class PositionTactics extends LocalCombat {
     this.prepareMission(mission);
     if (mission.kind === "scout")
       return this.scouts.control(o, mission, evidence);
+    if (mission.kind === "screen") {
+      const intents: Intent[] = [];
+      for (const ref of mission.units) {
+        const unit = o.own.find((u) => u.ref === ref);
+        if (!unit || !mission.destination) continue;
+        const target = o.enemies
+          .filter(
+            (e) =>
+              e.type === 3 &&
+              !e.airborne &&
+              distance2(e, unit) <= 7 ** 2 &&
+              distance2(e, mission.destination!) <= 8 ** 2,
+          )
+          .sort((a, b) => distance2(a, unit) - distance2(b, unit))[0];
+        const key = target
+          ? `screen:${target.ref}`
+          : `screen:${mission.destination.x}:${mission.destination.y}`;
+        const old = this.lastPositionOrders.get(ref);
+        if (
+          !old ||
+          (old.key !== key && o.tick - old.tick >= 30) ||
+          o.tick - old.tick >= 180
+        ) {
+          intents.push(
+            target
+              ? {
+                  kind: "attack",
+                  refs: [ref],
+                  target: target.ref,
+                  task: mission.id,
+                }
+              : {
+                  kind: "attackMove",
+                  refs: [ref],
+                  ...mission.destination,
+                  task: mission.id,
+                },
+          );
+          this.lastPositionOrders.set(ref, { key, tick: o.tick });
+        }
+      }
+      return {
+        origin: {
+          id: mission.id,
+          revision: mission.revision,
+          controller: "tactics",
+        },
+        intents,
+        report: {
+          task: mission,
+          status: "active",
+          reason: "screen-supported-force",
+          proposedIntents: intents.length,
+          facts: { assignedUnits: mission.units.length },
+          executionEvidence: currentEvidence(mission, evidence),
+        },
+      };
+    }
     if (mission.kind === "capture") {
       const intents: Intent[] = [];
       const target = o.techBuildings?.find((b) => b.ref === mission.target);

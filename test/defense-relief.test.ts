@@ -26,7 +26,12 @@ test("relief prefers a nearby reserve, retains its task, and releases it after c
     tank("reserve", 2),
     ...Array.from({ length: 6 }, (_, i) => tank(`attacker-${i}`, 35 + i)),
   ];
-  const o = { tick: 6000, home: { x: 0, y: 0 }, own: units } as Observation;
+  const o = {
+    enemies: [],
+    tick: 6000,
+    home: { x: 0, y: 0 },
+    own: units,
+  } as unknown as Observation;
   const assault = new Set(units.slice(1).map((u) => u.ref));
   const raider: Contact = {
     ref: "raider",

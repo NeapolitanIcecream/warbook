@@ -6,7 +6,13 @@ export interface TaskIdentity {
 }
 export interface CombatMission extends TaskIdentity {
   readonly kind:
-    "assemble" | "advance" | "defend" | "scout" | "withdraw" | "capture";
+    | "assemble"
+    | "advance"
+    | "defend"
+    | "scout"
+    | "withdraw"
+    | "capture"
+    | "screen";
   readonly units: readonly string[];
   /** Undefined means preserve existing orders; it does not send Stop. */
   readonly destination?: Point;

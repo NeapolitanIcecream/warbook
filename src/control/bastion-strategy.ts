@@ -40,6 +40,7 @@ export class BastionStrategy implements StrategicController {
   private nextLaunchTick = 0;
   private readonly launchSize = 6;
   private firstForceFunded = false;
+  private producedArmor = new Set<string>();
   private launchedArmor = 6;
 
   constructor(private readonly doctrine: "bastion" | "cohort" = "bastion") {
@@ -74,7 +75,8 @@ export class BastionStrategy implements StrategicController {
   ): StrategicPlan {
     const base = this.opening.plan(o, assessment);
     const { unitType: armor, factoryType: factory } = this.assessmentRequest(o);
-    if (assessment.observedArmor >= this.launchSize)
+    for (const u of o.own) if (u.name === armor) this.producedArmor.add(u.ref);
+    if (this.producedArmor.size >= this.launchSize)
       this.firstForceFunded = true;
     const scouts = assessment.army.filter(isScout);
     const infantry = assessment.army.filter((u) => u.type === 3 && !isScout(u));
@@ -102,7 +104,7 @@ export class BastionStrategy implements StrategicController {
       [...new Map(incursions.map((i) => [i.enemy.ref, i.enemy])).values()],
       vehiclePost,
       this.assault,
-      protectNow && this.assault.size > 0,
+      responding && this.assault.size > 0,
     );
     const reliefRefs = new Set(relief.map((u) => u.ref));
     for (const ref of reliefRefs) {
@@ -284,16 +286,37 @@ export class BastionStrategy implements StrategicController {
     const fort = o.side === 0 ? "GAPILL" : "NALASR";
     const refinery = o.side === 0 ? "GAREFN" : "NAREFN";
     const mobilizing = !this.firstForceFunded;
+    const resourceFields = (o.oreFields ?? []).filter((f) => f.amount >= 180);
+    const expand =
+      !mobilizing && resourceFields.length >= 2 && o.credits >= 1200;
+    const economyStructures = base.production.structures.map((g) => ({
+      ...g,
+      count:
+        g.product === refinery && g.count > 1
+          ? expand
+            ? 3
+            : g.count
+          : g.count,
+    }));
     const income = this.neutral.plan(o);
     const economy = {
       ...base.production,
+      structures: economyStructures,
+      vehicles: {
+        ...base.production.vehicles,
+        harvesters: expand ? 6 : base.production.vehicles.harvesters,
+      },
+      spending: {
+        ...base.production.spending,
+        infantryAbove: mobilizing ? 800 : 300,
+      },
       engineers: {
         product: o.side === 0 ? "ENGINEER" : "SENGINEER",
         count: income.demand,
       },
       scouts: {
         product: o.side === 0 ? "ADOG" : "DOG",
-        count: o.starts.length > 2 ? 2 : 1,
+        count: (o.starts.length > 2 ? 2 : 1) + (this.firstForceFunded ? 2 : 0),
       },
       ...(mobilizing
         ? {
@@ -426,7 +449,24 @@ export class BastionStrategy implements StrategicController {
       );
     if (income.mission)
       additionalCombat.push(this.mission(income.mission.id, income.mission));
-    for (const scout of scouts) {
+    const screen = scouts.slice(o.starts.length > 2 ? 2 : 1);
+    if (screen.length) {
+      const front = [...(assault.length ? assault : reserve)].sort(
+        (a, b) =>
+          distance2(a, operation?.point ?? stagingDirection) -
+          distance2(b, operation?.point ?? stagingDirection),
+      )[0];
+      additionalCombat.push(
+        this.mission("armor-screen", {
+          kind: "screen",
+          units: screen.map((u) => u.ref),
+          destination: front ? { x: front.x, y: front.y } : musterPost,
+          objective: "screen-armor",
+          engagement: { allowCrush: false },
+        }),
+      );
+    }
+    for (const scout of scouts.slice(0, o.starts.length > 2 ? 2 : 1)) {
       const id = `recon-${scout.ref}`;
       additionalCombat.push(
         this.mission(id, {

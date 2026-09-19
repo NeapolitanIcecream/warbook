@@ -28,7 +28,7 @@ const asset = (ref: string, x: number): Unit => ({
   combat: false,
 });
 
-test("a fort covers the exposed approach left outside the infantry's fire", () => {
+test("a fort shares the infantry firing line and still prioritizes an observed attack", () => {
   const own = [
     asset("west", 0),
     asset("east", 20),
@@ -63,7 +63,7 @@ test("a fort covers the exposed approach left outside the infantry's fire", () =
     { width: 1, height: 1 },
     5.5,
   );
-  assert.deepEqual(pick?.point, sites[0]);
+  assert.deepEqual(pick?.point, sites[1]);
   assert(pick!.coverage > 0);
   const constrained = defenseSite(
     { x: 10, y: 10 },

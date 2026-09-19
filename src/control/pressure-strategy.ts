@@ -4,6 +4,7 @@ import {
   type Observation,
   type Unit,
 } from "../model.js";
+import { isScout } from "./reconnaissance.js";
 import { BastionStrategy } from "./bastion-strategy.js";
 import {
   TaskRevision,
@@ -15,7 +16,7 @@ import {
 
 /** Independent pressure route: two infantry groups attack separate economic targets. */
 export class PressureStrategy implements StrategicController {
-  readonly id = "two-front-pressure-v2";
+  readonly id = "two-front-pressure-v3";
   private readonly base = new BastionStrategy("cohort");
   private readonly revisions = new Map<string, TaskRevision>();
   private readonly productionRevision = new TaskRevision();
@@ -68,11 +69,19 @@ export class PressureStrategy implements StrategicController {
         spare -= 3;
       }
     const allocated = raiders();
+    const dogs = o.own.filter(isScout).slice(1, 3);
+    for (let i = 0; i < 2; i++)
+      if (this.groups[i].size && dogs[i]) allocated.add(dogs[i].ref);
     const structures = [...this.known.values()].filter(
       (e) => !(e.weaponRange ?? 0),
     );
+    const exposed = (target: Contact) =>
+      o.enemies.filter(
+        (e) => (e.weaponRange ?? 0) > 0 && distance2(e, target) <= 10 ** 2,
+      ).length;
     structures.sort(
       (a, b) =>
+        exposed(a) - exposed(b) ||
         Number(b.name.endsWith("POWR")) - Number(a.name.endsWith("POWR")) ||
         distance2(a, o.home) - distance2(b, o.home),
     );
@@ -80,7 +89,11 @@ export class PressureStrategy implements StrategicController {
     const second = first
       ? [...structures]
           .filter((e) => e.ref !== first.ref)
-          .sort((a, b) => distance2(b, first) - distance2(a, first))[0]
+          .sort(
+            (a, b) =>
+              exposed(a) - exposed(b) ||
+              distance2(b, first) - distance2(a, first),
+          )[0]
       : undefined;
     const starts = o.starts.filter((p) => distance2(p, o.home) > 12 ** 2);
     const additionalCombat = (plan.additionalCombat ?? []).map((m) =>
@@ -94,6 +107,25 @@ export class PressureStrategy implements StrategicController {
       const target = i ? (second ?? first) : first;
       const goal = target ?? starts[i % starts.length];
       const destination = goal ? { x: goal.x, y: goal.y } : undefined;
+      if (dogs[i] && destination) {
+        const front = gi
+          .filter((u) => group.has(u.ref))
+          .sort(
+            (a, b) => distance2(a, destination) - distance2(b, destination),
+          )[0];
+        if (front)
+          additionalCombat.push(
+            this.revise({
+              id: `pressure-screen-${i}`,
+              revision: 0,
+              kind: "screen",
+              units: [dogs[i].ref],
+              destination: { x: front.x, y: front.y },
+              objective: "protect-infantry-approach",
+              engagement: { allowCrush: false },
+            }),
+          );
+      }
       additionalCombat.push(
         this.revise({
           id: `pressure-${i}`,
@@ -113,6 +145,14 @@ export class PressureStrategy implements StrategicController {
     const updated = {
       ...production,
       infantry: { ...production.infantry, count: 10 },
+      scouts: { product: o.side === 0 ? "ADOG" : "DOG", count: 3 },
+      structures: [
+        ...production.structures,
+        {
+          product: o.side === 0 ? "GAPILE" : "NAHAND",
+          count: o.credits >= 1800 && gi.length >= 8 ? 2 : 1,
+        },
+      ],
     };
     return {
       ...plan,
