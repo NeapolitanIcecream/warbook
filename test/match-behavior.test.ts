@@ -83,6 +83,32 @@ const replayUnit = (
   ...overrides,
 });
 
+test("arriving reinforcements do not erase an existing stalled marching cohort", () => {
+  const b = new JournalBehavior();
+  for (let tick = 0; tick <= 1200; tick += 150) {
+    const o = observation(tick);
+    o.own.push(
+      ...Array.from({ length: tick / 150 }, (_, i) =>
+        armor(`new-${i}`, 10 + i, 15),
+      ),
+    );
+    const p = plan("advance", tick);
+    b.onPlan({ ...p, combat: { ...p.combat, units: o.own.map((u) => u.ref) } });
+    b.onOrder(tick, {
+      kind: "attackMove",
+      refs: ["a", "b"],
+      x: 50,
+      y: 50,
+      task: "main",
+    });
+    b.onObservation(o);
+  }
+  const stalled = b.finish().longestStalledMarch;
+  assert.equal(stalled?.fromTick, 0);
+  assert.equal(stalled?.toTick, 1200);
+  assert.equal(stalled?.units, 2);
+});
+
 test("a rapid building loss is not hidden by the ten-second damage-span filter", () => {
   for (const lost of [false, true]) {
     const b = new ReplayBehavior(),

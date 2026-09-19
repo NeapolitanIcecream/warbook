@@ -195,7 +195,9 @@ export class ScoutTactics {
             {
               x: unit.x,
               y: unit.y,
-              ...(unit.onBridge ? { onBridge: true } : {}),
+              ...(unit.onBridge === undefined
+                ? {}
+                : { onBridge: unit.onBridge }),
             },
           ]);
       } else avoiding++;

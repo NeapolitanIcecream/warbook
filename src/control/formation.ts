@@ -25,5 +25,9 @@ export function rendezvous(units: readonly Unit[]): Point {
   const unit = [...(available.length ? available : units)].sort(
     (a, b) => distance2(a, center) - distance2(b, center),
   )[0];
-  return { x: unit.x, y: unit.y, ...(unit.onBridge ? { onBridge: true } : {}) };
+  return {
+    x: unit.x,
+    y: unit.y,
+    ...(unit.onBridge === undefined ? {} : { onBridge: unit.onBridge }),
+  };
 }

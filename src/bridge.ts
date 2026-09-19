@@ -846,9 +846,7 @@ export class WarbookBot extends Bot {
                 intent.kind === "move" ? OrderType.Move : OrderType.AttackMove,
                 intent.x,
                 intent.y,
-                intent.onBridge ??
-                  this.mapPrior?.closest(intent, 0)?.bridge ??
-                  false,
+                intent.onBridge ?? false,
               );
             break;
         }

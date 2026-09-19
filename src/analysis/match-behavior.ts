@@ -179,20 +179,18 @@ export class JournalBehavior {
       this.finishSegment();
       return;
     }
-    const key = JSON.stringify([
-      mission.id,
-      target.x,
-      target.y,
-      force.map((u) => u.ref).sort(),
-    ]);
+    const key = JSON.stringify([mission.id, target.x, target.y]);
     const s = this.segment;
+    const continuing = s ? force.filter((u) => s.positions.has(u.ref)) : [];
     if (
       s &&
       s.key === key &&
       o.tick - s.toTick <= 300 &&
-      force.every((u) => distance(u, s.positions.get(u.ref)!) <= 1)
+      continuing.length >= Math.max(2, Math.ceil(s.positions.size * 0.7)) &&
+      continuing.every((u) => distance(u, s.positions.get(u.ref)!) <= 1)
     ) {
       s.toTick = o.tick;
+      s.units = Math.min(s.units, continuing.length);
     } else {
       this.finishSegment();
       this.segment = {

@@ -512,7 +512,15 @@ export class BastionStrategy implements StrategicController {
         this.mission("armor-screen", {
           kind: "screen",
           units: screen.map((u) => u.ref),
-          destination: front ? { x: front.x, y: front.y } : musterPost,
+          destination: front
+            ? {
+                x: front.x,
+                y: front.y,
+                ...(front.onBridge === undefined
+                  ? {}
+                  : { onBridge: front.onBridge }),
+              }
+            : musterPost,
           objective: "screen-armor",
           engagement: { allowCrush: false },
         }),

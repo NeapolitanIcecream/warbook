@@ -142,7 +142,13 @@ export class PressureStrategy implements StrategicController {
               revision: 0,
               kind: "screen",
               units: [dogs[i].ref],
-              destination: { x: front.x, y: front.y },
+              destination: {
+                x: front.x,
+                y: front.y,
+                ...(front.onBridge === undefined
+                  ? {}
+                  : { onBridge: front.onBridge }),
+              },
               objective: "protect-infantry-approach",
               engagement: { allowCrush: false },
             }),
