@@ -215,6 +215,7 @@ export class PositionTactics extends LocalCombat {
     let stationed = 0,
       deployed = 0,
       engaging = 0,
+      rotating = 0,
       givingWay = 0;
     for (const ref of mission.units) {
       const unit = owns.get(ref);
@@ -360,6 +361,7 @@ export class PositionTactics extends LocalCombat {
         const target = localArmorTarget(unit, close, sharedTarget);
         const rotation = rotationPost(unit, armor, close);
         if (rotation) {
+          rotating++;
           issue(
             ref,
             `rotate:${rotation.x}:${rotation.y}`,
@@ -516,6 +518,7 @@ export class PositionTactics extends LocalCombat {
           stationed,
           deployed,
           engaging,
+          rotating,
           givingWay,
           phase: mission.kind,
         },

@@ -114,7 +114,8 @@ export class StrikeTactics extends LocalCombat {
         proposed.push(intent);
       }
     };
-    let retreating = 0;
+    let retreating = 0,
+      rotating = 0;
     for (const u of members) {
       const close = hard.filter(
         (e) => distance2(u, e) <= ((e.weaponRange ?? 5) + 1) ** 2,
@@ -150,6 +151,7 @@ export class StrikeTactics extends LocalCombat {
       }
       const rotation = rotationPost(u, core, o.enemies);
       if (rotation) {
+        rotating++;
         issue(u, `rotate:${rotation.x}:${rotation.y}`, {
           kind: "move",
           refs: [u.ref],
@@ -257,6 +259,7 @@ export class StrikeTactics extends LocalCombat {
           coreTanks: core.length,
           stragglers: lagging.length,
           retreating,
+          rotating,
           visibleHardTargets: nearby.length,
         },
         executionEvidence: currentEvidence(mission, evidence),

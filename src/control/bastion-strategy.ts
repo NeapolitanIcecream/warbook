@@ -43,6 +43,7 @@ export class BastionStrategy implements StrategicController {
   private producedArmor = new Set<string>();
   private launchedArmor = 6;
   private transition: Record<string, number | string> = {};
+  private resourcePost?: Point;
 
   constructor(private readonly doctrine: "bastion" | "cohort" = "bastion") {
     this.id =
@@ -131,7 +132,27 @@ export class BastionStrategy implements StrategicController {
       o.tick - o.stagingRoute.observedTick <= 450
         ? o.stagingRoute.point
         : post;
-    const musterPost = responding ? vehiclePost : stagingPost;
+    const forwardFields = (o.oreFields ?? []).filter(
+      (p) =>
+        p.amount >= 100 &&
+        distance2(p, o.home) >= 10 ** 2 &&
+        distance2(p, o.home) <= 24 ** 2 &&
+        distance2(p, stagingDirection) < distance2(o.home, stagingDirection),
+    );
+    if (
+      !forwardFields.some(
+        (p) => this.resourcePost && distance2(p, this.resourcePost) <= 8 ** 2,
+      )
+    )
+      this.resourcePost = undefined;
+    this.resourcePost ??= forwardFields.find((p) =>
+      o.own.some((u) => u.harvester && distance2(u, p) <= 8 ** 2),
+    );
+    const musterPost = responding
+      ? vehiclePost
+      : this.firstForceFunded && this.resourcePost
+        ? this.resourcePost
+        : stagingPost;
     const outsideFactory = (u: Unit) =>
       !o.own.some(
         (b) =>
@@ -383,7 +404,9 @@ export class BastionStrategy implements StrategicController {
             ? (operation?.reason ?? "reassess-operation")
             : responding
               ? "protect-economy"
-              : "muster-counterattack",
+              : this.resourcePost && this.firstForceFunded
+                ? "hold-mining-approach"
+                : "muster-counterattack",
       engagement: { allowCrush: true },
       approach: stagingDirection,
       ...(assault.length && operation?.ref ? { target: operation.ref } : {}),
