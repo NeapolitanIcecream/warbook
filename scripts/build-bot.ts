@@ -81,6 +81,13 @@ export async function buildBot(
       format: "esm",
       target: "node22",
       external: ["@chronodivide/game-api"],
+      ...(launchModel
+        ? {
+            banner: {
+              js: "import { createRequire as createNodeRequire } from 'node:module'; const require = createNodeRequire(import.meta.url);",
+            },
+          }
+        : {}),
       metafile: true,
       write: false,
     });
