@@ -16,8 +16,10 @@ import {
 
 /** Independent pressure route: two infantry groups attack separate economic targets. */
 export class PressureStrategy implements StrategicController {
-  readonly id = "two-front-pressure-v4";
-  private readonly base = new BastionStrategy("cohort");
+  readonly id = "two-front-pressure-v5";
+  // Form at the working field, then commit armor to pressure. Compare this route's
+  // initiative with a permanently retained screen; reactive relief remains active.
+  private readonly base = new BastionStrategy("cohort", 0);
   private readonly revisions = new Map<string, TaskRevision>();
   private readonly productionRevision = new TaskRevision();
   private readonly groups = [new Set<string>(), new Set<string>()];
