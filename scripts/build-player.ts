@@ -6,6 +6,13 @@ import { POLICY_VERSION, POLICY_MODES } from "../src/policy.js";
 import { PINNED_CLIENT, SDK_RESOURCE_SHA } from "../src/player/client.js";
 mkdirSync("dist/player", { recursive: true });
 const mode = process.env.PLAYER_POLICY ?? "bastion";
+const modelPath = process.env.PLAYER_LAUNCH_MODEL;
+const launchModel = modelPath
+  ? JSON.parse(readFileSync(modelPath, "utf8"))
+  : null;
+const modelSha256 = modelPath
+  ? createHash("sha256").update(readFileSync(modelPath)).digest("hex")
+  : undefined;
 if (!POLICY_MODES.some((value) => value === mode))
   throw new Error("Unknown player policy");
 const output = await build({
@@ -18,7 +25,10 @@ const output = await build({
   target: "es2022",
   sourcemap: "inline",
   write: false,
-  define: { __WARBOOK_POLICY__: JSON.stringify(mode) },
+  define: {
+    __WARBOOK_POLICY__: JSON.stringify(mode),
+    __WARBOOK_LAUNCH_MODEL__: JSON.stringify(launchModel),
+  },
   plugins: [
     {
       name: "official-api",
@@ -53,7 +63,8 @@ let release = {
   sdkResourceSha256: SDK_RESOURCE_SHA,
   sha256,
   version: POLICY_VERSION,
-  mode,
+  mode: launchModel ? "learned-launch" : mode,
+  ...(launchModel ? { launchModelSha256: modelSha256, baseMode: mode } : {}),
   git: execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
 };
 const manifestPath = `${directory}/release.json`;

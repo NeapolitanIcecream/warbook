@@ -23,6 +23,8 @@ export interface BotRelease {
   mode: string;
   policyVersion: string;
   observationProtocol: string;
+  launchModelSha256?: string;
+  deterministicLaunch?: boolean;
   apiSha256: string;
   resourceSha256: string;
   lockSha256: string;

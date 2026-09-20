@@ -1,7 +1,24 @@
 import { WarbookBot, OBSERVATION_PROTOCOL } from "../bridge.js";
 import { POLICY_VERSION, type PolicyMode } from "../policy.js";
 import { installReplayControls } from "./replay-controls.js";
+import {
+  ExperimentalLaunchProvider,
+  LinearLaunchPolicy,
+  GLOBAL_SIZE,
+  CANDIDATE_SIZE,
+  type LaunchPolicy,
+  type LinearLaunchModel,
+  type LaunchSnapshot,
+} from "../learning/launch.js";
+import {
+  NeuralLaunchPolicy,
+  prepareInference,
+  type LaunchModel,
+} from "../learning/model.js";
+import { BastionStrategy } from "../control/bastion-strategy.js";
+import { PressureStrategy } from "../control/pressure-strategy.js";
 declare const __WARBOOK_POLICY__: PolicyMode;
+declare const __WARBOOK_LAUNCH_MODEL__: LaunchModel | LinearLaunchModel | null;
 
 declare global {
   var SystemJS: { import(name: string): Promise<any> };
@@ -40,8 +57,26 @@ export async function install(): Promise<void> {
     games: 0,
     bots: [],
   } as typeof WarbookSession);
+  let launchPolicy: LaunchPolicy | undefined;
+  let launchReady: Promise<void> | undefined;
+  const prepareLaunch = () =>
+    (launchReady ??= (async () => {
+      const artifact = __WARBOOK_LAUNCH_MODEL__;
+      if (!artifact) return;
+      if (artifact.format === "warbook-launch-linear-v1")
+        launchPolicy = new LinearLaunchPolicy(artifact);
+      else {
+        await prepareInference();
+        launchPolicy = new NeuralLaunchPolicy(artifact);
+        launchPolicy.predict({
+          global: Array(GLOBAL_SIZE).fill(0),
+          candidates: [Array(CANDIDATE_SIZE).fill(0)],
+        } as LaunchSnapshot);
+      }
+    })());
   const originalOptions = SkirmishScreen.prototype.initOptions;
   SkirmishScreen.prototype.initOptions = async function () {
+    await prepareLaunch();
     const first = !localStorage.getItem("warbook.defaults.v2");
     if (first) {
       this.localPrefs.setItem(StorageKey.LastMap, "mp03t4.map");
@@ -69,10 +104,23 @@ export async function install(): Promise<void> {
     }
   };
   BotFactory.prototype.create = function (player: any) {
+    if (__WARBOOK_LAUNCH_MODEL__ && !launchPolicy)
+      throw new Error("Launch model was not prepared before game creation");
+    const launch = launchPolicy
+      ? new ExperimentalLaunchProvider("model", "player", launchPolicy, true)
+      : undefined;
     const bot = new WarbookBot(
       player.name,
       player.country.name,
       __WARBOOK_POLICY__,
+      launch
+        ? {
+            strategy:
+              __WARBOOK_POLICY__ === "pressure"
+                ? new PressureStrategy(launch)
+                : new BastionStrategy("bastion", launch),
+          }
+        : undefined,
     );
     bot.autoTick = true;
     session.bots.push(bot);

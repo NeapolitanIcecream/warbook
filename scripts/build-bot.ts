@@ -11,10 +11,21 @@ import {
 } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { isBuiltin } from "node:module";
 import { parseArgs } from "node:util";
 import { engineHashes, fileHash, type BotRelease } from "../src/bot-release.js";
 
-export async function buildBot(ref: string, mode = "combined") {
+export async function buildBot(
+  ref: string,
+  mode = "combined",
+  modelPath?: string,
+) {
+  const launchModel = modelPath
+    ? JSON.parse(readFileSync(modelPath, "utf8"))
+    : undefined;
+  const modelSha = modelPath ? fileHash(modelPath) : undefined;
+  if (launchModel && !["bastion", "pressure"].includes(mode))
+    throw new Error("Launch models require a supported layered mode");
   const git = execFileSync(
     "git",
     ["rev-parse", "--verify", `${ref}^{commit}`],
@@ -44,9 +55,22 @@ export async function buildBot(ref: string, mode = "combined") {
           import { POLICY_VERSION, POLICY_MODES } from './src/policy.ts';
           export const mode = ${JSON.stringify(mode)};
           if (!POLICY_MODES.includes(mode)) throw new Error('Unknown frozen policy mode');
-          export const policyVersion = POLICY_VERSION;
+          ${
+            launchModel
+              ? `
+          import { ExperimentalLaunchProvider, LinearLaunchPolicy } from './src/learning/launch.ts';
+          import { NeuralLaunchPolicy, prepareInference } from './src/learning/model.ts';
+          import { BastionStrategy } from './src/control/bastion-strategy.ts';
+          import { PressureStrategy } from './src/control/pressure-strategy.ts';
+          const artifact = ${JSON.stringify(launchModel)};
+          await prepareInference();
+          const launchPolicy = artifact.format === 'warbook-launch-linear-v1' ? new LinearLaunchPolicy(artifact) : new NeuralLaunchPolicy(artifact);
+          `
+              : ""
+          }
+          export const policyVersion = POLICY_VERSION + ${JSON.stringify(launchModel ? "-learned" : "")};
           export const observationProtocol = OBSERVATION_PROTOCOL;
-          export const createBot = name => new WarbookBot(name, 'Americans', mode);
+          export const createBot = name => new WarbookBot(name, 'Americans', mode${launchModel ? `, { strategy: mode === 'pressure' ? new PressureStrategy(new ExperimentalLaunchProvider('model','frozen',launchPolicy,true)) : new BastionStrategy('bastion',new ExperimentalLaunchProvider('model','frozen',launchPolicy,true)) }` : ""});
         `,
         resolveDir: source,
         sourcefile: "frozen-bot-entry.ts",
@@ -62,7 +86,10 @@ export async function buildBot(ref: string, mode = "combined") {
     });
     for (const output of Object.values(result.metafile!.outputs))
       for (const imported of output.imports)
-        if (imported.path !== "@chronodivide/game-api")
+        if (
+          imported.path !== "@chronodivide/game-api" &&
+          !(launchModel && isBuiltin(imported.path))
+        )
           throw new Error(`Unfrozen bot dependency: ${imported.path}`);
     const code = result.outputFiles[0].contents;
     const sha256 = createHash("sha256").update(code).digest("hex");
@@ -118,6 +145,9 @@ export async function buildBot(ref: string, mode = "combined") {
       sha256,
       mode,
       policyVersion: module.policyVersion,
+      ...(launchModel
+        ? { launchModelSha256: modelSha, deterministicLaunch: true }
+        : {}),
       observationProtocol: module.observationProtocol,
       ...engineHashes(),
       lockSha256,
@@ -148,7 +178,12 @@ if (
     options: {
       ref: { type: "string", default: "HEAD" },
       mode: { type: "string", default: "combined" },
+      "launch-model": { type: "string" },
     },
   });
-  console.log(JSON.stringify(await buildBot(values.ref!, values.mode!)));
+  console.log(
+    JSON.stringify(
+      await buildBot(values.ref!, values.mode!, values["launch-model"]),
+    ),
+  );
 }
