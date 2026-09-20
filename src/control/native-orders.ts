@@ -19,12 +19,14 @@ export class NativeOrders {
     interval = 30,
     urgent = false,
   ): boolean {
-    const { task: _task, ...action } = intent;
-    const key = JSON.stringify({
-      ...action,
-      ...("refs" in action ? { refs: undefined } : {}),
-      ...(intent.kind === "deploy" ? { deployed: !unit.deployed } : {}),
-    });
+    const key =
+      "target" in intent
+        ? `${intent.kind}:${intent.target}`
+        : "x" in intent
+          ? `${intent.kind}:${intent.x}:${intent.y}:${Boolean("onBridge" in intent && intent.onBridge)}`
+          : intent.kind === "deploy"
+            ? `deploy:${!unit.deployed}`
+            : intent.kind;
     const old = this.sent.get(unit.ref);
     const completedMove =
       (intent.kind === "move" || intent.kind === "attackMove") &&

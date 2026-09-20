@@ -1,0 +1,27 @@
+{
+  "purpose": "Integrated native command continuity, threatened miner return and active mining screen.",
+  "subjects": {
+    "integrated-016": {
+      "ref": "4edb951fc6972a0b3ecbda008e4715bc6db395f7",
+      "mode": "bastion"
+    }
+  },
+  "opponents": {
+    "pressure-015": {
+      "ref": "v0.1.15",
+      "mode": "pressure"
+    },
+    "old-defense": {
+      "ref": "b3a1f7c",
+      "mode": "bastion"
+    },
+    "supalosa": {
+      "native": "supalosa"
+    }
+  },
+  "maps": [
+    "mp03t4.map",
+    "mp06t2.map"
+  ],
+  "rounds": 1
+}

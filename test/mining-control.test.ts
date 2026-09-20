@@ -160,3 +160,32 @@ test("the mining screen follows cargo gains at a new patch, not unloading trips 
     "also works beyond the old home-distance limit",
   );
 });
+
+test("a safe destination behind visible guns is not a safe return to work", () => {
+  const control = new HarvesterTactics(),
+    o = observation();
+  control.control(o, mission, []);
+  o.tick += 3;
+  o.own[0].hp -= 30;
+  control.control(o, mission, []);
+  o.tick += 210;
+  Object.assign(o.own[0], { x: 12, y: 11, cargo: 0 });
+  o.oreFields = [{ x: 40, y: 11, amount: 100 }];
+  o.enemies = [
+    {
+      ref: "ambush",
+      name: "MTNK",
+      type: 7,
+      x: 25,
+      y: 11,
+      hp: 300,
+      maxHp: 300,
+      observedTick: o.tick,
+      weaponRange: 5,
+    },
+  ];
+  assert.equal(control.control(o, mission, []).intents[0].kind, "stop");
+  o.tick += 30;
+  o.enemies = [];
+  assert.equal(control.control(o, mission, []).intents[0].kind, "gather");
+});

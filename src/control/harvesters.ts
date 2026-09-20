@@ -13,6 +13,19 @@ import {
   type ExecutionEvidence,
 } from "./contracts.js";
 
+function corridorDistance2(p: Point, start: Point, end: Point): number {
+  const dx = end.x - start.x,
+    dy = end.y - start.y;
+  const t = Math.max(
+    0,
+    Math.min(
+      1,
+      ((p.x - start.x) * dx + (p.y - start.y) * dy) / (dx * dx + dy * dy || 1),
+    ),
+  );
+  return distance2(p, { x: start.x + t * dx, y: start.y + t * dy });
+}
+
 /** Fast economic-unit tactics; damage comes from own HP, never hidden attackers. */
 export class HarvesterTactics {
   private hp = new Map<string, number>();
@@ -100,6 +113,12 @@ export class HarvesterTactics {
         (p) =>
           p.amount > 0 &&
           !danger(p, 5) &&
+          !o.enemies.some(
+            (e) =>
+              e.canThreatenVehicles !== false &&
+              (e.weaponRange ?? 0) > 0 &&
+              corridorDistance2(e, u, p) <= ((e.weaponRange ?? 5) + 3) ** 2,
+          ) &&
           !this.unsafe.some((q) => distance2(q.point, p) <= 8 ** 2),
       );
       const goal = safe.sort((a, b) => distance2(a, u) - distance2(b, u))[0];
@@ -145,6 +164,7 @@ export class MiningArea {
   private lastCargo = new Map<string, number>();
   private sites = new Map<string, { point: Point; tick: number }>();
   private selected?: Point;
+  private lastActiveTick = -Infinity;
   observe(o: Observation): Point | undefined {
     const miners = o.own.filter((u) => u.harvester);
     for (const u of miners) {
@@ -172,9 +192,11 @@ export class MiningArea {
           : distance2(b.point, o.home) - distance2(a.point, o.home)),
     )[0];
     if (!best) {
+      if (o.tick - this.lastActiveTick <= 150) return this.selected;
       this.selected = undefined;
       return;
     }
+    this.lastActiveTick = o.tick;
     if (!this.selected || distance2(this.selected, best.point) > 6 ** 2)
       this.selected = best.point;
     return this.selected;
