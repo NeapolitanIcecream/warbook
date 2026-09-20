@@ -78,6 +78,7 @@ export async function buildBot(
       },
       bundle: true,
       platform: "node",
+      ...(launchModel ? { mainFields: ["module", "main"] } : {}),
       format: "esm",
       target: "node22",
       external: ["@chronodivide/game-api"],
