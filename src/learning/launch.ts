@@ -47,6 +47,11 @@ export interface LaunchRecord extends LaunchSnapshot {
   trainable: boolean;
   teacherAction: number;
   policy: string;
+  teacherProjection?: {
+    requestedCount: number;
+    actualCount: number;
+    targetDistance: number;
+  };
 }
 const isArmor = (u: { name: string }) =>
   ["MTNK", "HTNK", "SREF"].includes(u.name);
@@ -138,6 +143,17 @@ export function buildLaunchSnapshot(c: LegacyLaunchContext): LaunchSnapshot {
   const regions = new Map(
     (o.launchGeometry ?? []).map((p) => [pkey(p), p.region]),
   );
+  const starts = o.starts.filter(
+    (p) =>
+      distance2(p, o.home) > 12 ** 2 &&
+      !(o.exploredStarts ?? []).some((q) => distance2(p, q) < 1),
+  );
+  const prioritySearch = new Set([
+    ...(c.searchGoal ? [pkey(c.searchGoal)] : []),
+    ...starts.map(pkey),
+  ]);
+  const critical = (name: string) =>
+    ["GACNST", "NACNST", "AMCV", "SMCV"].includes(name);
   const raw = [
     ...known
       .filter((e) => e.type === 2 || ["AMCV", "SMCV"].includes(e.name))
@@ -157,15 +173,13 @@ export function buildLaunchSnapshot(c: LegacyLaunchContext): LaunchSnapshot {
     })),
     ...(known.some((e) => e.type === 2)
       ? []
-      : o.starts
-          .filter((p) => distance2(p, o.home) > 12 ** 2)
-          .map((p) => ({
-            key: pkey(p),
-            point: p,
-            kind: "search",
-            ref: undefined,
-            contact: undefined as Contact | undefined,
-          }))),
+      : starts.map((p) => ({
+          key: pkey(p),
+          point: p,
+          kind: "search",
+          ref: undefined,
+          contact: undefined as Contact | undefined,
+        }))),
   ];
   result.sourceTargets = raw.length;
   const groups = new Map<string, (typeof raw)[number]>();
@@ -185,28 +199,43 @@ export function buildLaunchSnapshot(c: LegacyLaunchContext): LaunchSnapshot {
       )
     )
       continue;
-    const key = `${Math.floor(t.point.x / 8)}:${Math.floor(t.point.y / 8)}:${Boolean(t.point.onBridge)}:${r ?? "unknown"}`;
+    const key =
+      critical(t.kind) ||
+      (t.kind === "search" && prioritySearch.has(pkey(t.point)))
+        ? `objective:${t.kind}:${pkey(t.point)}`
+        : `${Math.floor(t.point.x / 8)}:${Math.floor(t.point.y / 8)}:${Boolean(t.point.onBridge)}:${r ?? "unknown"}`;
     const old = groups.get(key);
     if (!old || (old.kind === "search" && t.kind !== "search"))
       groups.set(key, t);
   }
   const pending = [...groups.values()],
     selected: typeof raw = [];
-  // Deterministic geometry coverage; retain the first observed objective before farthest-point fill.
-  if (pending.length)
-    selected.push(
-      pending.splice(
-        Math.max(
-          0,
-          pending.findIndex((t) => t.kind !== "search"),
-        ),
-        1,
-      )[0],
+  // Preserve known construction objectives and actual unexplored starts. A cloud
+  // of remote frontier points must not evict the enemy base from the bounded menu.
+  const preferred = pending.filter(
+    (t) =>
+      critical(t.kind) ||
+      (!known.some((e) => e.type === 2) &&
+        t.kind === "search" &&
+        prioritySearch.has(pkey(t.point))),
+  );
+  for (const t of preferred.slice(0, 8)) {
+    selected.push(t);
+    pending.splice(pending.indexOf(t), 1);
+  }
+  if (!selected.length && pending.length) {
+    const i = Math.max(
+      0,
+      pending.findIndex((t) => t.kind !== "search"),
     );
+    selected.push(pending.splice(i, 1)[0]);
+  }
   while (pending.length && selected.length < 8) {
     let best = 0,
       bestD = -1;
+    const hasKnown = pending.some((t) => t.kind !== "search");
     for (let i = 0; i < pending.length; i++) {
+      if (hasKnown && pending[i].kind === "search") continue;
       const d = Math.min(
         ...selected.map((t) => distance2(t.point, pending[i].point)),
       );
@@ -407,6 +436,21 @@ export class ExperimentalLaunchProvider implements LaunchProvider {
       trainable: snapshot.actions.length > 1,
       teacherAction,
       policy: this.policyName,
+      ...(teacher && teacherAction > 0
+        ? {
+            teacherProjection: {
+              requestedCount: teacher.units.filter(isArmor).length,
+              actualCount: snapshot.actions[teacherAction].units.length,
+              targetDistance: Math.sqrt(
+                distance2(
+                  snapshot.targets[snapshot.actions[teacherAction].target!]
+                    .point,
+                  teacher.operation.point,
+                ),
+              ),
+            },
+          }
+        : {}),
     };
     c.operations.decision = {
       operationReason:

@@ -52,7 +52,7 @@ def main():
         try:
             with (directory/'console.log').open('w') as log:subprocess.run(cmd,stdout=log,stderr=subprocess.STDOUT,check=True,timeout=seconds+45)
             result=json.loads((directory/'result.json').read_text());m=json.loads((directory/'manifest.json').read_text());name=next(x['name'] for x in m['participants'] if x['role']=='subject')
-            status='W' if result['cleanCompletionVerified'] and result['outcome'].get('survivor')==name else 'L' if result['cleanCompletionVerified'] else 'U' if result['stopReason']=='runner_limit' else 'E'
+            status='W' if result['cleanCompletionVerified'] and result['outcome'].get('survivor')==name else 'L' if result['cleanCompletionVerified'] else 'U' if result['stopReason']=='runner_limit' and result['tick']>=m['limits']['ticks'] else 'E'
         except Exception as exc:error=f'{type(exc).__name__}: {exc}';result={};status='E'
         row={'map':map_name,'opponent':opponent,'repeat':repeat,'subject':subject,'outcome':status,'tick':result.get('tick'),'seconds':time.monotonic()-attempt,'dir':str(directory),'error':error}
         atomic(completed,row);return row

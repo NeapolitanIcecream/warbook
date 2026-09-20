@@ -729,7 +729,7 @@ export class WarbookBot extends Bot {
       stagingRoute: this.stagingRoute,
       flankApproach: this.flankApproach,
     };
-    if (this.components?.strategy) {
+    if (this.components?.strategy && tick % 75 === 0) {
       const points: Point[] = [
         ...own.filter((u) => u.type === 7),
         ...enemies,

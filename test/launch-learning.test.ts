@@ -283,3 +283,24 @@ test("model export dimensions match synchronous shared CPU inference", async () 
   assert.equal(p.value, 0.5);
   model.dispose();
 });
+
+test("frontier compression preserves a known yard and the intended unexplored start", () => {
+  const o = observation();
+  o.armySearchPoints = Array.from({ length: 100 }, (_, i) => ({
+    x: 10 + (i % 10) * 8,
+    y: 10 + Math.floor(i / 10) * 8,
+  }));
+  o.enemies = [
+    { ...enemy("yard", 81), name: "GACNST", y: 86 },
+    { ...enemy("power", 78), name: "GAPOWR", y: 87 },
+  ];
+  assert(buildLaunchSnapshot(context(o)).targets.some((t) => t.ref === "yard"));
+  o.enemies = [];
+  const c = context(o);
+  c.searchGoal = { x: 90, y: 2 };
+  assert(
+    buildLaunchSnapshot(c).targets.some(
+      (t) => t.point.x === 90 && t.point.y === 2,
+    ),
+  );
+});

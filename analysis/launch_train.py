@@ -1,7 +1,7 @@
 """Small shared candidate scorer: behavior cloning and bounded on-policy PPO updates.
 Consumes complete-game files produced by the existing Node runner; no simulator or privileged critic.
 """
-import argparse, hashlib, json, random
+import argparse, hashlib, json, random, subprocess, sys
 from pathlib import Path
 import numpy as np
 import torch
@@ -38,7 +38,7 @@ def load_artifact(model,path):
 def read_episode(directory):
     result=json.loads((directory/'result.json').read_text());manifest=json.loads((directory/'manifest.json').read_text())
     subject=next(p['name'] for p in manifest['participants'] if p['role']=='subject')
-    outcome='W' if result['cleanCompletionVerified'] and result['outcome'].get('survivor')==subject else 'L' if result['cleanCompletionVerified'] else 'U' if result['stopReason']=='runner_limit' else 'E'
+    outcome='W' if result['cleanCompletionVerified'] and result['outcome'].get('survivor')==subject else 'L' if result['cleanCompletionVerified'] else 'U' if result['stopReason']=='runner_limit' and result['tick']>=manifest['limits']['ticks'] else 'E'
     if outcome=='E':return None
     rows=[]
     for line in (directory/'decisions.ndjson').open():
@@ -65,7 +65,7 @@ def main():
     torch.set_num_threads(args.threads);torch.manual_seed(args.seed);np.random.seed(args.seed);random.seed(args.seed)
     model=Policy()
     if args.input:load_artifact(model,Path(args.input))
-    out=Path(args.out);metadata={'method':args.method,'seed':args.seed,'torch':torch.__version__,'numpy':np.__version__,'threads':args.threads,'objective':'formal win within 54000 ticks; W=1,L=0,U=0; E excluded and reported','architecture':'shared flat candidate scoring over <=33 legal actions; equivalent joint probability can be factorized by launch/target/amount'}
+    out=Path(args.out);metadata={'git':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'trainerSha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),'python':sys.version.split()[0],'method':args.method,'seed':args.seed,'torch':torch.__version__,'numpy':np.__version__,'threads':args.threads,'objective':'formal win within 54000 ticks; W=1,L=0,U=0; E excluded and reported','architecture':'shared flat candidate scoring over <=33 legal actions; equivalent joint probability can be factorized by launch/target/amount'}
     if args.method=='init':
         print(json.dumps({'sha256':export(model,out,'launch-init',metadata),'parameters':sum(p.numel() for p in model.parameters())}));return
     paths=json.loads(Path(args.episodes).read_text());episodes=[];excluded=[]
@@ -86,6 +86,7 @@ def main():
     launch_weight=min(8.,float((act==0).sum())/max(1,int((act>0).sum())))
     adv=ret-oldvalue
     if not bc:
+        if not valid.any():raise ValueError('Batch has no actionable policy decisions')
         mean=adv[valid].mean();std=adv[valid].std(unbiased=False).clamp_min(1e-6);adv=(adv-mean)/std
     history=[];epochs=args.epochs or (20 if bc else 3)
     for epoch in range(epochs):
