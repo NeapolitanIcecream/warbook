@@ -207,7 +207,6 @@ export class WarbookBot extends Bot {
         ...(u.rules.harvester
           ? {
               cargo: (u.harvestedOre ?? 0) + (u.harvestedGems ?? 0),
-              teleporter: u.rules.teleporter,
             }
           : {}),
         mcv: !!u.rules.deploysInto && !u.rules.harvester,

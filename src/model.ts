@@ -24,7 +24,6 @@ export interface Unit extends Point {
   harvester: boolean;
   /** Own cargo only, observed through the pinned public UnitData API. */
   cargo?: number;
-  teleporter?: boolean;
   mcv: boolean;
   yard: boolean;
   refinery: boolean;

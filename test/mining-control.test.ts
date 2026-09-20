@@ -18,7 +18,6 @@ const miner = (ref = "miner", x = 25, y = 25): Unit => ({
   mobile: true,
   idle: false,
   harvester: true,
-  teleporter: true,
   cargo: 4,
   mcv: false,
   yard: false,

@@ -1,0 +1,28 @@
+{
+  "purpose": "Pressure route response: commit armor after mining-area assembly versus permanent screen, against the frozen new main.",
+  "subjects": {
+    "pressure-commit": {
+      "ref": "aab24af2a8572a9e91fc63794c633b61c19c389e",
+      "mode": "pressure"
+    },
+    "pressure-screen": {
+      "ref": "962e614",
+      "mode": "pressure"
+    },
+    "pressure-015": {
+      "ref": "v0.1.15",
+      "mode": "pressure"
+    }
+  },
+  "opponents": {
+    "main-016": {
+      "ref": "962e614",
+      "mode": "bastion"
+    }
+  },
+  "maps": [
+    "mp29u2.map",
+    "mp06t2.map"
+  ],
+  "rounds": 2
+}

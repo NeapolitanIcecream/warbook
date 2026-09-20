@@ -53,10 +53,7 @@ export class BastionStrategy implements StrategicController {
   private flankAttempted = false;
   private developSiege = false;
 
-  constructor(
-    private readonly doctrine: "bastion" | "cohort" = "bastion",
-    private readonly miningGuardLimit = 2,
-  ) {
+  constructor(private readonly doctrine: "bastion" | "cohort" = "bastion") {
     this.id =
       doctrine === "bastion" ? "bastion-strategy-v11" : "cohort-strategy-v6";
   }
@@ -253,7 +250,7 @@ export class BastionStrategy implements StrategicController {
       distance2(workingField, o.home) > 12 ** 2 &&
       !protectNow &&
       vehicles.filter(combatArmor).length >= 8
-        ? this.miningGuardLimit
+        ? 2
         : 0;
     const mineGuards = guardCandidates
       .sort(
