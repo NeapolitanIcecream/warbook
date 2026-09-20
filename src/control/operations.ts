@@ -23,6 +23,10 @@ export interface Operation {
   productionArrivals: number;
   travelSeconds: number;
   assumedProduction?: boolean;
+  /** Learned commitment identity is separate from the currently attackable entity. */
+  objectiveKey?: string;
+  objectiveRef?: string;
+  origin?: "experiment";
 }
 const mcv = (c: Contact) => ["AMCV", "SMCV"].includes(c.name);
 const yard = (c: Contact) => ["GACNST", "NACNST"].includes(c.name);
@@ -39,6 +43,9 @@ export class Operations {
   private factorySeen = false;
   active?: Operation;
   decision: Record<string, number | string | boolean> = {};
+  get contacts(): readonly Contact[] {
+    return [...this.known.values()];
+  }
   get hasKnownBase() {
     return [...this.known.values()].some((e) => e.type === 2);
   }
@@ -268,12 +275,82 @@ export class Operations {
     }
   }
 
+  /** Describe a committed objective for existing production/tactics, without vetoing it. */
+  describe(
+    o: Observation,
+    force: readonly Unit[],
+    point: Point,
+    ref?: string,
+  ): Operation {
+    const target = ref ? this.known.get(ref) : undefined;
+    if (!target)
+      return {
+        point,
+        reason: "formed-advance",
+        defenders: 0,
+        productionArrivals: 0,
+        travelSeconds: 0,
+      };
+    const center = {
+      x: force.reduce((n, u) => n + u.x, 0) / force.length,
+      y: force.reduce((n, u) => n + u.y, 0) / force.length,
+    };
+    const estimate = this.opposition(o, target, center, force.length);
+    const visible = o.enemies.some((e) => e.ref === ref);
+    const power = force.reduce((n, u) => n + Math.sqrt(u.hp / u.maxHp), 0);
+    const supported =
+      power >=
+      Math.max(
+        1.5,
+        (estimate.defenders + estimate.productionArrivals + (visible ? 0 : 1)) *
+          1.2,
+      );
+    return {
+      point,
+      ...(visible ? { ref } : {}),
+      ...estimate,
+      reason: !supported
+        ? "formed-pressure"
+        : visible &&
+            (mcv(target) || yard(target)) &&
+            distance(target, o.home) <= 30
+          ? "exposed-construction"
+          : this.pressured && o.tick - this.lastPressureTick <= 1800
+            ? "counterattack-window"
+            : "attack-opportunity",
+    };
+  }
+
   target(o: Observation, force: readonly Unit[]): Operation | undefined {
     if (!this.active) return;
     const tanks = force.filter((u) =>
       ["MTNK", "HTNK", "SREF"].includes(u.name),
     );
     if (!tanks.length) return;
+    if (this.active.origin === "experiment") {
+      const ref = this.active.objectiveRef;
+      const remembered = ref ? this.known.get(ref) : undefined;
+      const cleared = ref
+        ? !remembered
+        : !o.armySearchPoints?.some(
+            (p) => distance2(p, this.active!.point) === 0,
+          ) && force.some((u) => distance2(u, this.active!.point) <= 4 ** 2);
+      if (cleared) {
+        this.active = undefined;
+        this.decision = { operationReason: "objective-area-cleared" };
+        return;
+      }
+      if (remembered)
+        this.active.point = {
+          x: remembered.x,
+          y: remembered.y,
+          ...(remembered.onBridge ? { onBridge: true } : {}),
+        };
+      return {
+        ...this.active,
+        ref: ref && o.enemies.some((e) => e.ref === ref) ? ref : undefined,
+      };
+    }
     const center = {
       x: tanks.reduce((s, u) => s + u.x, 0) / tanks.length,
       y: tanks.reduce((s, u) => s + u.y, 0) / tanks.length,

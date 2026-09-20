@@ -6,6 +6,7 @@ import {
 } from "../model.js";
 import { isScout } from "./reconnaissance.js";
 import { BastionStrategy } from "./bastion-strategy.js";
+import type { LaunchProvider } from "./launch-provider.js";
 import {
   TaskRevision,
   type CombatMission,
@@ -17,7 +18,16 @@ import {
 /** Independent pressure route: two infantry groups attack separate economic targets. */
 export class PressureStrategy implements StrategicController {
   readonly id = "two-front-pressure-v5";
-  private readonly base = new BastionStrategy("cohort");
+  private readonly base: BastionStrategy;
+  constructor(launch?: LaunchProvider) {
+    this.base = new BastionStrategy("cohort", launch);
+  }
+  get launchRecord() {
+    return this.base.launchRecord;
+  }
+  launchPoints() {
+    return this.base.launchPoints();
+  }
   private readonly revisions = new Map<string, TaskRevision>();
   private readonly productionRevision = new TaskRevision();
   private readonly groups = [new Set<string>(), new Set<string>()];

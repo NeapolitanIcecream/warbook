@@ -9,7 +9,7 @@ import type {
   ExecutionEvidence,
 } from "./control/contracts.js";
 
-export const POLICY_VERSION = "warbook-0.1.16";
+export const POLICY_VERSION = "warbook-0.1.17-dev.1";
 export type PolicyMode =
   | "baseline"
   | "cohesive"
@@ -92,6 +92,12 @@ export class Commander {
   }
   get controlPlan() {
     return this.control?.plan;
+  }
+  get launchRecord() {
+    return this.control?.components.strategy.launchRecord;
+  }
+  get launchPoints() {
+    return this.control?.components.strategy.launchPoints?.() ?? [];
   }
   intentOrigin(intent: Intent) {
     return this.control?.origin(intent);

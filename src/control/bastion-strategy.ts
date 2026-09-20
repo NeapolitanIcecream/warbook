@@ -12,7 +12,10 @@ import { isScout, Reconnaissance } from "./reconnaissance.js";
 import { MiningArea } from "./harvesters.js";
 import { NeutralEconomy } from "./neutral-economy.js";
 import { Operations } from "./operations.js";
-import { LegacyLaunchProvider } from "./launch-provider.js";
+import {
+  LegacyLaunchProvider,
+  type LaunchProvider,
+} from "./launch-provider.js";
 import { formedUnits, rendezvous } from "./formation.js";
 import {
   TaskRevision,
@@ -54,10 +57,26 @@ export class BastionStrategy implements StrategicController {
   private flankVia?: Point;
   private flankAttempted = false;
   private developSiege = false;
+  private heldForWave = new Set<string>();
+  private launchThreats = new Set<string>();
+  private launchTick = -Infinity;
 
-  constructor(private readonly doctrine: "bastion" | "cohort" = "bastion") {
+  constructor(
+    private readonly doctrine: "bastion" | "cohort" = "bastion",
+    private readonly launchProvider?: LaunchProvider,
+  ) {
     this.id =
       doctrine === "bastion" ? "bastion-strategy-v11" : "cohort-strategy-v6";
+  }
+  get launchRecord() {
+    return this.launchProvider?.record;
+  }
+  launchPoints(): readonly Point[] {
+    return this.launchProvider
+      ? this.operations.contacts.filter(
+          (e) => e.type === 2 || ["AMCV", "SMCV"].includes(e.name),
+        )
+      : [];
   }
 
   assessmentRequest(o: Observation) {
@@ -135,14 +154,25 @@ export class BastionStrategy implements StrategicController {
       responding,
       damagedAt,
     } = this.situation.observe(o);
+    const freshDefense =
+      !this.launchProvider?.experimental ||
+      incursions.some(
+        (i) =>
+          !this.launchThreats.has(`${i.enemy.ref}:${i.asset.ref}`) ||
+          (damagedAt.get(i.asset.ref) ?? -Infinity) > this.launchTick,
+      );
     const relief = this.relief.assign(
       o,
-      allVehicles.filter((u) => !this.withdrawing.has(u.ref)),
+      allVehicles.filter(
+        (u) =>
+          !this.withdrawing.has(u.ref) &&
+          (freshDefense || !this.assault.has(u.ref)),
+      ),
       infantry,
       [...new Map(incursions.map((i) => [i.enemy.ref, i.enemy])).values()],
       vehiclePost,
       this.assault,
-      responding && this.assault.size > 0,
+      responding && this.assault.size > 0 && freshDefense,
     );
     const reliefRefs = new Set(relief.map((u) => u.ref));
     for (const ref of reliefRefs) {
@@ -315,6 +345,7 @@ export class BastionStrategy implements StrategicController {
       assault = [];
     }
     let reserve = vehicles.filter(isReserve);
+    if (!this.assault.size && !this.joining.size) this.heldForWave.clear();
     const ready = formedUnits(
       reserve.filter(
         (u) => outsideFactory(u) && distance2(u, musterPost) <= 12 ** 2,
@@ -326,7 +357,7 @@ export class BastionStrategy implements StrategicController {
       distance2(o.flankApproach.towards, stagingDirection) <= 10 ** 2
         ? o.flankApproach.point
         : undefined;
-    const proposal = this.legacyLaunch.choose({
+    const proposal = (this.launchProvider ?? this.legacyLaunch).choose({
       observation: o,
       operations: this.operations,
       ready,
@@ -338,11 +369,23 @@ export class BastionStrategy implements StrategicController {
       searchGoal,
       launchSize: this.launchSize,
       armor,
+      reserve,
+      slotFree: !this.assault.size && !this.joining.size,
     });
     if (proposal) {
       const nextOperation = proposal.operation;
-      this.assault = new Set(ready.map((u) => u.ref));
-      this.launchedArmor = ready.filter(combatArmor).length;
+      const committed = proposal.units;
+      this.assault = new Set(committed.map((u) => u.ref));
+      this.launchedArmor = committed.filter(combatArmor).length;
+      if (proposal.origin === "experiment") {
+        this.heldForWave = new Set(
+          reserve.filter((u) => !this.assault.has(u.ref)).map((u) => u.ref),
+        );
+        this.launchThreats = new Set(
+          incursions.map((i) => `${i.enemy.ref}:${i.asset.ref}`),
+        );
+        this.launchTick = o.tick;
+      }
       this.transition = {
         operationTransition: nextOperation.reason,
         operationTransitionTick: o.tick,
@@ -354,7 +397,7 @@ export class BastionStrategy implements StrategicController {
       this.flankAttempted = false;
       if (
         nextOperation.reason === "formed-pressure" &&
-        ready.filter((u) => u.name === armor).length >= 12 &&
+        committed.filter((u) => u.name === armor).length >= 12 &&
         alternative
       ) {
         this.flankAttempted = true;
@@ -368,11 +411,11 @@ export class BastionStrategy implements StrategicController {
         };
         this.flankVia = alternative;
         this.flankRefs = new Set(
-          [...ready]
+          [...committed]
             .sort(
               (a, b) => distance2(a, alternative) - distance2(b, alternative),
             )
-            .slice(0, Math.floor(ready.length / 2))
+            .slice(0, Math.floor(committed.length / 2))
             .map((u) => u.ref),
         );
       }
@@ -388,7 +431,10 @@ export class BastionStrategy implements StrategicController {
       reserve = vehicles.filter(isReserve);
       const nextBatch = formedUnits(
         reserve.filter(
-          (u) => outsideFactory(u) && distance2(u, musterPost) <= 12 ** 2,
+          (u) =>
+            !this.heldForWave.has(u.ref) &&
+            outsideFactory(u) &&
+            distance2(u, musterPost) <= 12 ** 2,
         ),
         musterPost,
       );

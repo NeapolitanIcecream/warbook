@@ -93,6 +93,9 @@ export interface Observation {
   baseRally?: Point;
   stagingRoute?: { towards: Point; point: Point; observedTick: number };
   flankApproach?: { towards: Point; point: Point; observedTick: number };
+  /** Read-only connectivity from the independent map, not live SDK path queries.
+   * Region IDs are equality keys for mechanical masks, never numeric model inputs. */
+  launchGeometry?: readonly (Point & { region?: number })[];
   /** Static-map routes, refreshed from own positions; dynamic enemies are separate. */
   oreFields?: readonly { x: number; y: number; amount: number }[];
   routes?: readonly {

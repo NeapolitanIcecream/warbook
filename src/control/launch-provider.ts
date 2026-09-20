@@ -13,11 +13,20 @@ export interface LegacyLaunchContext {
   searchGoal?: Point;
   launchSize: number;
   armor: string;
+  reserve?: readonly Unit[];
+  slotFree?: boolean;
 }
 
 export interface LaunchProposal {
   operation: Operation;
   units: readonly Unit[];
+  origin?: "experiment";
+}
+
+export interface LaunchProvider {
+  readonly experimental?: boolean;
+  readonly record?: unknown;
+  choose(c: LegacyLaunchContext): LaunchProposal | undefined;
 }
 
 /** Extraction only: preserve the old candidate checks, ordering and side effects. */

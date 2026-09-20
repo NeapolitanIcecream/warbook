@@ -25,15 +25,19 @@
   "dependencies": {
     "@chronodivide/game-api": "0.79.0",
     "@hono/node-server": "2.1.1",
+    "@tensorflow/tfjs-backend-cpu": "4.22.0",
+    "@tensorflow/tfjs-core": "4.22.0",
     "hono": "4.13.7",
     "ngraph.graph": "20.1.2",
     "ngraph.path": "1.6.1",
+    "seedrandom": "3.0.5",
     "three": "0.94.0"
   },
   "devDependencies": {
     "@playwright/cli": "0.1.20",
     "@supalosa/chronodivide-bot": "0.6.8-beta.3-165b77a",
     "@types/node": "26.5.1",
+    "@types/seedrandom": "3.0.8",
     "esbuild": "0.28.2",
     "playwright": "1.63.0",
     "prettier": "3.9.6",

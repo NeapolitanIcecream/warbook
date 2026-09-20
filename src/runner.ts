@@ -23,6 +23,20 @@ import { recordDestruction } from "./referee.js";
 import { createOfficialOpponent } from "./official-opponent.js";
 import { loadBotRelease, type DrivenBot } from "./bot-release.js";
 import { DecisionShadow, ShadowMismatch } from "./analysis/shadow.js";
+import {
+  ExperimentalLaunchProvider,
+  LAUNCH_SCHEMA,
+  LinearLaunchPolicy,
+  type LaunchPolicy,
+  type LinearLaunchModel,
+} from "./learning/launch.js";
+import {
+  NeuralLaunchPolicy,
+  prepareInference,
+  type LaunchModel,
+} from "./learning/model.js";
+import { BastionStrategy } from "./control/bastion-strategy.js";
+import { PressureStrategy } from "./control/pressure-strategy.js";
 
 const { values } = parseArgs({
   options: {
@@ -37,6 +51,11 @@ const { values } = parseArgs({
     "shadow-release": { type: "string" },
     swap: { type: "boolean", default: false },
     out: { type: "string" },
+    "launch-policy": { type: "string" },
+    "launch-model": { type: "string" },
+    "policy-seed": { type: "string", default: "0" },
+    "launch-deterministic": { type: "boolean", default: false },
+    "trace-level": { type: "string", default: "full" },
   },
 });
 const start = performance.now();
@@ -49,10 +68,61 @@ mkdirSync(dir, { recursive: true });
 const mixDir = resolve(process.env.MIX_DIR ?? "assets/ra2");
 const sha256 = (file: string) =>
   createHash("sha256").update(readFileSync(file)).digest("hex");
-const trace = (event: unknown) =>
+const trace = (event: unknown) => {
+  if (
+    values["trace-level"] === "launch" &&
+    (event as { kind: string }).kind !== "launch_decision" &&
+    !(
+      (event as { kind: string; tick: number }).kind === "observation" &&
+      (event as { tick: number }).tick % 450 === 0
+    )
+  )
+    return;
   appendFileSync(`${dir}/decisions.ndjson`, JSON.stringify(event) + "\n");
+};
 let game: GameInstanceApi | undefined;
 async function main(): Promise<void> {
+  if (
+    values["launch-policy"] &&
+    (values["actor-release"] ||
+      values["shadow-release"] ||
+      !["bastion", "pressure"].includes(values.mode!))
+  )
+    throw new Error(
+      "Experimental launch control needs a live layered subject, separate from frozen/shadow actors",
+    );
+  if (
+    values["launch-policy"] &&
+    !["teacher", "random", "model", "linear"].includes(values["launch-policy"])
+  )
+    throw new Error("Unknown launch policy");
+  if (!["full", "launch"].includes(values["trace-level"]!))
+    throw new Error("Unknown trace level");
+  let neural: LaunchPolicy | undefined;
+  if (values["launch-policy"] === "model") {
+    if (!values["launch-model"]) throw new Error("Model artifact required");
+    await prepareInference();
+    neural = new NeuralLaunchPolicy(
+      JSON.parse(readFileSync(values["launch-model"], "utf8")) as LaunchModel,
+    );
+  }
+  if (values["launch-policy"] === "linear") {
+    if (!values["launch-model"])
+      throw new Error("Linear model artifact required");
+    neural = new LinearLaunchPolicy(
+      JSON.parse(
+        readFileSync(values["launch-model"], "utf8"),
+      ) as LinearLaunchModel,
+    );
+  }
+  const launch = values["launch-policy"]
+    ? new ExperimentalLaunchProvider(
+        values["launch-policy"],
+        values["policy-seed"]!,
+        neural,
+        values["launch-deterministic"],
+      )
+    : undefined;
   const allowedModes: readonly string[] = POLICY_MODES;
   if (
     !allowedModes.includes(values.mode!) ||
@@ -70,9 +140,23 @@ async function main(): Promise<void> {
       )
     : {
         bot: new WarbookBot(
-          policyPlayerName(POLICY_VERSION, values.mode!, "A"),
+          policyPlayerName(
+            POLICY_VERSION,
+            launch
+              ? `${values.mode}-launch-${values["launch-policy"]}`
+              : values.mode!,
+            "A",
+          ),
           "Americans",
           values.mode as PolicyMode,
+          launch
+            ? {
+                strategy:
+                  values.mode === "pressure"
+                    ? new PressureStrategy(launch)
+                    : new BastionStrategy("bastion", launch),
+              }
+            : undefined,
         ),
         release: undefined,
       };
@@ -150,6 +234,19 @@ async function main(): Promise<void> {
         }
       : {}),
     observationProtocol: OBSERVATION_PROTOCOL,
+    ...(launch
+      ? {
+          launchExperiment: {
+            schema: LAUNCH_SCHEMA,
+            policy: values["launch-policy"],
+            seed: values["policy-seed"],
+            deterministic: values["launch-deterministic"],
+            modelSha256: values["launch-model"]
+              ? sha256(values["launch-model"])
+              : undefined,
+          },
+        }
+      : {}),
     decisionInterval: 3,
     batchOrder: agents.map((a) => a.name),
     lockHash: sha256("package-lock.json"),
@@ -177,6 +274,9 @@ async function main(): Promise<void> {
         "src/engine-diagnostics.mjs",
         "src/bot-release.ts",
         "src/player-identity.ts",
+        "src/control/launch-provider.ts",
+        "src/learning/launch.ts",
+        "src/learning/model.ts",
       ].map((path) => [path, sha256(path)]),
     ),
     resources: ["ra2.mix", "language.mix", "multi.mix"].map((name) => ({

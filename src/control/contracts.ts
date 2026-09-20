@@ -117,6 +117,8 @@ export interface ControlReport {
 }
 export interface StrategicController {
   readonly id: string;
+  readonly launchRecord?: unknown;
+  launchPoints?(): readonly Point[];
   assessmentRequest(observation: Observation): AssessmentRequest;
   plan(
     observation: Observation,

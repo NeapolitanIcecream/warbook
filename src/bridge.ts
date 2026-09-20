@@ -18,6 +18,7 @@ import { MapPrior } from "./map-prior.js";
 import { LocalGroundMap } from "./local-ground-map.js";
 import { combatCapabilities } from "./unit-capabilities.js";
 import { Commander, type PolicyMode } from "./policy.js";
+import type { ControlComponents } from "./control/contracts.js";
 import {
   rememberIntent,
   observedEffect,
@@ -78,9 +79,10 @@ export class WarbookBot extends Bot {
     name: string,
     country = "Americans",
     readonly mode: PolicyMode = "baseline",
+    private readonly components?: Partial<ControlComponents>,
   ) {
     super(name, country);
-    this.commander = new Commander(mode);
+    this.commander = new Commander(mode, components);
   }
   override onGameInit(game: GameApi): void {
     const side = this.player.getPlayerData().country!.side;
@@ -232,6 +234,7 @@ export class WarbookBot extends Bot {
         ref: this.ref(u),
         name: u.name,
         type: u.type,
+        ...(this.components?.strategy ? { onBridge: u.onBridge } : {}),
         x: u.tile.rx,
         y: u.tile.ry,
         position: {
@@ -726,6 +729,24 @@ export class WarbookBot extends Bot {
       stagingRoute: this.stagingRoute,
       flankApproach: this.flankApproach,
     };
+    if (this.components?.strategy) {
+      const points: Point[] = [
+        ...own.filter((u) => u.type === 7),
+        ...enemies,
+        ...this.commander.launchPoints,
+        ...observation.starts,
+        ...this.armySearchPoints,
+      ];
+      const unique = new Map(
+        points.map((p) => [`${p.x}:${p.y}:${Boolean(p.onBridge)}`, p]),
+      );
+      observation.launchGeometry = [...unique.values()].map((p) => ({
+        x: p.x,
+        y: p.y,
+        ...(p.onBridge ? { onBridge: true } : {}),
+        region: this.mapPrior?.region(p),
+      }));
+    }
     if (this.lastObservation) {
       const previousContacts = new Set(
         this.lastObservation.enemies.map((e) => e.ref),
@@ -789,7 +810,16 @@ export class WarbookBot extends Bot {
     return observation;
   }
   decide(observation: Observation): Intent[] {
-    return this.commander.decide(observation);
+    const result = this.commander.decide(observation);
+    const record = this.commander.launchRecord as { tick?: number } | undefined;
+    if (record?.tick === observation.tick)
+      this.trace?.({
+        tick: observation.tick,
+        actor: this.name,
+        kind: "launch_decision",
+        record,
+      });
+    return result;
   }
   submit(intents: Intent[]): void {
     const o = this.observation;
