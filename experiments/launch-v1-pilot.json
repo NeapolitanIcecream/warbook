@@ -1,0 +1,32 @@
+{
+  "subjects": {
+    "teacher": {
+      "policy": "teacher",
+      "mode": "bastion"
+    },
+    "baseline": {
+      "ref": "v0.1.16",
+      "mode": "bastion"
+    }
+  },
+  "opponents": {
+    "pressure-016": {
+      "ref": "v0.1.16",
+      "mode": "pressure"
+    },
+    "supalosa": {
+      "native": "supalosa"
+    }
+  },
+  "maps": [
+    "mp29u2.map",
+    "mp06t2.map",
+    "mp08t2.map",
+    "mp03t4.map"
+  ],
+  "rounds": 1,
+  "workers": 8,
+  "orderSeed": 41,
+  "policySeed": 11,
+  "trace": "full"
+}
