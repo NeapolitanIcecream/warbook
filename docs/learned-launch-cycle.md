@@ -77,3 +77,9 @@ python analysis/launch_expand.py --base /path/to/first-sprint --out /path/to/exp
 ```
 
 以上是前台入口。实际服务器由独立tmux会话运行，stdout、状态JSON和结束码都留在远端，环境未包含SSH_AUTH_SOCK或DISPLAY。模型、资产、完整日志/回放和服务器具体目录均不入Git。
+
+第二任务源码冻结 `c4656ee`，已在独立会话排队等第一任务结束，原SSH已退出。跨学习对手的接线另用 `runs/pressure-frozen-smoke` 验证：pressure老师对冻结PPO完成16,902 tick正常胜局，7.48秒；单局只证明该实验路径能运行。
+
+### 本轮结构与性能检查
+
+在扩大前对 `runs/learned-performance-profile` 做一次完整局CPU采样：本机24,552 tick、10.04秒，累计决策约7.70秒；学习模块及子调用占采样2.08%，本方地图先验12.89%、局部图7.21%。它指出当前模型推理不是该样本主要成本，不代表服务器占比或性能提升。优先校准整局并发，保持既有游戏/规划行为；后续如地图维护确实限制采样，再用同观察工作负载验证具体优化。原profile保存在忽略目录，未新增通用性能系统。
