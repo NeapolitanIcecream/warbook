@@ -85,7 +85,7 @@ def main():
     optimizer=torch.optim.Adam(model.parameters(),lr=3e-4 if bc else 1e-4)
     if not bc and args.input:
         previous_optimizer=Path(args.input).with_suffix('.optimizer.pt')
-        if previous_optimizer.exists():optimizer.load_state_dict(torch.load(previous_optimizer,map_location='cpu',weights_only=True))
+        if previous_optimizer.exists() and json.loads(Path(args.input).read_text()).get('training',{}).get('method')=='ppo':optimizer.load_state_dict(torch.load(previous_optimizer,map_location='cpu',weights_only=True))
     launch_weight=max(1.,min(8.,float((act==0).sum())/max(1,int((act>0).sum()))))
     adv=ret-oldvalue
     if not bc:
