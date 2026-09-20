@@ -51,12 +51,7 @@ export class LocalCombat implements TacticalController {
   ): ControlResult {
     const intents: Intent[] = [];
     const holding = mission.kind === "assemble";
-    const order = (
-      ref: string,
-      _key: string,
-      intent: Intent,
-      _repeat: number,
-    ) => {
+    const order = (ref: string, intent: Intent) => {
       const unit = o.own.find((u) => u.ref === ref);
       if (unit && this.orders.allow(unit, intent, o.tick)) intents.push(intent);
     };
@@ -94,45 +89,30 @@ export class LocalCombat implements TacticalController {
           !target.airborne &&
           distance2(unit, target) < this.crushRadius ** 2
         ) {
-          order(
-            ref,
-            "crush:" + target.ref,
-            {
-              kind: "crush",
-              refs: [ref],
-              target: target.ref,
-              ...(holding ? { task: "counter-defense" } : {}),
-            },
-            60,
-          );
+          order(ref, {
+            kind: "crush",
+            refs: [ref],
+            target: target.ref,
+            ...(holding ? { task: "counter-defense" } : {}),
+          });
         } else if (target) {
-          order(
-            ref,
-            "attack:" + target.ref,
-            {
-              kind: "attack",
-              refs: [ref],
-              target: target.ref,
-              ...(holding ? { task: "counter-defense" } : {}),
-            },
-            180,
-          );
+          order(ref, {
+            kind: "attack",
+            refs: [ref],
+            target: target.ref,
+            ...(holding ? { task: "counter-defense" } : {}),
+          });
         } else {
           const goal = unit.antiAir
             ? mission.destination
             : (mission.groundDestination ?? mission.destination);
-          order(
-            ref,
-            `advance:${goal.x}:${goal.y}`,
-            {
-              kind: "attackMove",
-              refs: [ref],
-              x: goal.x,
-              y: goal.y,
-              ...(holding ? { task: "counter-rally" } : {}),
-            },
-            450,
-          );
+          order(ref, {
+            kind: "attackMove",
+            refs: [ref],
+            x: goal.x,
+            y: goal.y,
+            ...(holding ? { task: "counter-rally" } : {}),
+          });
         }
       }
     return {

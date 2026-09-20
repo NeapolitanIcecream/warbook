@@ -1,0 +1,31 @@
+{
+  "purpose": "Native combat order continuity only, before mineral protection changes.",
+  "subjects": {
+    "native-016": {
+      "ref": "b801011",
+      "mode": "bastion"
+    },
+    "baseline-015": {
+      "ref": "v0.1.15",
+      "mode": "bastion"
+    }
+  },
+  "opponents": {
+    "pressure-015": {
+      "ref": "v0.1.15",
+      "mode": "pressure"
+    },
+    "old-defense": {
+      "ref": "b3a1f7c",
+      "mode": "bastion"
+    },
+    "supalosa": {
+      "native": "supalosa"
+    }
+  },
+  "maps": [
+    "mp03t4.map",
+    "mp06t2.map"
+  ],
+  "rounds": 1
+}

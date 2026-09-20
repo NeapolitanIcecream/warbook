@@ -14,6 +14,7 @@ import {
 } from "./combat-targets.js";
 import { StrikeTactics } from "./strike-tactics.js";
 import { ScoutTactics } from "./reconnaissance.js";
+import { HarvesterTactics } from "./harvesters.js";
 import {
   currentEvidence,
   type CombatMission,
@@ -31,6 +32,7 @@ export class PositionTactics extends LocalCombat {
   private yieldingUntil = new Map<string, number>();
   private readonly scouts = new ScoutTactics();
   private readonly strike = new StrikeTactics();
+  private readonly harvesters = new HarvesterTactics();
 
   protected prepareMission(mission: CombatMission): void {
     const role = `${mission.id}:${mission.kind}`;
@@ -58,6 +60,8 @@ export class PositionTactics extends LocalCombat {
     evidence: readonly ExecutionEvidence[],
   ): ControlResult {
     this.prepareMission(mission);
+    if (mission.kind === "harvest")
+      return this.harvesters.control(o, mission, evidence);
     if (mission.kind === "scout")
       return this.scouts.control(o, mission, evidence);
     if (mission.kind === "screen") {
@@ -77,27 +81,21 @@ export class PositionTactics extends LocalCombat {
         const key = target
           ? `screen:${target.ref}`
           : `screen:${mission.destination.x}:${mission.destination.y}`;
-        const old = this.lastPositionOrders.get(ref);
-        if (
-          !old ||
-          (old.key !== key && o.tick - old.tick >= 30) ||
-          o.tick - old.tick >= 180
-        ) {
-          intents.push(
-            target
-              ? {
-                  kind: "attack",
-                  refs: [ref],
-                  target: target.ref,
-                  task: mission.id,
-                }
-              : {
-                  kind: "attackMove",
-                  refs: [ref],
-                  ...mission.destination,
-                  task: mission.id,
-                },
-          );
+        const intent: Intent = target
+          ? {
+              kind: "attack",
+              refs: [ref],
+              target: target.ref,
+              task: mission.id,
+            }
+          : {
+              kind: "attackMove",
+              refs: [ref],
+              ...mission.destination,
+              task: mission.id,
+            };
+        if (this.orders.allow(unit, intent, o.tick)) {
+          intents.push(intent);
           this.lastPositionOrders.set(ref, { key, tick: o.tick });
         }
       }
@@ -130,18 +128,17 @@ export class PositionTactics extends LocalCombat {
             distance2(e, unit) <= ((e.weaponRange ?? 5) + 2) ** 2,
         );
         const signature = danger ? "capture-retreat" : `capture:${target?.ref}`;
-        const old = this.lastPositionOrders.get(ref);
-        if (!old || old.key !== signature || o.tick - old.tick >= 180) {
-          intents.push(
-            danger || !target
-              ? { kind: "move", refs: [ref], ...o.home, task: mission.id }
-              : {
-                  kind: "capture",
-                  refs: [ref],
-                  target: target!.ref,
-                  task: mission.id,
-                },
-          );
+        const intent: Intent =
+          danger || !target
+            ? { kind: "move", refs: [ref], ...o.home, task: mission.id }
+            : {
+                kind: "capture",
+                refs: [ref],
+                target: target.ref,
+                task: mission.id,
+              };
+        if (this.orders.allow(unit, intent, o.tick)) {
+          intents.push(intent);
           this.lastPositionOrders.set(ref, { key: signature, tick: o.tick });
         }
       }
@@ -179,12 +176,7 @@ export class PositionTactics extends LocalCombat {
       return super.control(o, mission, evidence);
     const intents: Intent[] = [];
     const owns = new Map(o.own.map((u) => [u.ref, u]));
-    const issue = (
-      ref: string,
-      key: string,
-      intent: Intent,
-      _repeat: number,
-    ) => {
+    const issue = (ref: string, key: string, intent: Intent) => {
       const unit = owns.get(ref);
       if (unit && this.orders.allow(unit, intent, o.tick)) {
         this.lastPositionOrders.set(ref, { key, tick: o.tick });
@@ -278,36 +270,29 @@ export class PositionTactics extends LocalCombat {
           engaging++;
           const distance = Math.sqrt(weaponDistance2(unit, target));
           if (unit.name === "E1" && unit.deployed && distance > range + 0.25) {
-            issue(
-              ref,
-              "undeploy",
-              { kind: "deploy", refs: [ref], task: mission.id },
-              180,
-            );
+            issue(ref, "undeploy", {
+              kind: "deploy",
+              refs: [ref],
+              task: mission.id,
+            });
           } else if (
             unit.name === "E1" &&
             !unit.deployed &&
             (distance <= range || (unit.attackState ?? 0) >= 3)
           ) {
-            issue(
-              ref,
-              "deploy",
-              { kind: "deploy", refs: [ref], task: mission.id },
-              180,
-            );
+            issue(ref, "deploy", {
+              kind: "deploy",
+              refs: [ref],
+              task: mission.id,
+            });
           } else {
             if (unit.deployed) deployed++;
-            issue(
-              ref,
-              `attack:${target.ref}`,
-              {
-                kind: "attack",
-                refs: [ref],
-                target: target.ref,
-                task: mission.id,
-              },
-              180,
-            );
+            issue(ref, `attack:${target.ref}`, {
+              kind: "attack",
+              refs: [ref],
+              target: target.ref,
+              task: mission.id,
+            });
           }
           continue;
         }
@@ -315,12 +300,12 @@ export class PositionTactics extends LocalCombat {
       } else if (mission.kind !== "withdraw") {
         const screen = rangedFallback(unit, armor, o.enemies);
         if (screen) {
-          issue(
-            ref,
-            `screen:${screen.x}:${screen.y}`,
-            { kind: "move", refs: [ref], ...screen, task: mission.id },
-            90,
-          );
+          issue(ref, `screen:${screen.x}:${screen.y}`, {
+            kind: "move",
+            refs: [ref],
+            ...screen,
+            task: mission.id,
+          });
           continue;
         }
         const close = o.enemies.filter(
@@ -352,44 +337,34 @@ export class PositionTactics extends LocalCombat {
                 .sort((a, b) => distance2(a, unit) - distance2(b, unit))[0]
             : undefined;
         if (infantry) {
-          issue(
-            ref,
-            `crush:${infantry.ref}`,
-            {
-              kind: "crush",
-              refs: [ref],
-              target: infantry.ref,
-              task: mission.id,
-            },
-            60,
-          );
+          issue(ref, `crush:${infantry.ref}`, {
+            kind: "crush",
+            refs: [ref],
+            target: infantry.ref,
+            task: mission.id,
+          });
           continue;
         }
         const target = localArmorTarget(unit, close, sharedTarget);
         const rotation = rotationPost(unit, armor, close);
         if (rotation) {
           rotating++;
-          issue(
-            ref,
-            `rotate:${rotation.x}:${rotation.y}`,
-            { kind: "move", refs: [ref], ...rotation, task: mission.id },
-            90,
-          );
+          issue(ref, `rotate:${rotation.x}:${rotation.y}`, {
+            kind: "move",
+            refs: [ref],
+            ...rotation,
+            task: mission.id,
+          });
           continue;
         }
         if (target) {
           engaging++;
-          issue(
-            ref,
-            `attack:${target.ref}`,
-            {
-              kind: "attack",
-              refs: [ref],
-              target: target.ref,
-              task: mission.id,
-            },
-            180,
-          );
+          issue(ref, `attack:${target.ref}`, {
+            kind: "attack",
+            refs: [ref],
+            target: target.ref,
+            task: mission.id,
+          });
           continue;
         }
       }
@@ -427,12 +402,11 @@ export class PositionTactics extends LocalCombat {
               this.roles.get(other.ref)?.endsWith(":withdraw"),
           )
         ) {
-          issue(
-            ref,
-            "give-way",
-            { kind: "scatter", refs: [ref], task: mission.id },
-            90,
-          );
+          issue(ref, "give-way", {
+            kind: "scatter",
+            refs: [ref],
+            task: mission.id,
+          });
           this.yieldingUntil.set(ref, o.tick + 90);
           givingWay++;
           continue;
@@ -473,28 +447,23 @@ export class PositionTactics extends LocalCombat {
               .find(free) ?? desired);
       if (distance2(unit, point) > (unit.type === 3 ? 1 : 2) ** 2) {
         if (unit.deployed)
-          issue(
-            ref,
-            "undeploy",
-            { kind: "deploy", refs: [ref], task: mission.id },
-            180,
-          );
+          issue(ref, "undeploy", {
+            kind: "deploy",
+            refs: [ref],
+            task: mission.id,
+          });
         else
-          issue(
-            ref,
-            `post:${point.x}:${point.y}`,
-            { kind: "move", refs: [ref], ...point, task: mission.id },
-            180,
-          );
+          issue(ref, `post:${point.x}:${point.y}`, {
+            kind: "move",
+            refs: [ref],
+            ...point,
+            task: mission.id,
+          });
       } else {
         stationed++;
         if (unit.deployed) deployed++;
-        issue(
-          ref,
-          "hold",
-          { kind: "stop", refs: [ref], task: mission.id },
-          Number.POSITIVE_INFINITY,
-        );
+        if ((unit.attackState ?? 0) >= 3) continue;
+        issue(ref, "hold", { kind: "stop", refs: [ref], task: mission.id });
       }
     }
     for (const ref of this.roles.keys())

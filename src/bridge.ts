@@ -204,6 +204,12 @@ export class WarbookBot extends Bot {
         mobile: !!u.canMove,
         idle: !!u.isIdle,
         harvester: u.rules.harvester,
+        ...(u.rules.harvester
+          ? {
+              cargo: (u.harvestedOre ?? 0) + (u.harvestedGems ?? 0),
+              teleporter: u.rules.teleporter,
+            }
+          : {}),
         mcv: !!u.rules.deploysInto && !u.rules.harvester,
         yard: u.rules.constructionYard,
         refinery: u.rules.refinery,
@@ -523,25 +529,17 @@ export class WarbookBot extends Bot {
     }
     if (tick - this.lastOreTick >= 300) {
       const fields: { x: number; y: number; amount: number }[] = [];
-      for (
-        let x = data.startLocation.x - 45;
-        x <= data.startLocation.x + 45;
-        x++
-      )
-        for (
-          let y = data.startLocation.y - 45;
-          y <= data.startLocation.y + 45;
-          y++
-        ) {
-          const tile = this.game.map.getTile(x, y);
-          if (!tile || !this.game.map.isVisibleTile(tile, this.name)) continue;
-          const r = this.game.map.getTileResourceData(tile),
-            amount = (r?.ore ?? 0) + 2 * (r?.gems ?? 0);
-          if (!amount) continue;
-          const field = fields.find((p) => distance2(p, { x, y }) < 10 ** 2);
-          if (field) field.amount += amount;
-          else fields.push({ x, y, amount });
-        }
+      for (const { x, y, bridge } of this.mapPrior?.points ?? []) {
+        if (bridge) continue;
+        const tile = this.game.map.getTile(x, y);
+        if (!tile || !this.game.map.isVisibleTile(tile, this.name)) continue;
+        const r = this.game.map.getTileResourceData(tile),
+          amount = (r?.ore ?? 0) + 2 * (r?.gems ?? 0);
+        if (!amount) continue;
+        const field = fields.find((p) => distance2(p, { x, y }) < 10 ** 2);
+        if (field) field.amount += amount;
+        else fields.push({ x, y, amount });
+      }
       this.oreFields = fields;
       this.lastOreTick = tick;
     }
@@ -860,6 +858,11 @@ export class WarbookBot extends Bot {
           throw new Error("Conflicting queue intent");
         changedQueues.add(intent.product.queue);
       }
+      if (
+        intent.kind === "dock" &&
+        !o.own.some((u) => u.ref === intent.target && u.refinery)
+      )
+        throw new Error("Return target is not an owned refinery");
       if ("refs" in intent) for (const ref of intent.refs) assigned.add(ref);
       const intentId = `intent-${this.intentSequence++}`;
       const origin = this.commander.intentOrigin(intent);
@@ -892,9 +895,10 @@ export class WarbookBot extends Bot {
               );
             break;
           case "capture":
+          case "dock":
             this.player.actions.orderUnits(
               ids,
-              OrderType.Capture,
+              intent.kind === "dock" ? OrderType.Dock : OrderType.Capture,
               this.currentRefs.get(intent.target)!,
             );
             break;
@@ -911,10 +915,15 @@ export class WarbookBot extends Bot {
             break;
           case "attackMove":
           case "move":
+          case "gather":
             for (let n = 0; n < ids.length; n += 128)
               this.player.actions.orderUnits(
                 ids.slice(n, n + 128),
-                intent.kind === "move" ? OrderType.Move : OrderType.AttackMove,
+                intent.kind === "gather"
+                  ? OrderType.Gather
+                  : intent.kind === "move"
+                    ? OrderType.Move
+                    : OrderType.AttackMove,
                 intent.x,
                 intent.y,
                 intent.onBridge ?? false,

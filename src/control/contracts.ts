@@ -12,6 +12,7 @@ export interface CombatMission extends TaskIdentity {
     | "scout"
     | "withdraw"
     | "capture"
+    | "harvest"
     | "screen";
   readonly units: readonly string[];
   /** Undefined means preserve existing orders; it does not send Stop. */

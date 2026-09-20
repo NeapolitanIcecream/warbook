@@ -9,6 +9,7 @@ import { DefenseAssignments } from "./defense-assignments.js";
 import { DefenseSituation } from "./defense-situation.js";
 import { DefenseRelief } from "./defense-relief.js";
 import { isScout, Reconnaissance } from "./reconnaissance.js";
+import { MiningArea } from "./harvesters.js";
 import { NeutralEconomy } from "./neutral-economy.js";
 import { Operations } from "./operations.js";
 import { formedUnits, rendezvous } from "./formation.js";
@@ -44,6 +45,8 @@ export class BastionStrategy implements StrategicController {
   private launchedArmor = 6;
   private transition: Record<string, number | string> = {};
   private resourcePost?: Point;
+  private readonly mining = new MiningArea();
+  private mineGuards = new Set<string>();
   private scoutRefs = new Set<string>();
   private flankRefs = new Set<string>();
   private flankVia?: Point;
@@ -163,22 +166,26 @@ export class BastionStrategy implements StrategicController {
       o.tick - o.stagingRoute.observedTick <= 450
         ? o.stagingRoute.point
         : post;
-    const forwardFields = (o.oreFields ?? []).filter(
-      (p) =>
-        p.amount >= 100 &&
-        distance2(p, o.home) >= 10 ** 2 &&
-        distance2(p, o.home) <= 24 ** 2 &&
-        distance2(p, stagingDirection) < distance2(o.home, stagingDirection),
-    );
-    if (
-      !forwardFields.some(
-        (p) => this.resourcePost && distance2(p, this.resourcePost) <= 8 ** 2,
-      )
-    )
-      this.resourcePost = undefined;
-    this.resourcePost ??= forwardFields.find((p) =>
-      o.own.some((u) => u.harvester && distance2(u, p) <= 8 ** 2),
-    );
+    const workingField = this.mining.observe(o);
+    const mineThreat = workingField
+      ? [...o.enemies]
+          .filter(
+            (e) => (e.weaponRange ?? 0) > 0 && e.canThreatenVehicles !== false,
+          )
+          .sort(
+            (a, b) => distance2(a, workingField) - distance2(b, workingField),
+          )[0]
+      : undefined;
+    const mineApproach = mineThreat ?? stagingDirection;
+    if (workingField) {
+      const dx = mineApproach.x - workingField.x,
+        dy = mineApproach.y - workingField.y;
+      const length = Math.hypot(dx, dy) || 1;
+      this.resourcePost = {
+        x: Math.round(workingField.x + (4 * dx) / length),
+        y: Math.round(workingField.y + (4 * dy) / length),
+      };
+    } else this.resourcePost = undefined;
     const musterPost = responding
       ? vehiclePost
       : this.firstForceFunded && this.resourcePost
@@ -229,7 +236,34 @@ export class BastionStrategy implements StrategicController {
         )
           this.withdrawing.add(u.ref);
     };
+    const guardCandidates = vehicles.filter(
+      (u) =>
+        u.name === armor &&
+        outsideFactory(u) &&
+        !this.assault.has(u.ref) &&
+        !this.joining.has(u.ref) &&
+        !this.withdrawing.has(u.ref),
+    );
+    const guardCount =
+      this.resourcePost &&
+      workingField &&
+      distance2(workingField, o.home) > 12 ** 2 &&
+      !protectNow &&
+      vehicles.filter(combatArmor).length >= 8
+        ? 2
+        : 0;
+    const mineGuards = guardCandidates
+      .sort(
+        (a, b) =>
+          Number(this.mineGuards.has(b.ref)) -
+            Number(this.mineGuards.has(a.ref)) ||
+          distance2(a, this.resourcePost ?? o.home) -
+            distance2(b, this.resourcePost ?? o.home),
+      )
+      .slice(0, guardCount);
+    this.mineGuards = new Set(mineGuards.map((u) => u.ref));
     const isReserve = (u: Unit) =>
+      !this.mineGuards.has(u.ref) &&
       !this.assault.has(u.ref) &&
       !this.joining.has(u.ref) &&
       !this.withdrawing.has(u.ref);
@@ -578,6 +612,27 @@ export class BastionStrategy implements StrategicController {
             engagement: { allowCrush: false },
           }),
         ];
+    if (mineGuards.length && this.resourcePost)
+      additionalCombat.push(
+        this.mission("mining-screen", {
+          kind: "defend",
+          units: mineGuards.map((u) => u.ref),
+          destination: this.resourcePost,
+          objective: "screen-working-mining-area",
+          protectedAssets: o.own.filter((u) => u.harvester).map((u) => u.ref),
+          engagement: { allowCrush: true },
+        }),
+      );
+    const miners = o.own.filter((u) => u.harvester);
+    if (miners.length)
+      additionalCombat.push(
+        this.mission("mining-safety", {
+          kind: "harvest",
+          units: miners.map((u) => u.ref),
+          objective: "preserve-miners-and-income",
+          engagement: { allowCrush: false },
+        }),
+      );
     if (flank.length)
       additionalCombat.push(
         this.mission("flank-force", {

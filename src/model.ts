@@ -22,6 +22,9 @@ export interface Unit extends Point {
   mobile: boolean;
   idle: boolean;
   harvester: boolean;
+  /** Own cargo only, observed through the pinned public UnitData API. */
+  cargo?: number;
+  teleporter?: boolean;
   mcv: boolean;
   yard: boolean;
   refinery: boolean;
@@ -122,7 +125,11 @@ export type Intent = (
   | { kind: "scatter"; refs: string[] }
   | { kind: "queue"; product: Product }
   | { kind: "place"; name: string; x: number; y: number }
-  | { kind: "attack" | "crush" | "capture"; refs: string[]; target: string }
+  | {
+      kind: "attack" | "crush" | "capture" | "dock";
+      refs: string[];
+      target: string;
+    }
   | {
       kind: "attackMove" | "move";
       refs: string[];
@@ -130,6 +137,7 @@ export type Intent = (
       y: number;
       onBridge?: boolean;
     }
+  | { kind: "gather"; refs: string[]; x: number; y: number; onBridge?: boolean }
   | { kind: "repair"; ref: string }
 ) & { task?: string };
 

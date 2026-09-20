@@ -39,6 +39,15 @@ export function observedEffect(
   o: Observation,
 ): string | undefined {
   const i = p.intent;
+  if (
+    i.kind === "dock" &&
+    p.units.some((before) =>
+      o.own.some(
+        (u) => u.ref === before.ref && (u.cargo ?? 0) < (before.cargo ?? 0),
+      ),
+    )
+  )
+    return "harvester_cargo_decreased";
   if (i.kind === "capture" && o.own.some((u) => u.ref === i.target))
     return "captured_building_owned";
   if (

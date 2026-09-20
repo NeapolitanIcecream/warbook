@@ -1,3 +1,4 @@
+import { NativeOrders } from "./native-orders.js";
 import {
   distance2,
   type Intent,
@@ -135,7 +136,7 @@ export class Reconnaissance {
 export class ScoutTactics {
   private safe = new Map<string, Point[]>();
   private retreat = new Map<string, { point: Point; until: number }>();
-  private orders = new Map<string, { goal: string; tick: number }>();
+  private readonly orders = new NativeOrders();
   control(
     o: Observation,
     mission: CombatMission,
@@ -197,23 +198,15 @@ export class ScoutTactics {
       );
       const goal = retreat?.point ?? route?.waypoint ?? mission.destination;
       if (!goal) continue;
-      const previous = this.orders.get(ref),
-        signature = `${key(goal)}:${Boolean(goal.onBridge)}`;
-      if (
-        !previous ||
-        (signature !== previous.goal && o.tick - previous.tick >= 30) ||
-        o.tick - previous.tick >= 300
-      ) {
-        intents.push({
-          kind: "move",
-          refs: [ref],
-          x: goal.x,
-          y: goal.y,
-          ...(goal.onBridge ? { onBridge: true } : {}),
-          task: mission.id,
-        });
-        this.orders.set(ref, { goal: signature, tick: o.tick });
-      }
+      const intent: Intent = {
+        kind: "move",
+        refs: [ref],
+        x: goal.x,
+        y: goal.y,
+        ...(goal.onBridge ? { onBridge: true } : {}),
+        task: mission.id,
+      };
+      if (this.orders.allow(unit, intent, o.tick)) intents.push(intent);
     }
     return {
       origin: {

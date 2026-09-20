@@ -181,8 +181,9 @@ export class StrikeTactics extends LocalCombat {
           )
           .sort((a, b) => distance2(a, rally) - distance2(b, rally))[0]);
     const proposed: Intent[] = [];
-    const issue = (unit: Unit, _key: string, intent: Intent, urgent = false) => {
-      if (this.orders.allow(unit, intent, o.tick, 15, urgent)) proposed.push(intent);
+    const issue = (unit: Unit, intent: Intent, urgent = false) => {
+      if (this.orders.allow(unit, intent, o.tick, 15, urgent))
+        proposed.push(intent);
     };
     let rangedEngaging = 0,
       retreating = 0,
@@ -191,7 +192,7 @@ export class StrikeTactics extends LocalCombat {
       const screen = rangedFallback(u, tanks, o.enemies);
       if (screen) {
         retreating++;
-        issue(u, `screen:${screen.x}:${screen.y}`, {
+        issue(u, {
           kind: "move",
           refs: [u.ref],
           ...screen,
@@ -221,7 +222,7 @@ export class StrikeTactics extends LocalCombat {
           )[0];
         if (rangedTarget) {
           rangedEngaging++;
-          issue(u, `attack:${rangedTarget.ref}`, {
+          issue(u, {
             kind: "attack",
             refs: [u.ref],
             target: rangedTarget.ref,
@@ -256,7 +257,6 @@ export class StrikeTactics extends LocalCombat {
         retreating++;
         issue(
           u,
-          `retreat:${retreat.point.x}:${retreat.point.y}`,
           { kind: "move", refs: [u.ref], ...retreat.point, task: mission.id },
           true,
         );
@@ -265,7 +265,7 @@ export class StrikeTactics extends LocalCombat {
       const rotation = rotationPost(u, core, o.enemies);
       if (rotation) {
         rotating++;
-        issue(u, `rotate:${rotation.x}:${rotation.y}`, {
+        issue(u, {
           kind: "move",
           refs: [u.ref],
           ...rotation,
@@ -277,7 +277,7 @@ export class StrikeTactics extends LocalCombat {
         const point = core.every((a) => a.onBridge)
           ? mission.destination
           : rally;
-        issue(u, `join:${point.x}:${point.y}`, {
+        issue(u, {
           kind: "move",
           refs: [u.ref],
           ...point,
@@ -289,7 +289,7 @@ export class StrikeTactics extends LocalCombat {
         ? o.enemies.find((e) => e.airborne && distance2(e, u) <= 14 ** 2)
         : undefined;
       if (air) {
-        issue(u, `attack:${air.ref}`, {
+        issue(u, {
           kind: "attack",
           refs: [u.ref],
           target: air.ref,
@@ -298,7 +298,7 @@ export class StrikeTactics extends LocalCombat {
         continue;
       }
       if (regroup) {
-        issue(u, "regroup", { kind: "stop", refs: [u.ref], task: mission.id });
+        issue(u, { kind: "stop", refs: [u.ref], task: mission.id });
         continue;
       }
       const crush =
@@ -318,7 +318,7 @@ export class StrikeTactics extends LocalCombat {
               .sort((a, b) => distance2(a, u) - distance2(b, u))[0]
           : undefined;
       if (crush)
-        issue(u, `crush:${crush.ref}`, {
+        issue(u, {
           kind: "crush",
           refs: [u.ref],
           target: crush.ref,
@@ -328,14 +328,14 @@ export class StrikeTactics extends LocalCombat {
         const personal = finishNow
           ? target
           : (localArmorTarget(u, o.enemies, dangerous) ?? target);
-        issue(u, `attack:${personal.ref}`, {
+        issue(u, {
           kind: "attack",
           refs: [u.ref],
           target: personal.ref,
           task: mission.id,
         });
       } else
-        issue(u, `march:${march!.x}:${march!.y}:${Boolean(march!.onBridge)}`, {
+        issue(u, {
           kind: "attackMove",
           refs: [u.ref],
           ...march!,
