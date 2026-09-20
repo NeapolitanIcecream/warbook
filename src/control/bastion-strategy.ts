@@ -12,6 +12,7 @@ import { isScout, Reconnaissance } from "./reconnaissance.js";
 import { MiningArea } from "./harvesters.js";
 import { NeutralEconomy } from "./neutral-economy.js";
 import { Operations } from "./operations.js";
+import { LegacyLaunchProvider } from "./launch-provider.js";
 import { formedUnits, rendezvous } from "./formation.js";
 import {
   TaskRevision,
@@ -32,6 +33,7 @@ export class BastionStrategy implements StrategicController {
   private readonly neutral = new NeutralEconomy();
   private readonly recon = new Reconnaissance();
   private readonly operations = new Operations();
+  private readonly legacyLaunch = new LegacyLaunchProvider();
   private readonly revisions = new Map<string, TaskRevision>();
   private readonly productionRevision = new TaskRevision();
   private assault = new Set<string>();
@@ -319,40 +321,26 @@ export class BastionStrategy implements StrategicController {
       ),
       musterPost,
     );
-    const opportunity = !assault.length
-      ? this.operations.consider(o, ready)
-      : undefined;
     const alternative =
       o.flankApproach &&
       distance2(o.flankApproach.towards, stagingDirection) <= 10 ** 2
         ? o.flankApproach.point
         : undefined;
-    const exploration =
-      !this.operations.hasKnownBase &&
-      (ready.filter(combatArmor).length >= this.launchSize ||
-        (this.firstForceFunded && !scouts.length && ready.some(combatArmor))) &&
-      searchGoal
-        ? {
-            point: searchGoal,
-            reason: "formed-advance" as const,
-            defenders: 0,
-            productionArrivals: 0,
-            travelSeconds: 0,
-          }
-        : undefined;
-    // A favorable fight at home belongs to defense tactics. Promoting it to
-    // an expedition can immediately trigger a full withdrawal as another
-    // attacker becomes visible, taking the tanks away from their own guard.
-    const nextOperation =
-      opportunity?.reason === "local-counterattack"
-        ? undefined
-        : (opportunity ?? exploration);
-    if (
-      !this.assault.size &&
-      !protectNow &&
-      o.tick >= this.nextLaunchTick &&
-      nextOperation
-    ) {
+    const proposal = this.legacyLaunch.choose({
+      observation: o,
+      operations: this.operations,
+      ready,
+      active: !!assault.length,
+      protectNow,
+      nextLaunchTick: this.nextLaunchTick,
+      firstForceFunded: this.firstForceFunded,
+      hasScouts: !!scouts.length,
+      searchGoal,
+      launchSize: this.launchSize,
+      armor,
+    });
+    if (proposal) {
+      const nextOperation = proposal.operation;
       this.assault = new Set(ready.map((u) => u.ref));
       this.launchedArmor = ready.filter(combatArmor).length;
       this.transition = {
