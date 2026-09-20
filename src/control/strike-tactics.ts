@@ -41,7 +41,7 @@ export class StrikeTactics extends LocalCombat {
   private heldContacts = new Map<string, { point: Point; goal: Point }>();
 
   handoff(ref: string, mission: string) {
-    this.lastOrders.delete(ref);
+    this.orders.forget(ref);
     this.retreats.delete(ref);
   }
 
@@ -181,16 +181,8 @@ export class StrikeTactics extends LocalCombat {
           )
           .sort((a, b) => distance2(a, rally) - distance2(b, rally))[0]);
     const proposed: Intent[] = [];
-    const issue = (unit: Unit, key: string, intent: Intent, urgent = false) => {
-      const old = this.lastOrders.get(unit.ref);
-      if (
-        !old ||
-        (old.key !== key && (urgent || o.tick - old.tick >= 15)) ||
-        o.tick - old.tick >= 180
-      ) {
-        this.lastOrders.set(unit.ref, { key, tick: o.tick });
-        proposed.push(intent);
-      }
+    const issue = (unit: Unit, _key: string, intent: Intent, urgent = false) => {
+      if (this.orders.allow(unit, intent, o.tick, 15, urgent)) proposed.push(intent);
     };
     let rangedEngaging = 0,
       retreating = 0,

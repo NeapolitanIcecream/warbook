@@ -47,8 +47,8 @@ export class PositionTactics extends LocalCombat {
         if (!continuingDefense) {
           this.lastPositionOrders.delete(ref);
           this.targets.delete(ref);
+          this.orders.forget(ref);
         }
-        this.lastOrders.delete(ref);
       }
   }
 
@@ -183,17 +183,10 @@ export class PositionTactics extends LocalCombat {
       ref: string,
       key: string,
       intent: Intent,
-      repeat: number,
+      _repeat: number,
     ) => {
-      const previous = this.lastPositionOrders.get(ref);
-      if (
-        !previous ||
-        (previous.key !== key &&
-          (o.tick - previous.tick >= 30 ||
-            previous.key === "deploy" ||
-            previous.key === "undeploy")) ||
-        o.tick - previous.tick >= repeat
-      ) {
+      const unit = owns.get(ref);
+      if (unit && this.orders.allow(unit, intent, o.tick)) {
         this.lastPositionOrders.set(ref, { key, tick: o.tick });
         intents.push(intent);
       }
@@ -508,7 +501,7 @@ export class PositionTactics extends LocalCombat {
       if (!owns.has(ref)) {
         this.lastPositionOrders.delete(ref);
         this.roles.delete(ref);
-        this.lastOrders.delete(ref);
+        this.orders.forget(ref);
         this.targets.delete(ref);
         this.motion.delete(ref);
         this.yieldingUntil.delete(ref);

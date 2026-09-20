@@ -1,3 +1,4 @@
+import { NativeOrders } from "./native-orders.js";
 import { distance2, type Intent, type Observation } from "../model.js";
 import {
   currentEvidence,
@@ -14,7 +15,7 @@ export class LocalCombat implements TacticalController {
   readonly id: string = "local-combat-v1";
   private readonly contactRadius = 14;
   private readonly crushRadius = 10;
-  protected lastOrders = new Map<string, { tick: number; key: string }>();
+  protected readonly orders = new NativeOrders();
   assess(o: Observation, request: AssessmentRequest): TacticalAssessment {
     const name = request.unitType;
     const factory = request.factoryType;
@@ -52,19 +53,12 @@ export class LocalCombat implements TacticalController {
     const holding = mission.kind === "assemble";
     const order = (
       ref: string,
-      key: string,
+      _key: string,
       intent: Intent,
-      repeat: number,
+      _repeat: number,
     ) => {
-      const prev = this.lastOrders.get(ref);
-      if (
-        !prev ||
-        (prev.key !== key && o.tick - prev.tick >= 30) ||
-        o.tick - prev.tick >= repeat
-      ) {
-        this.lastOrders.set(ref, { tick: o.tick, key });
-        intents.push(intent);
-      }
+      const unit = o.own.find((u) => u.ref === ref);
+      if (unit && this.orders.allow(unit, intent, o.tick)) intents.push(intent);
     };
     const units = new Map(o.own.map((u) => [u.ref, u]));
     if (mission.destination)
