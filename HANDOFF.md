@@ -4,7 +4,7 @@
 
 ## 当前交接：0.1.16 已发布
 
-**2026-09-20晚间追加：** 用户要求17:30前启动服务器过夜实验、明早9:00查看。已部署独立会话，源码 `0849eeb`，先真实小规模端到端预检，再自动执行[有界过夜学习](docs/learned-overnight.md)。两份PPO的各自BC对照、线性搜索、主线/压力交替训练与最终复验；最多八轮/60,000局，2026-09-21 08:00上海时间后不再开始新训练阶段。任务定位在 `work/server-feasibility/active-job.json` 的 `overnight` 项；先读实际状态，不要重复启动。玩家仍0.1.16。GPT 6 Pro的[非文本Qwen咨询](docs/nontext-pretrained-policy.md)已完成；仅形成研究候选，没有启动Qwen训练。
+**2026-09-20晚间追加：** 用户要求17:30前启动服务器过夜实验、明早9:00查看。独立会话已在**17:19**完成114局预检后自动启动正式批次，源码 `0849eeb`；预检复算110正常、4预定上限、零异常，重连已确认正式96路校准91/512且继续推进。[有界过夜学习](docs/learned-overnight.md)包含两份PPO的各自BC对照、线性搜索、主线/压力交替训练与最终复验；最多八轮/60,000局，2026-09-21 08:00上海时间后不再开始新训练阶段。任务定位在 `work/server-feasibility/active-job.json` 的 `overnight` 项；先读实际状态，不要重复启动。玩家仍0.1.16。GPT 6 Pro的[非文本Qwen咨询](docs/nontext-pretrained-policy.md)已完成；仅形成研究候选，没有启动Qwen训练。
 
 **2026-09-20 12:39用户已授权开始学习实施并使用CPU服务器，要求超过17:30也能脱离开发机运行。当前开发分支`codex/learned-launch`；执行记录见 [学习实施](docs/learned-launch-cycle.md)。** 两个独立服务器任务现已正常结束，共4,240次试验，尚未晋升玩家候选。连接/目录/任务名在忽略文件`work/server-feasibility/active-job.json`，原始环境信息在同目录runtime.json。不要重新启动重复任务。固定Node26.5/CPU PyTorch2.9.1环境、原始对局和检查点均留在远端，玩家入口仍为0.1.16。
 
