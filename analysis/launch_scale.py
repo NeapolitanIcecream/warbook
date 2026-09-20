@@ -20,7 +20,7 @@ def tree_rss(pid):
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('--model', required=True); p.add_argument('--out', required=True)
-    p.add_argument('--workers', default='16,32,64'); p.add_argument('--rounds', type=int, default=8)
+    p.add_argument('--workers', default='16,32,64,96'); p.add_argument('--rounds', type=int, default=8)
     a = p.parse_args(); root = Path(a.out).resolve(); root.mkdir(parents=True, exist_ok=True)
     model = str(Path(a.model).resolve()); results = []
     for workers in map(int, a.workers.split(',')):
