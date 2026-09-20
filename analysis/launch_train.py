@@ -35,6 +35,26 @@ def load_artifact(model,path):
                 dst.weight.copy_(torch.tensor(src['weights']).reshape(src['input'],src['output']).T)
                 dst.bias.copy_(torch.tensor(src['bias']))
 
+def write_golden(model,path,g,c,mask,act):
+    # Early PPO records usually have only forced KEEP. Include real choices and
+    # distinct menu sizes so parity actually checks the candidate scorer too.
+    sizes=mask.sum(-1);ids=[]
+    def take(indices):
+        for i in indices:
+            i=int(i)
+            if i not in ids and len(ids)<6:ids.append(i)
+    take(torch.nonzero(sizes==1).flatten()[:1])
+    take(torch.nonzero((sizes>1)&(act>0)).flatten()[:1])
+    for size in sorted(set(sizes.tolist()),reverse=True):
+        take(torch.nonzero(sizes==size).flatten()[:1])
+    take(torch.nonzero(sizes>1).flatten()[:6])
+    if not any(sizes[i]>1 for i in ids):raise ValueError('Parity needs actual policy choices')
+    with torch.no_grad():
+        dist,val=model(g[ids],c[ids],mask[ids]);gold=[]
+        for j,i in enumerate(ids):
+            count=int(sizes[i]);gold.append({'global':g[i].tolist(),'candidates':c[i,:count].tolist(),'probabilities':dist.probs[j,:count].tolist(),'value':float(val[j])})
+    path.write_text(json.dumps(gold))
+
 def read_episode(directory):
     result=json.loads((directory/'result.json').read_text());manifest=json.loads((directory/'manifest.json').read_text())
     subject=next(p['name'] for p in manifest['participants'] if p['role']=='subject')
@@ -118,12 +138,7 @@ def main():
     metadata.update(episodes=[e['path'] for e in training],validationEpisodes=[e['path'] for e in validation],excludedEpisodes=excluded,outcomes={k:sum(e['outcome']==k for e in episodes) for k in ['W','L','U']},records=len(g),actorRecords=int(valid.sum()),history=history,validation=validation_metrics,inputSha256=hashlib.sha256(Path(args.input).read_bytes()).hexdigest() if args.input else None)
     torch.save(optimizer.state_dict(),out.with_suffix('.optimizer.pt'))
     sha=export(model,out,f'launch-{args.method}-{args.seed}',metadata)
-    # Fixed real samples for cross-runtime probability/value checking.
-    with torch.no_grad():
-        ids=list(range(min(6,len(g))));dist,val=model(g[ids],c[ids],mask[ids]);gold=[]
-        for j,i in enumerate(ids):
-            count=int(mask[i].sum());gold.append({'global':g[i].tolist(),'candidates':c[i,:count].tolist(),'probabilities':dist.probs[j,:count].tolist(),'value':float(val[j])})
-    out.with_suffix('.golden.json').write_text(json.dumps(gold))
+    write_golden(model,out.with_suffix('.golden.json'),g,c,mask,act)
     out.with_suffix('.training.json').write_text(json.dumps(metadata,indent=2)+'\n')
     print(json.dumps({'sha256':sha,'parameters':sum(p.numel() for p in model.parameters()),'episodes':len(episodes),'records':len(g),'validation':validation_metrics,'lastUpdate':history[-1]}))
 if __name__=='__main__':main()
