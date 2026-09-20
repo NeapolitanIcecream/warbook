@@ -1,0 +1,33 @@
+{
+  "purpose": "Release-source equivalence after versioning and unused own-property removal; no new strength claim.",
+  "subjects": {
+    "release-main": {
+      "ref": "190749c",
+      "mode": "bastion"
+    },
+    "release-pressure": {
+      "ref": "190749c",
+      "mode": "pressure"
+    }
+  },
+  "shadows": {
+    "release-main": {
+      "ref": "962e614",
+      "mode": "bastion"
+    },
+    "release-pressure": {
+      "ref": "962e614",
+      "mode": "pressure"
+    }
+  },
+  "opponents": {
+    "supalosa": {
+      "native": "supalosa"
+    }
+  },
+  "maps": [
+    "mp06t2.map",
+    "mp03t4.map"
+  ],
+  "rounds": 1
+}
