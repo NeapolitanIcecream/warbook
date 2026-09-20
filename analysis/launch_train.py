@@ -65,7 +65,7 @@ def main():
     torch.set_num_threads(args.threads);torch.manual_seed(args.seed);np.random.seed(args.seed);random.seed(args.seed)
     model=Policy()
     if args.input:load_artifact(model,Path(args.input))
-    out=Path(args.out);metadata={'git':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'trainerSha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),'python':sys.version.split()[0],'method':args.method,'seed':args.seed,'torch':torch.__version__,'numpy':np.__version__,'threads':args.threads,'objective':'formal win within 54000 ticks; W=1,L=0,U=0; E excluded and reported','architecture':'shared flat candidate scoring over <=33 legal actions; equivalent joint probability can be factorized by launch/target/amount'}
+    out=Path(args.out);out.parent.mkdir(parents=True,exist_ok=True);metadata={'git':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'trainerSha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),'python':sys.version.split()[0],'method':args.method,'seed':args.seed,'torch':torch.__version__,'numpy':np.__version__,'threads':args.threads,'objective':'formal win within 54000 ticks; W=1,L=0,U=0; E excluded and reported','architecture':'shared flat candidate scoring over <=33 legal actions; equivalent joint probability can be factorized by launch/target/amount'}
     if args.method=='init':
         print(json.dumps({'sha256':export(model,out,'launch-init',metadata),'parameters':sum(p.numel() for p in model.parameters())}));return
     paths=json.loads(Path(args.episodes).read_text());episodes=[];excluded=[]
@@ -83,7 +83,10 @@ def main():
     training=episodes[:-len(validation)] if bc else episodes
     data=tensors(training,bc);g,c,mask,act,ret,oldlog,oldvalue,valid=data
     optimizer=torch.optim.Adam(model.parameters(),lr=3e-4 if bc else 1e-4)
-    launch_weight=min(8.,float((act==0).sum())/max(1,int((act>0).sum())))
+    if not bc and args.input:
+        previous_optimizer=Path(args.input).with_suffix('.optimizer.pt')
+        if previous_optimizer.exists():optimizer.load_state_dict(torch.load(previous_optimizer,map_location='cpu',weights_only=True))
+    launch_weight=max(1.,min(8.,float((act==0).sum())/max(1,int((act>0).sum()))))
     adv=ret-oldvalue
     if not bc:
         if not valid.any():raise ValueError('Batch has no actionable policy decisions')
@@ -113,6 +116,7 @@ def main():
             pred=model(vg,vc,vm)[0].probs.argmax(-1);positive=va>0
             validation_metrics={'decisionAccuracy':float((pred==va).float().mean()),'nonKeepAccuracy':float((pred[positive]==va[positive]).float().mean()) if positive.any() else None,'predictedLaunchFraction':float((pred>0).float().mean()),'teacherLaunchFraction':float(positive.float().mean())}
     metadata.update(episodes=[e['path'] for e in training],validationEpisodes=[e['path'] for e in validation],excludedEpisodes=excluded,outcomes={k:sum(e['outcome']==k for e in episodes) for k in ['W','L','U']},records=len(g),actorRecords=int(valid.sum()),history=history,validation=validation_metrics,inputSha256=hashlib.sha256(Path(args.input).read_bytes()).hexdigest() if args.input else None)
+    torch.save(optimizer.state_dict(),out.with_suffix('.optimizer.pt'))
     sha=export(model,out,f'launch-{args.method}-{args.seed}',metadata)
     # Fixed real samples for cross-runtime probability/value checking.
     with torch.no_grad():
