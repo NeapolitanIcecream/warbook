@@ -239,7 +239,9 @@ export async function install(): Promise<void> {
     "position:fixed;z-index:10000;left:12px;bottom:8px;background:#111c25e8;color:#ccd8de;font:12px system-ui;padding:6px 10px;border:1px solid #425665;border-radius:5px;pointer-events:none";
   document.body.append(bar);
   const policyLabel =
-    __WARBOOK_POLICY__ === "pressure"
+    __WARBOOK_LAUNCH_MODEL__
+      ? "学习型出击（实验）"
+      : __WARBOOK_POLICY__ === "pressure"
       ? "步兵压制"
       : __WARBOOK_POLICY__ === "bastion"
         ? "阵地反击"

@@ -18,6 +18,7 @@ import { resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
 import { fileHash } from "../src/bot-release.js";
+import type { LaunchRecord } from "../src/learning/launch.js";
 import {
   JournalBehavior,
   ReplayBehavior,
@@ -80,6 +81,9 @@ async function main() {
     { actor: string; own: string; enemy: string }[]
   >();
   const journal = new JournalBehavior();
+  const launches: { tick: number; units: number; target: string }[] = [];
+  let launchRecords = 0;
+  let launchChoices = 0;
   let lastTick = -1;
   for await (const line of createInterface({
     input: createReadStream(`${directory}/decisions.ndjson`),
@@ -99,6 +103,19 @@ async function main() {
       sparse.set(event.tick, list);
     }
     if (event.actor !== actor) continue;
+    if (event.kind === "launch_decision") {
+      const record = event.record as LaunchRecord;
+      launchRecords++;
+      if (record.trainable) launchChoices++;
+      if (record.action > 0) {
+        const action = record.actions[record.action];
+        launches.push({
+          tick: event.tick,
+          units: action.units.length,
+          target: record.targets[action.target!].kind,
+        });
+      }
+    }
     if (event.kind === "strategic_plan") journal.onPlan(event.plan);
     if (event.kind === "base_contact")
       journal.onContact(event.tick, event.contacts);
@@ -308,6 +325,9 @@ async function main() {
         mismatches,
       },
       behavior: verified ? result : undefined,
+      launchDecisions: launchRecords
+        ? { records: launchRecords, choices: launchChoices, launches }
+        : undefined,
       task: values.task
         ? { name: values.task, ...journal.taskOrders.get(values.task) }
         : undefined,
@@ -348,6 +368,11 @@ async function main() {
       "",
       `${actor} 对 ${opponent}；记录到 ${clockTime(expected.tick)}，${expected.stopReason}，${JSON.stringify(expected.outcome)}。`,
       "",
+      ...(launchRecords
+        ? [
+            `- 学习出击选择：${launchChoices} 个可选择时点，${launches.length} 次选择出击。${launches.length ? `首次 ${clockTime(launches[0].tick)}，${launches[0].units} 单位，目标 ${launches[0].target}；最后 ${clockTime(launches.at(-1)!.tick)}。` : "没有选择出击。"}这是策略选择，不等于已抵达或开火。`,
+          ]
+        : []),
       renderBehavior(result),
       "",
       `核对：${checked}/${snapshotCount} 份原单位快照、停止 tick、资金及败北状态一致。原始回放和版本见 encounter.json。`,

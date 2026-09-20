@@ -590,7 +590,7 @@ export function renderBehavior(b: ReturnType<ReplayBehavior["finish"]>) {
       ? `- 进攻计划：${clockTime(b.firstAdvance.tick)}，${b.firstAdvance.units} 个单位；该阶段提交 ${b.advanceCombatOrders} 条主力作战命令，其中移动 ${b.advanceMoveOrders} 条。`
       : b.plansRecorded
         ? "- 进攻计划：全段任务日志中未出现有兵力的主力 advance 任务。"
-        : "- 进攻计划：该版本没有记录战略任务，无法从日志判断。",
+        : "- 进攻计划：这份日志没有记录战略任务，无法据此判断执行中的进攻计划。",
   );
   if (b.firstAdvanceOutsideHome !== undefined)
     lines.push(

@@ -11,8 +11,9 @@ def main():
     ap=argparse.ArgumentParser();ap.add_argument('plan');ap.add_argument('--out',required=True);ap.add_argument('--workers',type=int);ap.add_argument('--resume',action='store_true');args=ap.parse_args()
     plan=json.loads(Path(args.plan).read_text());root=Path(args.out).resolve();root.mkdir(parents=True,exist_ok=True)
     node=os.environ.get('WARBOOK_NODE','node');commit=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
-    for s in plan['subjects'].values():
-        if s.get('model'):s['model']=str(Path(s['model']).resolve());s['modelSha256']=digest(s['model'])
+    for s in [*plan['subjects'].values(),*plan['opponents'].values()]:
+        for field in ['model','release']:
+            if s.get(field):s[field]=str(Path(s[field]).resolve());s[field+'Sha256']=digest(s[field])
     identity={'plan':plan,'git':commit};fingerprint=hashlib.sha256(json.dumps(identity,sort_keys=True).encode()).hexdigest();manifest=root/'batch.json'
     if manifest.exists():
         if not args.resume or json.loads(manifest.read_text())['fingerprint']!=fingerprint:raise ValueError('Batch already exists or source/plan changed')
@@ -32,7 +33,7 @@ def main():
                 for subject in plan['subjects']:tasks.append((map_name,opponent,repeat,subject))
     random.Random(plan.get('orderSeed',1)).shuffle(tasks)
     started=time.monotonic();rows=[];workers=args.workers or plan.get('workers',4)
-    if workers<1 or workers>32:raise ValueError('Explicit worker bound is 1..32')
+    if workers<1 or workers>128:raise ValueError('Explicit worker bound is 1..128; calibrate CPU and memory before scaling')
     def run(task):
         map_name,opponent,repeat,subject=task;s=plan['subjects'][subject];p=plan['opponents'][opponent]
         directory=root/map_name/opponent/f'{repeat}-{subject}';directory.mkdir(parents=True,exist_ok=True)
@@ -41,11 +42,13 @@ def main():
         seconds=plan.get('seconds',300)
         cmd=[node,'--env-file-if-exists=.env','--import','./src/engine-diagnostics.mjs','--import','tsx','src/runner.ts','--units','0','--map',map_name,'--mode',s.get('mode','bastion'),'--out',str(directory),'--seconds',str(seconds)]
         if 'ref' in s:cmd+=['--actor-release',releases[(s['ref'],s.get('mode','bastion'))]]
+        if 'release' in s:cmd+=['--actor-release',s['release']]
         if 'policy' in s:cmd+=['--launch-policy',s['policy'],'--policy-seed',str(plan.get('policySeed',1)*100000+repeat*31+plan['maps'].index(map_name)*7+list(plan['opponents']).index(opponent))]
         if s.get('model'):cmd+=['--launch-model',s['model']]
         if s.get('deterministic'):cmd+=['--launch-deterministic']
         if plan.get('trace','launch')=='launch':cmd+=['--trace-level','launch']
         if 'native' in p:cmd+=['--opponent',p['native']]
+        elif 'release' in p:cmd+=['--opponent-release',p['release']]
         else:cmd+=['--opponent-release',releases[(p['ref'],p.get('mode','bastion'))]]
         if repeat%2:cmd+=['--swap']
         attempt=time.monotonic();error=None
