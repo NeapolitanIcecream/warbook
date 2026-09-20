@@ -84,9 +84,7 @@ let game: GameInstanceApi | undefined;
 async function main(): Promise<void> {
   if (
     values["launch-policy"] &&
-    (values["actor-release"] ||
-      values["shadow-release"] ||
-      !["bastion", "pressure"].includes(values.mode!))
+    (values["actor-release"] || !["bastion", "pressure"].includes(values.mode!))
   )
     throw new Error(
       "Experimental launch control needs a live layered subject, separate from frozen/shadow actors",
@@ -176,6 +174,16 @@ async function main(): Promise<void> {
   )
     throw new Error(
       "A behavior shadow must share the subject mode and observation protocol",
+    );
+  if (
+    launch &&
+    shadow &&
+    (!values["launch-deterministic"] ||
+      !values["launch-model"] ||
+      shadow.release.launchModelSha256 !== sha256(values["launch-model"]))
+  )
+    throw new Error(
+      "A learned shadow requires the same checkpoint and deterministic action selection",
     );
   const comparison = shadow ? new DecisionShadow() : undefined;
   const opponent =
