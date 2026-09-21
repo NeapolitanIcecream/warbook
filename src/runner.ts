@@ -100,12 +100,19 @@ async function main(): Promise<void> {
     );
   if (
     values["launch-policy"] &&
-    !["teacher", "random", "model", "linear"].includes(values["launch-policy"])
+    !["teacher", "teacher-menu", "random", "model", "linear"].includes(
+      values["launch-policy"],
+    )
   )
     throw new Error("Unknown launch policy");
   if (!["full", "launch"].includes(values["trace-level"]!))
     throw new Error("Unknown trace level");
   let operationScope = values["operation-scope"] as OperationScope | undefined;
+  if (
+    values["launch-policy"] === "teacher-menu" &&
+    operationScope !== "operation"
+  )
+    throw new Error("Menu teacher requires --operation-scope operation");
   if (
     operationScope &&
     (!["launch", "operation"].includes(operationScope) ||

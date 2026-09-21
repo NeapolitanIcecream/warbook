@@ -167,7 +167,11 @@ export class Operations {
     return { defenders, productionArrivals, travelSeconds, assumedProduction };
   }
 
-  consider(o: Observation, force: readonly Unit[]): Operation | undefined {
+  consider(
+    o: Observation,
+    force: readonly Unit[],
+    targetRef?: string,
+  ): Operation | undefined {
     const tanks = force.filter((u) =>
       ["MTNK", "HTNK", "SREF"].includes(u.name),
     );
@@ -198,6 +202,7 @@ export class Operations {
       : "scouting-for-target";
     let lowestRequired = Infinity;
     for (const target of candidates) {
+      if (targetRef && target.ref !== targetRef) continue;
       const visible = o.enemies.some((e) => e.ref === target.ref);
       const exposed =
         visible &&

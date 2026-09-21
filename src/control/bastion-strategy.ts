@@ -413,7 +413,14 @@ export class BastionStrategy implements StrategicController {
               : !authorizedArmor(this.armor).size;
           if (this.operationProvider.scope === "launch")
             applyLaunchOnly(this.armor, action, o, reserve);
-          else applyOperation(this.armor, action, o, reserve);
+          else
+            applyOperation(
+              this.armor,
+              action,
+              o,
+              reserve,
+              this.operationProvider.executionSource,
+            );
           if (
             newForce &&
             action.kind === "apply" &&

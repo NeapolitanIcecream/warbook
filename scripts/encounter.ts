@@ -92,6 +92,7 @@ async function main() {
     startedForces: 0,
     reinforcementOrders: 0,
     teacherRecords: 0,
+    menuTeacherRecords: 0,
     clearedRetargets: 0,
     liveRetargets: 0,
     firstCommit: undefined as { tick: number; members: number } | undefined,
@@ -130,10 +131,14 @@ async function main() {
       operationSummary.records++;
       operationSummary.scope = r.scope;
       if (r.executionSource === "teacher") operationSummary.teacherRecords++;
+      if (r.policy === "teacher-menu") operationSummary.menuTeacherRecords++;
       if (r.trainable) operationSummary.choices++;
       operationSummary.teacherCoverage[r.teacherCoverage] =
         (operationSummary.teacherCoverage[r.teacherCoverage] ?? 0) + 1;
-      if (r.action > 0 && r.executionSource === "policy") {
+      if (
+        r.action > 0 &&
+        (r.executionSource === "policy" || r.policy === "teacher-menu")
+      ) {
         const a = r.actions[r.action],
           kind = a.order?.kind ?? r.operation.kind ?? "unknown";
         operationSummary.appliedByKind[kind] =
@@ -436,10 +441,12 @@ async function main() {
       "",
       ...(operationSummary.records
         ? [
-            operationSummary.teacherRecords === operationSummary.records
+            operationSummary.teacherRecords === operationSummary.records &&
+            !operationSummary.menuTeacherRecords
               ? `- 规则教师：${operationSummary.records} 个记录时点；候选覆盖 ${JSON.stringify(operationSummary.teacherCoverage)}。实际执行旧规则，未表示的动作不计作模型 KEEP。`
-              : `- 模型作战选择：${operationSummary.choices}/${operationSummary.records} 个时点有选择；${operationSummary.startedForces} 次建立编组、${operationSummary.reinforcementOrders} 次补兵；模型命令 ${JSON.stringify(operationSummary.appliedByKind)}。${operationSummary.firstCommit ? `首次 ${clockTime(operationSummary.firstCommit.tick)} 授权 ${operationSummary.firstCommit.members} 单位。` : ""}此前部队仍可执行固定任务；${operationSummary.scope === "launch" ? "持续作战由固定规则管理" : "KEEP 延续现有命令"}。`,
-            ...(operationSummary.teacherRecords === operationSummary.records
+              : `- ${operationSummary.menuTeacherRecords ? "菜单教师实际选择" : "模型作战选择"}：${operationSummary.choices}/${operationSummary.records} 个时点有选择；${operationSummary.startedForces} 次建立编组、${operationSummary.reinforcementOrders} 次补兵；模型命令 ${JSON.stringify(operationSummary.appliedByKind)}。${operationSummary.firstCommit ? `首次 ${clockTime(operationSummary.firstCommit.tick)} 授权 ${operationSummary.firstCommit.members} 单位。` : ""}此前部队仍可执行固定任务；${operationSummary.scope === "launch" ? "持续作战由固定规则管理" : "KEEP 延续现有命令"}。`,
+            ...(operationSummary.teacherRecords === operationSummary.records &&
+            !operationSummary.menuTeacherRecords
               ? []
               : [
                   `- 任务变化：${operationSummary.clearedRetargets} 次在目标清空后改派、${operationSummary.liveRetargets} 次在未清空时换进攻目标。${operationSummary.firstWithdrawal ? `首次切换撤回 ${clockTime(operationSummary.firstWithdrawal.tick)}，当时既有编组 ${operationSummary.firstWithdrawal.members} 单位、平均血量 ${Math.round(operationSummary.firstWithdrawal.meanHealth * 100)}%。` : "未选择撤回已有编组。"}命令变化不等于实际到达或开火。`,

@@ -40,6 +40,8 @@ export interface OperationProvider {
   readonly scope: OperationScope;
   readonly period: number;
   readonly teacher: boolean;
+  /** Raw legacy teachers delegate execution; menu teachers use the policy executor. */
+  readonly executionSource?: "policy" | "teacher";
   readonly record?: unknown;
   choose(context: OperationContext): OperationAction;
 }

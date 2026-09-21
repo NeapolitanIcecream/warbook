@@ -22,7 +22,9 @@ import {
   buildOperationSnapshot,
   matchTeacher,
   OPERATION_GLOBAL_SIZE,
+  ExperimentalOperationProvider,
 } from "../src/learning/operation.js";
+import { chooseMenuTeacher } from "../src/control/operation-teacher.js";
 import { BastionStrategy } from "../src/control/bastion-strategy.js";
 import { LocalCombat } from "../src/control/tactics.js";
 
@@ -615,4 +617,123 @@ test("binding a visible building at a search point is an explicit teacher action
   assert(match.action > 0);
   assert.equal(snapshot.actions[match.action].order?.goal.ref, "base");
   assert.equal(snapshot.actions[match.action].addRefs.length, 0);
+});
+
+test("menu teacher reuses arrived withdrawal members rather than waiting for an empty slot", () => {
+  const c = context();
+  c.observation.own.forEach((u) => {
+    u.x = 2;
+    u.y = 2;
+  });
+  commit(
+    c,
+    withdraw,
+    c.observation.own.map((u) => u.ref),
+  );
+  c.reserve = [];
+  c.observation.tick += 600;
+  const menu = buildOperationSnapshot(c, "operation"),
+    teacher = chooseMenuTeacher(c, menu);
+  assert.equal(menu.actions[teacher.action].order?.kind, "advance");
+  assert.equal(teacher.reason, "menu-v1:relaunch-owned-force");
+  applyOperation(
+    c.state,
+    menu.actions[teacher.action],
+    c.observation,
+    c.reserve,
+    "teacher",
+  );
+  assert.equal(authorizedArmor(c.state).size, 8);
+  assert.equal(c.state.withdrawing.size, 0);
+  assert.equal(c.state.lastCommit?.source, "teacher");
+});
+
+test("menu teacher keeps travelling withdrawal then assembles its surviving cohort", () => {
+  const c = context();
+  commit(c, withdraw, ["u0", "u1"]);
+  c.reserve = [];
+  c.observation.own = c.observation.own.slice(0, 2);
+  c.observation.own.forEach((u) => {
+    u.x = 40;
+    u.y = 40;
+  });
+  c.observation.tick += 600;
+  let menu = buildOperationSnapshot(c, "operation");
+  assert.equal(chooseMenuTeacher(c, menu).action, 0);
+  c.observation.own.forEach((u) => {
+    u.x = 2;
+    u.y = 2;
+  });
+  menu = buildOperationSnapshot(c, "operation");
+  const chosen = menu.actions[chooseMenuTeacher(c, menu).action];
+  assert.equal(chosen.order?.kind, "assemble");
+  assert.equal(chosen.addRefs.length, 0);
+});
+
+test("menu teacher explicitly replaces partial recall with an executable whole-force order", () => {
+  const c = context();
+  commit(c, advance, ["u0", "u1", "u2", "u3"]);
+  c.reserve = c.observation.own.slice(4);
+  c.advice.recalled = ["u0"];
+  const menu = buildOperationSnapshot(c, "operation"),
+    teacher = chooseMenuTeacher(c, menu);
+  assert.equal(menu.actions[teacher.action].order?.kind, "defend");
+  applyOperation(
+    c.state,
+    menu.actions[teacher.action],
+    c.observation,
+    c.reserve,
+    "teacher",
+  );
+  for (const ref of ["u0", "u1", "u2", "u3"])
+    assert.ok(authorizedArmor(c.state).has(ref));
+});
+
+test("menu teacher deployment follows the current defended approach", () => {
+  const c = context();
+  commit(
+    c,
+    {
+      kind: "defend",
+      goal: { key: "defend-old", point: { x: 3, y: 3 }, kind: "anchor" },
+    },
+    ["u0", "u1"],
+  );
+  c.reserve = c.observation.own.slice(2);
+  c.frame.protectNow = true;
+  c.anchors.defend = [{ x: 18, y: 18 }];
+  const menu = buildOperationSnapshot(c, "operation"),
+    choice = chooseMenuTeacher(c, menu);
+  assert.deepEqual(menu.actions[choice.action].order?.goal.point, {
+    x: 18,
+    y: 18,
+  });
+});
+
+test("menu teacher uses actual order kind and the policy executor, with no dropped label", () => {
+  const c = context();
+  commit(
+    c,
+    {
+      kind: "assemble",
+      goal: {
+        key: "assemble:3:3:false",
+        point: { x: 3, y: 3 },
+        kind: "anchor",
+      },
+    },
+    c.observation.own.map((u) => u.ref),
+  );
+  c.reserve = [];
+  const provider = new ExperimentalOperationProvider(
+    "operation",
+    "teacher-menu",
+    "47",
+  );
+  const action = provider.choose(c);
+  assert.equal(provider.teacher, false);
+  assert.equal(provider.executionSource, "teacher");
+  assert.equal(action.order?.kind, "advance");
+  assert.equal(provider.record?.action, provider.record?.teacherAction);
+  assert.ok(provider.record!.action >= 0);
 });

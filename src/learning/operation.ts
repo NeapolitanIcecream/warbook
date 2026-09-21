@@ -12,6 +12,7 @@ import type {
 } from "../control/operation-provider.js";
 import { pointKey, sameOrder } from "../control/operation-state.js";
 import { rendezvous } from "../control/formation.js";
+import { chooseMenuTeacher } from "../control/operation-teacher.js";
 import {
   BASE_GLOBAL_SIZE,
   buildLaunchSnapshot,
@@ -356,6 +357,7 @@ export function matchTeacher(c: OperationContext, snapshot: OperationSnapshot) {
 export class ExperimentalOperationProvider implements OperationProvider {
   readonly period = 75;
   readonly teacher: boolean;
+  readonly executionSource: "policy" | "teacher";
   record?: OperationRecord;
   private readonly history: number[][] = [];
   private readonly random: () => number;
@@ -369,13 +371,21 @@ export class ExperimentalOperationProvider implements OperationProvider {
     if (!["launch", "operation"].includes(scope))
       throw new Error("Unsupported operation scope");
     this.teacher = policyName === "teacher";
+    if (policyName === "teacher-menu" && scope !== "operation")
+      throw new Error("Menu teacher v1 requires persistent-operation scope");
+    this.executionSource = ["teacher", "teacher-menu"].includes(policyName)
+      ? "teacher"
+      : "policy";
     this.random = seedrandom(seed);
   }
   choose(c: OperationContext): OperationAction {
     if (c.observation.tick % this.period)
       throw new Error("Operation decision outside strategy clock");
     const s = buildOperationSnapshot(c, this.scope),
-      teacher = matchTeacher(c, s);
+      teacher =
+        this.policyName === "teacher-menu"
+          ? chooseMenuTeacher(c, s)
+          : matchTeacher(c, s);
     this.history.push(
       s.global.slice(OPERATION_STEP_SIZE * 3, OPERATION_STEP_SIZE * 4),
     );
@@ -386,7 +396,7 @@ export class ExperimentalOperationProvider implements OperationProvider {
       ...Array(4 - this.history.length).fill(0),
       ...Array(this.history.length).fill(1),
     ];
-    let action = this.teacher ? teacher.action : 0,
+    let action = this.executionSource === "teacher" ? teacher.action : 0,
       logp = 0,
       value = 0;
     if (this.policyName === "random") {
@@ -425,7 +435,7 @@ export class ExperimentalOperationProvider implements OperationProvider {
       value,
       trainable: s.actions.length > 1,
       policy: this.policyName,
-      executionSource: this.teacher ? "teacher" : "policy",
+      executionSource: this.executionSource,
       delegatedChange: c.delegatedChange,
     };
     return s.actions[action < 0 ? 0 : action]; // Unrepresentable teachers execute the separately recorded raw rule advice.
