@@ -86,15 +86,16 @@ export function operationFacts(c: OperationContext): {
     target = goal?.ref && c.operations.contacts.find((e) => e.ref === goal.ref);
   const visible = !!goal?.ref && o.enemies.some((e) => e.ref === goal.ref);
   const cleared =
-    !!goal &&
-    (goal.ref
-      ? (o.vacatedContacts ?? []).includes(goal.ref) ||
-        (!target && force.some((u) => distance2(u, goal.point) <= 4 ** 2))
-      : goal.kind === "search" &&
-        force.some((u) => distance2(u, goal.point) <= 4 ** 2) &&
-        !(o.armySearchPoints ?? []).some(
-          (p) => pointKey(p) === pointKey(goal.point),
-        ));
+    s.goalCleared ||
+    (!!goal &&
+      (goal.ref
+        ? (o.vacatedContacts ?? []).includes(goal.ref) ||
+          (!target && force.some((u) => distance2(u, goal.point) <= 4 ** 2))
+        : goal.kind === "search" &&
+          force.some((u) => distance2(u, goal.point) <= 4 ** 2) &&
+          !(o.armySearchPoints ?? []).some(
+            (p) => pointKey(p) === pointKey(goal.point),
+          )));
   const cohort = force.filter((u) => s.orderCohort.has(u.ref));
   return {
     cleared,

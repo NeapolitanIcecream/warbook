@@ -21,6 +21,7 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument('--model', required=True); p.add_argument('--out', required=True)
     p.add_argument('--workers', default='16,32,64,96'); p.add_argument('--rounds', type=int, default=8)
+    p.add_argument('--policy-seed', type=int, default=29)
     a = p.parse_args(); root = Path(a.out).resolve(); root.mkdir(parents=True, exist_ok=True)
     model = str(Path(a.model).resolve()); results = []
     for workers in map(int, a.workers.split(',')):
@@ -32,7 +33,7 @@ def main():
                               'old-defense': {'ref': 'b3a1f7c'}, 'supalosa': {'native': 'supalosa'}},
                 'maps': ['mp29u2.map', 'mp06t2.map', 'mp08t2.map', 'mp03t4.map'],
                 'rounds': a.rounds, 'workers': workers, 'trace': 'launch',
-                'orderSeed': 29, 'policySeed': workers, 'seconds': 900}
+                'orderSeed': 29, 'policySeed': a.policy_seed, 'seconds': 900}
         path = root/(name+'.plan.json'); atomic(path, plan)
         atomic(root/'status.json', {'phase': name, 'updatedAt': time.time()})
         resumed = (root/name/'summary.json').exists()

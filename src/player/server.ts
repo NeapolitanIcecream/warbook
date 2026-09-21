@@ -70,13 +70,15 @@ const specialistBotPath = specialistRelease
   ? `dist/player/${specialistRelease.sha256}/bot.js`
   : undefined;
 const policyName = (mode: string) =>
-  mode === "learned-launch"
-    ? "学习型出击（实验）"
-    : mode === "pressure"
-      ? "步兵压制（实验）"
-      : mode === "bastion"
-        ? "阵地反击"
-        : "历史策略";
+  mode === "learned-operation"
+    ? "学习型作战（实验）"
+    : mode === "learned-launch"
+      ? "学习型出击（实验）"
+      : mode === "pressure"
+        ? "步兵压制（实验）"
+        : mode === "bastion"
+          ? "阵地反击"
+          : "历史策略";
 const pending = new Map<string, Promise<{ body: Buffer; type: string }>>();
 // Keep one selected, completed match available without exposing local file paths.
 const watchResult = process.env.WATCH_MATCH

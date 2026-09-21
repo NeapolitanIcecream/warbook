@@ -337,3 +337,30 @@ test("changing purpose clears stale flanks and attack context used by production
   assert.equal(c.operations.active, undefined);
   assert.equal(c.operations.decision.operationReason, "policy-defend");
 });
+
+test("target-clear observation between policy ticks persists until a new order or visible target", () => {
+  const c = context();
+  commit(c, advance, ["u0", "u1"]);
+  c.observation.tick += 3;
+  c.observation.enemies = [];
+  c.observation.vacatedContacts = ["base"];
+  observeArmor(c.state, c.observation);
+  c.observation.tick += 72;
+  c.observation.vacatedContacts = [];
+  c.operations.observe(c.observation, []);
+  assert(buildOperationSnapshot(c, "operation").operation.cleared);
+  c.observation.enemies = [
+    {
+      ref: "base",
+      name: "GAWEAP",
+      type: 2,
+      x: 90,
+      y: 2,
+      hp: 1000,
+      maxHp: 1000,
+      observedTick: c.observation.tick,
+    },
+  ];
+  observeArmor(c.state, c.observation);
+  assert.equal(c.state.goalCleared, false);
+});

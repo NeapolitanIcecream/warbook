@@ -29,6 +29,7 @@ export interface ArmorState {
   launchThreats: Set<string>;
   launchTick: number;
   order?: OperationOrder;
+  goalCleared: boolean;
   operationId: number;
   operationStartedTick: number;
   orderStartedTick: number;
@@ -53,6 +54,7 @@ export function armorState(): ArmorState {
     heldForWave: new Set(),
     launchThreats: new Set(),
     launchTick: -Infinity,
+    goalCleared: false,
     operationId: 0,
     operationStartedTick: 0,
     orderStartedTick: 0,

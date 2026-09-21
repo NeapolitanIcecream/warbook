@@ -36,6 +36,7 @@ export function observeArmor(s: ArmorState, o: Observation): void {
   }
   if (!authorizedArmor(s).size) {
     s.order = undefined;
+    s.goalCleared = false;
     s.flankRefs.clear();
     s.flankVia = undefined;
     return;
@@ -56,12 +57,26 @@ export function observeArmor(s: ArmorState, o: Observation): void {
   // Track the same visible object, not a replacement chosen by the old strategy.
   const target =
     s.order?.goal.ref && o.enemies.find((e) => e.ref === s.order!.goal.ref);
-  if (target && s.order)
+  if (target && s.order) {
+    s.goalCleared = false;
     s.order.goal.point = {
       x: target.x,
       y: target.y,
       onBridge: target.onBridge,
     };
+  } else if (s.order) {
+    const goal = s.order.goal;
+    if (
+      goal.ref
+        ? (o.vacatedContacts ?? []).includes(goal.ref)
+        : goal.kind === "search" &&
+          main.some((u) => distance2(u, goal.point) <= 4 ** 2) &&
+          !(o.armySearchPoints ?? []).some(
+            (p) => pointKey(p) === pointKey(goal.point),
+          )
+    )
+      s.goalCleared = true;
+  }
 }
 
 /** One transaction changes the purpose of the existing force and adds reserves. */
@@ -100,6 +115,7 @@ export function applyOperation(
       goal: { ...order.goal, point: { ...order.goal.point } },
     };
     s.orderStartedTick = o.tick;
+    s.goalCleared = false;
     s.goalRevision++;
     s.orderCohort = new Set([...owned, ...a.addRefs]);
     s.flankRefs.clear();
@@ -188,6 +204,7 @@ export function syncLegacyOrder(
 ): void {
   const order = legacyOrder(s, operations);
   if (!sameOrder(s.order, order)) {
+    s.goalCleared = false;
     s.orderStartedTick = tick;
     s.goalRevision++;
     s.stateVersion++;
