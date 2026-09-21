@@ -86,8 +86,15 @@ async function main() {
   const operationSummary = {
     records: 0,
     choices: 0,
+    scope: undefined as OperationRecord["scope"] | undefined,
     startedForces: 0,
     reinforcementOrders: 0,
+    teacherRecords: 0,
+    clearedRetargets: 0,
+    liveRetargets: 0,
+    firstCommit: undefined as { tick: number; members: number } | undefined,
+    firstWithdrawal: undefined as
+      { tick: number; members: number; meanHealth: number } | undefined,
     appliedByKind: {} as Record<string, number>,
     teacherCoverage: {} as Record<string, number>,
   };
@@ -115,6 +122,8 @@ async function main() {
     if (event.kind === "operation_decision") {
       const r = event.record as OperationRecord;
       operationSummary.records++;
+      operationSummary.scope = r.scope;
+      if (r.executionSource === "teacher") operationSummary.teacherRecords++;
       if (r.trainable) operationSummary.choices++;
       operationSummary.teacherCoverage[r.teacherCoverage] =
         (operationSummary.teacherCoverage[r.teacherCoverage] ?? 0) + 1;
@@ -123,9 +132,28 @@ async function main() {
           kind = a.order?.kind ?? r.operation.kind ?? "unknown";
         operationSummary.appliedByKind[kind] =
           (operationSummary.appliedByKind[kind] ?? 0) + 1;
-        if (r.scope === "launch" || !r.operation.members)
+        if (r.scope === "launch" || !r.operation.members) {
           operationSummary.startedForces++;
-        else if (a.addRefs.length) operationSummary.reinforcementOrders++;
+          operationSummary.firstCommit ??= {
+            tick: r.tick,
+            members: a.addRefs.length,
+          };
+        } else if (a.addRefs.length) operationSummary.reinforcementOrders++;
+        if (r.operation.kind === "advance" && a.order?.kind === "advance") {
+          if (r.operation.cleared) operationSummary.clearedRetargets++;
+          else operationSummary.liveRetargets++;
+        }
+        if (
+          r.operation.members &&
+          r.operation.kind !== "withdraw" &&
+          a.order?.kind === "withdraw"
+        )
+          operationSummary.firstWithdrawal ??= {
+            tick: r.tick,
+            members: r.operation.members,
+            // The KEEP row describes the existing force, before any joint recruits.
+            meanHealth: r.candidates[0][20],
+          };
       }
     }
     if (event.kind === "launch_decision") {
@@ -398,7 +426,14 @@ async function main() {
       "",
       ...(operationSummary.records
         ? [
-            `- 持续作战选择：${operationSummary.choices}/${operationSummary.records} 个时点有选择；新建 ${operationSummary.startedForces} 支主力、${operationSummary.reinforcementOrders} 次补兵；命令 ${JSON.stringify(operationSummary.appliedByKind)}。命令次数不等于抵达或开火。`,
+            operationSummary.teacherRecords === operationSummary.records
+              ? `- 规则教师：${operationSummary.records} 个记录时点；候选覆盖 ${JSON.stringify(operationSummary.teacherCoverage)}。实际执行旧规则，未表示的动作不计作模型 KEEP。`
+              : `- 模型作战选择：${operationSummary.choices}/${operationSummary.records} 个时点有选择；${operationSummary.startedForces} 次建立编组、${operationSummary.reinforcementOrders} 次补兵；模型命令 ${JSON.stringify(operationSummary.appliedByKind)}。${operationSummary.firstCommit ? `首次 ${clockTime(operationSummary.firstCommit.tick)} 授权 ${operationSummary.firstCommit.members} 单位。` : ""}此前部队仍可执行固定任务；${operationSummary.scope === "launch" ? "持续作战由固定规则管理" : "KEEP 延续现有命令"}。`,
+            ...(operationSummary.teacherRecords === operationSummary.records
+              ? []
+              : [
+                  `- 任务变化：${operationSummary.clearedRetargets} 次在目标清空后改派、${operationSummary.liveRetargets} 次在未清空时换进攻目标。${operationSummary.firstWithdrawal ? `首次切换撤回 ${clockTime(operationSummary.firstWithdrawal.tick)}，当时既有编组 ${operationSummary.firstWithdrawal.members} 单位、平均血量 ${Math.round(operationSummary.firstWithdrawal.meanHealth * 100)}%。` : "未选择撤回已有编组。"}命令变化不等于实际到达或开火。`,
+                ]),
           ]
         : []),
       ...(launchRecords
