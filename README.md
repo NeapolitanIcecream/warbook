@@ -115,3 +115,10 @@ npm run bot:build -- --ref v0.1.14 --mode pressure
 研发依据：[小型对手池与共同演化方案](docs/opponent-pool.md)。首轮已完成双方版本冻结、挑战路线试跑与固定池比较；实际保留决定及后续工作以 [执行进展](docs/progress.md) 为准。
 
 先读 [AGENTS.md](AGENTS.md)、[HANDOFF.md](HANDOFF.md) 和 [当前进展](docs/progress.md)。实现依据包括 [接口契约](docs/interface-contract.md)、[环境审计](docs/environment-audit.md)、[策略与责任](docs/strategy.md)、[评估协议](docs/evaluation.md)；历史规划、来源记录和无资源探针保留用于追溯。
+
+
+## 实验日志与回放
+
+完整实验批次自动无损压缩决策日志，并在采样前检查整批空间预算；训练与行为分析直接支持压缩数据。恢复冻结历史工具所需明文的命令见[数据保存](docs/experiment-storage.md)。
+
+维护入口的`/replays`列出显式选定的实验回放。可在本地环境中设置`WATCH_CATALOG`，指向由`{id, title, result}`组成的JSON数组，其中`result`为对应`result.json`路径；启动时验证回放SHA、引擎版本和停止状态。该目录与`WATCH_MATCH`的单一`/watch`入口兼容。

@@ -8,6 +8,7 @@ import json
 import statistics
 import sys
 from pathlib import Path
+from experiment_storage import open_text
 
 root = Path(sys.argv[1])
 rows = json.loads((root / "summary.json").read_text())["rows"]
@@ -24,7 +25,7 @@ for row in rows:
     tanks, miners, queues = [], [], []
     max_miners, max_miner_tick = 0, None
     tank_refs = set()
-    with (directory / "decisions.ndjson").open() as journal:
+    with open_text(directory / "decisions.ndjson") as journal:
         for line in journal:
             event = json.loads(line)
             if event.get("actor") != actor:

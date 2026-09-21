@@ -7,6 +7,7 @@ import numpy as np
 import torch
 from torch import nn
 from launch_outcome import classify
+from experiment_storage import open_text
 
 G, C, K = 116, 32, 33
 SCHEMA = 'launch-v1'
@@ -64,9 +65,10 @@ def read_episode(directory):
     outcome,reason,trainable=classify(result,manifest)
     if not trainable:return None
     rows=[]
-    for line in (directory/'decisions.ndjson').open():
-        e=json.loads(line)
-        if e['kind'] in ['launch_decision','operation_decision'] and e['actor']==subject: rows.append(e['record'])
+    with open_text(directory/'decisions.ndjson') as journal:
+        for line in journal:
+            e=json.loads(line)
+            if e['kind'] in ['launch_decision','operation_decision'] and e['actor']==subject: rows.append(e['record'])
     for r in rows:
         assert r['schema']==SCHEMA and len(r['global'])==G and 1<=len(r['candidates'])<=K
         assert all(len(c)==C for c in r['candidates'])

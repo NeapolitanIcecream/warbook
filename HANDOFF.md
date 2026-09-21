@@ -4,7 +4,9 @@
 
 ## 当前交接：0.1.16 已发布
 
-**2026-09-21持续控制实验已完成：** 分支`codex/operation-control`，冻结行为源`0d17b73`。两路线×两权限×两种子、各自BC及两次PPO，正式6,848局+保留检查点96局=6,944局；逐局审计6,528正常、413上限、3引擎双方败北未决、零错误。全记录见[本轮结果和下一步](docs/operation-control-cycle.md)。窄权限四个重复胜场+8/+1/+6/+2；完整权限-1/-9/+1/+2，主线退化且未决增加；不晋升完整控制。保留较早主线launch47 PPO0（补测63/96），当前玩家仍8642/PID79131、0.1.16。所有本轮实验/临时8643及回放实例已结束。定位`work/server-feasibility/active-job.json`的operation项，`work/operation-control/harvest/audit.json`；不要恢复superseded的第一批512局。
+维护入口新增`/replays`，三份有版本和胜负标识的学习实验回放已重放核对。实验数据新增无损压缩与直接压缩读取，详见[数据保存](docs/experiment-storage.md)；冻结旧分析器需要先restore，不要把`.ndjson`缺失误当数据丢失。当前用户还更新了consult-pro：后续咨询优先提供远端固定commit和短阅读指南，让Pro自行读仓库。
+
+**2026-09-21持续控制首轮对照已完成，学习方案仍需继续落实：** 分支`codex/operation-control`，冻结行为源`0d17b73`。两路线×两权限×两种子、各自BC及两次PPO，正式6,848局+保留检查点96局=6,944局；逐局审计6,528正常、413上限、3引擎双方败北未决、零错误。全记录见[本轮结果和下一步](docs/operation-control-cycle.md)。窄权限四个重复胜场+8/+1/+6/+2；完整权限-1/-9/+1/+2，主线退化且未决增加；不晋升完整控制。保留较早主线launch47 PPO0（补测63/96），当前玩家仍8642/PID19151、0.1.16。所有本轮实验/临时8643及回放实例已结束。定位`work/server-feasibility/active-job.json`的operation项，`work/operation-control/harvest/audit.json`；不要恢复superseded的第一批512局。
 
 163项Node/13项Python测试、类型检查通过；24模型导出最大误差3.309e-7。旧v1多次完整同观察零差异，新GUI进入/建造/退出/重开/多候选执行已核对。分析器已区分目标清空后改派与仍有效时改派，并报告首次授权/撤回成员数，记录案例避免把KEEP当停止、把正常清目标当乱改令。
 

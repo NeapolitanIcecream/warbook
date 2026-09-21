@@ -13,7 +13,9 @@ import {
   readFileSync,
   writeFileSync,
   statSync,
+  existsSync,
 } from "node:fs";
+import { createGunzip } from "node:zlib";
 import { createInterface } from "node:readline";
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
@@ -101,8 +103,12 @@ async function main() {
   let launchRecords = 0;
   let launchChoices = 0;
   let lastTick = -1;
+  const rawTrace = `${directory}/decisions.ndjson`;
+  const compressed = !existsSync(rawTrace);
+  const tracePath = compressed ? rawTrace + ".gz" : rawTrace;
+  const traceStream = createReadStream(tracePath);
   for await (const line of createInterface({
-    input: createReadStream(`${directory}/decisions.ndjson`),
+    input: compressed ? traceStream.pipe(createGunzip()) : traceStream,
     crlfDelay: Infinity,
   })) {
     const event = JSON.parse(line);
@@ -408,7 +414,11 @@ async function main() {
         sampledFrames: sampled,
         retainedFrames: frames.length,
         windowBytes: frames.reduce((n, f) => n + Buffer.byteLength(f) + 1, 0),
-        originalTraceBytes: statSync(`${directory}/decisions.ndjson`).size,
+        originalTraceBytes: compressed
+          ? JSON.parse(readFileSync(rawTrace + ".archive.json", "utf8"))
+              .originalBytes
+          : statSync(tracePath).size,
+        storedTraceBytes: statSync(tracePath).size,
       },
     };
     writeFileSync(

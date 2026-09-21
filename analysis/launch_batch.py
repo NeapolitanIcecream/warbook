@@ -4,6 +4,7 @@ Every child receives a fixed code/model/opponent version; no laptop RPC is invol
 import argparse,concurrent.futures,hashlib,json,os,random,shutil,subprocess,time
 from pathlib import Path
 from launch_outcome import classify
+from experiment_storage import compact_completed, require_batch_space
 
 def digest(path):return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 def atomic(path,value):
@@ -47,6 +48,8 @@ def main():
             for repeat in range(plan['rounds']):
                 for subject in plan['subjects']:tasks.append((map_name,opponent,repeat,subject))
     random.Random(plan.get('orderSeed',1)).shuffle(tasks)
+    remaining=sum(not (root/m/o/f'{r}-{s}'/'batch-row.json').exists() for m,o,r,s in tasks)
+    atomic(root/'storage-budget.json',require_batch_space(root,remaining,plan.get('trace','launch'),plan.get('storageMiBPerGame')))
     started=time.monotonic();rows=[];workers=args.workers or plan.get('workers',4)
     if workers<1 or workers>128:raise ValueError('Explicit worker bound is 1..128; calibrate CPU and memory before scaling')
     def run(task):
@@ -84,5 +87,6 @@ def main():
             print(json.dumps({'completed':len(rows),'planned':len(tasks),'last':row,'counts':counts}),flush=True)
     for subject in plan['subjects']:
         atomic(root/f'{subject}-episodes.json',[r['dir'] for r in rows if r['subject']==subject and r.get('trainingEligible',r['outcome']!='E')])
+    print(json.dumps({'storage':compact_completed(root)}),flush=True)
     if any(r['outcome']=='E' for r in rows):raise RuntimeError('Batch includes errors; inspect them before training')
 if __name__=='__main__':main()
