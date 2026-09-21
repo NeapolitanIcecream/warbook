@@ -6,6 +6,7 @@ from pathlib import Path
 import numpy as np
 import torch
 from torch import nn
+from launch_outcome import classify
 
 G, C, K = 116, 32, 33
 SCHEMA = 'launch-v1'
@@ -58,8 +59,8 @@ def write_golden(model,path,g,c,mask,act):
 def read_episode(directory):
     result=json.loads((directory/'result.json').read_text());manifest=json.loads((directory/'manifest.json').read_text())
     subject=next(p['name'] for p in manifest['participants'] if p['role']=='subject')
-    outcome='W' if result['cleanCompletionVerified'] and result['outcome'].get('survivor')==subject else 'L' if result['cleanCompletionVerified'] else 'U' if result['stopReason']=='runner_limit' and result['tick']>=manifest['limits']['ticks'] else 'E'
-    if outcome=='E':return None
+    outcome,reason,trainable=classify(result,manifest)
+    if not trainable:return None
     rows=[]
     for line in (directory/'decisions.ndjson').open():
         e=json.loads(line)
@@ -85,7 +86,7 @@ def main():
     torch.set_num_threads(args.threads);torch.manual_seed(args.seed);np.random.seed(args.seed);random.seed(args.seed)
     model=Policy()
     if args.input:load_artifact(model,Path(args.input))
-    out=Path(args.out);out.parent.mkdir(parents=True,exist_ok=True);metadata={'git':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'trainerSha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),'python':sys.version.split()[0],'method':args.method,'seed':args.seed,'torch':torch.__version__,'numpy':np.__version__,'threads':args.threads,'objective':'formal win within 54000 ticks; W=1,L=0,U=0; E excluded and reported','architecture':'shared flat candidate scoring over <=33 legal actions; equivalent joint probability can be factorized by launch/target/amount'}
+    out=Path(args.out);out.parent.mkdir(parents=True,exist_ok=True);metadata={'git':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'trainerSha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),'python':sys.version.split()[0],'method':args.method,'seed':args.seed,'torch':torch.__version__,'numpy':np.__version__,'threads':args.threads,'objective':'formal win within 54000 ticks; W=1,L=0,tick-cap or error-free mutual-defeat U=0; E excluded and reported','architecture':'shared flat candidate scoring over <=33 legal actions; equivalent joint probability can be factorized by launch/target/amount'}
     if args.method=='init':
         print(json.dumps({'sha256':export(model,out,'launch-init',metadata),'parameters':sum(p.numel() for p in model.parameters())}));return
     paths=json.loads(Path(args.episodes).read_text());episodes=[];excluded=[]
