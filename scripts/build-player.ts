@@ -63,7 +63,11 @@ let release = {
   sdkResourceSha256: SDK_RESOURCE_SHA,
   sha256,
   version: POLICY_VERSION,
-  mode: launchModel ? "learned-launch" : mode,
+  mode: launchModel
+    ? launchModel.schema === "operation-v2"
+      ? "learned-" + launchModel.controlScope
+      : "learned-launch"
+    : mode,
   ...(launchModel ? { launchModelSha256: modelSha256, baseMode: mode } : {}),
   git: execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
 };

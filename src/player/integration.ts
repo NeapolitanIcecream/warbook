@@ -1,3 +1,8 @@
+import {
+  ExperimentalOperationProvider,
+  OPERATION_SCHEMA,
+  OPERATION_SHAPE,
+} from "../learning/operation.js";
 import { WarbookBot, OBSERVATION_PROTOCOL } from "../bridge.js";
 import { POLICY_VERSION, type PolicyMode } from "../policy.js";
 import { installReplayControls } from "./replay-controls.js";
@@ -67,10 +72,23 @@ export async function install(): Promise<void> {
         launchPolicy = new LinearLaunchPolicy(artifact);
       else {
         await prepareInference();
-        launchPolicy = new NeuralLaunchPolicy(artifact);
+        const shape =
+          artifact.schema === OPERATION_SCHEMA
+            ? OPERATION_SHAPE
+            : {
+                schema: artifact.schema,
+                global: GLOBAL_SIZE,
+                candidate: CANDIDATE_SIZE,
+              };
+        if (artifact.schema === OPERATION_SCHEMA && !artifact.controlScope)
+          throw new Error("Operation model scope missing");
+        launchPolicy = new NeuralLaunchPolicy(
+          artifact,
+          artifact.schema === OPERATION_SCHEMA ? shape : undefined,
+        );
         launchPolicy.predict({
-          global: Array(GLOBAL_SIZE).fill(0),
-          candidates: [Array(CANDIDATE_SIZE).fill(0)],
+          global: Array(shape.global).fill(0),
+          candidates: [Array(shape.candidate).fill(0)],
         } as LaunchSnapshot);
       }
     })());
@@ -106,19 +124,34 @@ export async function install(): Promise<void> {
   BotFactory.prototype.create = function (player: any) {
     if (__WARBOOK_LAUNCH_MODEL__ && !launchPolicy)
       throw new Error("Launch model was not prepared before game creation");
-    const launch = launchPolicy
-      ? new ExperimentalLaunchProvider("model", "player", launchPolicy, true)
-      : undefined;
+    const artifact = __WARBOOK_LAUNCH_MODEL__;
+    const operation =
+      launchPolicy &&
+      artifact?.schema === OPERATION_SCHEMA &&
+      "controlScope" in artifact &&
+      artifact.controlScope
+        ? new ExperimentalOperationProvider(
+            artifact.controlScope,
+            "model",
+            "player",
+            launchPolicy,
+            true,
+          )
+        : undefined;
+    const launch =
+      launchPolicy && !operation
+        ? new ExperimentalLaunchProvider("model", "player", launchPolicy, true)
+        : undefined;
     const bot = new WarbookBot(
       player.name,
       player.country.name,
       __WARBOOK_POLICY__,
-      launch
+      launch || operation
         ? {
             strategy:
               __WARBOOK_POLICY__ === "pressure"
-                ? new PressureStrategy(launch)
-                : new BastionStrategy("bastion", launch),
+                ? new PressureStrategy(launch, operation)
+                : new BastionStrategy("bastion", launch, operation),
           }
         : undefined,
     );
@@ -238,10 +271,9 @@ export async function install(): Promise<void> {
   bar.style.cssText =
     "position:fixed;z-index:10000;left:12px;bottom:8px;background:#111c25e8;color:#ccd8de;font:12px system-ui;padding:6px 10px;border:1px solid #425665;border-radius:5px;pointer-events:none";
   document.body.append(bar);
-  const policyLabel =
-    __WARBOOK_LAUNCH_MODEL__
-      ? "学习型出击（实验）"
-      : __WARBOOK_POLICY__ === "pressure"
+  const policyLabel = __WARBOOK_LAUNCH_MODEL__
+    ? "学习型出击（实验）"
+    : __WARBOOK_POLICY__ === "pressure"
       ? "步兵压制"
       : __WARBOOK_POLICY__ === "bastion"
         ? "阵地反击"

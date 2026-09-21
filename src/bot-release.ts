@@ -25,6 +25,8 @@ export interface BotRelease {
   observationProtocol: string;
   launchModelSha256?: string;
   deterministicLaunch?: boolean;
+  policySchema?: string;
+  controlScope?: "launch" | "operation";
   apiSha256: string;
   resourceSha256: string;
   lockSha256: string;

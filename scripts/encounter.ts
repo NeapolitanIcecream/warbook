@@ -1,3 +1,4 @@
+import type { OperationRecord } from "../src/learning/operation.js";
 import {
   cdapi,
   Replay,
@@ -82,6 +83,14 @@ async function main() {
   >();
   const journal = new JournalBehavior();
   const launches: { tick: number; units: number; target: string }[] = [];
+  const operationSummary = {
+    records: 0,
+    choices: 0,
+    startedForces: 0,
+    reinforcementOrders: 0,
+    appliedByKind: {} as Record<string, number>,
+    teacherCoverage: {} as Record<string, number>,
+  };
   let launchRecords = 0;
   let launchChoices = 0;
   let lastTick = -1;
@@ -103,6 +112,21 @@ async function main() {
       sparse.set(event.tick, list);
     }
     if (event.actor !== actor) continue;
+    if (event.kind === "operation_decision") {
+      const r = event.record as OperationRecord;
+      operationSummary.records++;
+      if (r.trainable) operationSummary.choices++;
+      operationSummary.teacherCoverage[r.teacherCoverage] =
+        (operationSummary.teacherCoverage[r.teacherCoverage] ?? 0) + 1;
+      if (r.action > 0 && r.executionSource === "policy") {
+        const a = r.actions[r.action],
+          kind = a.order?.kind ?? r.operation.kind ?? "unknown";
+        operationSummary.appliedByKind[kind] =
+          (operationSummary.appliedByKind[kind] ?? 0) + 1;
+        if (!r.operation.members) operationSummary.startedForces++;
+        else if (a.addRefs.length) operationSummary.reinforcementOrders++;
+      }
+    }
     if (event.kind === "launch_decision") {
       const record = event.record as LaunchRecord;
       launchRecords++;
@@ -325,6 +349,9 @@ async function main() {
         mismatches,
       },
       behavior: verified ? result : undefined,
+      operationDecisions: operationSummary.records
+        ? operationSummary
+        : undefined,
       launchDecisions: launchRecords
         ? { records: launchRecords, choices: launchChoices, launches }
         : undefined,
@@ -368,6 +395,11 @@ async function main() {
       "",
       `${actor} 对 ${opponent}；记录到 ${clockTime(expected.tick)}，${expected.stopReason}，${JSON.stringify(expected.outcome)}。`,
       "",
+      ...(operationSummary.records
+        ? [
+            `- 持续作战选择：${operationSummary.choices}/${operationSummary.records} 个时点有选择；新建 ${operationSummary.startedForces} 支主力、${operationSummary.reinforcementOrders} 次补兵；命令 ${JSON.stringify(operationSummary.appliedByKind)}。命令次数不等于抵达或开火。`,
+          ]
+        : []),
       ...(launchRecords
         ? [
             `- 学习出击选择：${launchChoices} 个可选择时点，${launches.length} 次选择出击。${launches.length ? `首次 ${clockTime(launches[0].tick)}，${launches[0].units} 单位，目标 ${launches[0].target}；最后 ${clockTime(launches.at(-1)!.tick)}。` : "没有选择出击。"}这是策略选择，不等于已抵达或开火。`,

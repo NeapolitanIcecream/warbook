@@ -43,6 +43,25 @@ export class Operations {
   private factorySeen = false;
   active?: Operation;
   decision: Record<string, number | string | boolean> = {};
+  /** Rule advice gets a disposable plan over the same observed facts. */
+  planningCopy(): Operations {
+    const copy = new Operations();
+    copy.known = new Map(this.known);
+    copy.pressured = this.pressured;
+    copy.lastPressureTick = this.lastPressureTick;
+    copy.observedTankSpeed = this.observedTankSpeed;
+    copy.factorySeen = this.factorySeen;
+    copy.active = this.active && {
+      ...this.active,
+      point: { ...this.active.point },
+    };
+    copy.decision = { ...this.decision };
+    return copy;
+  }
+  commitPlan(copy: Operations): void {
+    this.active = copy.active;
+    this.decision = copy.decision;
+  }
   get contacts(): readonly Contact[] {
     return [...this.known.values()];
   }

@@ -10,6 +10,7 @@ from launch_outcome import classify
 
 G, C, K = 116, 32, 33
 SCHEMA = 'launch-v1'
+CONTROL_SCOPE = None
 class Policy(nn.Module):
     def __init__(self):
         super().__init__()
@@ -24,6 +25,7 @@ def layers(module):
     return [dict(input=m.in_features,output=m.out_features,weights=m.weight.detach().cpu().numpy().T.reshape(-1).tolist(),bias=m.bias.detach().cpu().tolist()) for m in module if isinstance(m,nn.Linear)]
 def export(model,path,version,metadata):
     artifact={'format':'warbook-launch-model-v1','schema':SCHEMA,'policyVersion':version,'actor':layers(model.actor),'critic':layers(model.critic),'training':{k:v for k,v in metadata.items() if k in ['method','seed','torch','numpy','inputSha256','architecture','objective']}}
+    if CONTROL_SCOPE:artifact['controlScope']=CONTROL_SCOPE
     path.parent.mkdir(parents=True,exist_ok=True)
     tmp=path.with_suffix('.tmp');tmp.write_text(json.dumps(artifact,separators=(',',':'))+'\n');tmp.replace(path)
     torch.save(model.state_dict(),path.with_suffix('.pt'))
@@ -64,14 +66,16 @@ def read_episode(directory):
     rows=[]
     for line in (directory/'decisions.ndjson').open():
         e=json.loads(line)
-        if e['kind']=='launch_decision' and e['actor']==subject: rows.append(e['record'])
+        if e['kind'] in ['launch_decision','operation_decision'] and e['actor']==subject: rows.append(e['record'])
     for r in rows:
         assert r['schema']==SCHEMA and len(r['global'])==G and 1<=len(r['candidates'])<=K
-        assert all(len(c)==C for c in r['candidates']) and 0<=r['action']<len(r['candidates'])
+        assert all(len(c)==C for c in r['candidates'])
+        assert 0<=r['action']<len(r['candidates']) or r['action']==-1 and r.get('executionSource')=='teacher' and r['teacherAction']==-1
+        if CONTROL_SCOPE:assert r['scope']==CONTROL_SCOPE
     return {'path':str(directory),'outcome':outcome,'reward':float(outcome=='W'),'rows':rows,'modelSha':manifest.get('launchExperiment',{}).get('modelSha256')}
 
 def tensors(episodes,bc):
-    records=[(e,r) for e in episodes for r in e['rows'] if not bc or r['trainable']]
+    records=[(e,r) for e in episodes for r in e['rows'] if not bc or r['trainable'] and r['teacherAction']>=0]
     if not records:raise ValueError('No trainable launch decisions')
     n=len(records);g=np.zeros((n,G),np.float32);c=np.zeros((n,K,C),np.float32);mask=np.zeros((n,K),bool)
     action=[];returns=[];oldlog=[];oldvalue=[];valid=[]
@@ -82,11 +86,23 @@ def tensors(episodes,bc):
     return (torch.from_numpy(g),torch.from_numpy(c),torch.from_numpy(mask),torch.tensor(action),torch.tensor(returns),torch.tensor(oldlog),torch.tensor(oldvalue),torch.tensor(valid))
 
 def main():
-    ap=argparse.ArgumentParser();ap.add_argument('method',choices=['init','bc','ppo']);ap.add_argument('--episodes');ap.add_argument('--input');ap.add_argument('--out',required=True);ap.add_argument('--seed',type=int,default=1);ap.add_argument('--epochs',type=int);ap.add_argument('--threads',type=int,default=4);args=ap.parse_args()
+    global G,C,K,SCHEMA,CONTROL_SCOPE
+    ap=argparse.ArgumentParser();ap.add_argument('method',choices=['init','bc','ppo']);ap.add_argument('--episodes');ap.add_argument('--input');ap.add_argument('--out',required=True);ap.add_argument('--seed',type=int,default=1);ap.add_argument('--epochs',type=int);ap.add_argument('--threads',type=int,default=4);ap.add_argument('--schema',choices=['launch-v1','operation-v2']);ap.add_argument('--scope',choices=['launch','operation']);args=ap.parse_args()
     torch.set_num_threads(args.threads);torch.manual_seed(args.seed);np.random.seed(args.seed);random.seed(args.seed)
+    artifact=json.loads(Path(args.input).read_text()) if args.input else {}
+    first_manifest={}
+    if args.episodes:
+        paths=json.loads(Path(args.episodes).read_text())
+        if paths:first_manifest=json.loads((Path(paths[0])/'manifest.json').read_text()).get('launchExperiment',{})
+    SCHEMA=args.schema or artifact.get('schema') or first_manifest.get('schema') or 'launch-v1'
+    CONTROL_SCOPE=args.scope or artifact.get('controlScope') or first_manifest.get('controlScope')
+    if SCHEMA=='operation-v2':
+        if CONTROL_SCOPE not in ['launch','operation']:raise ValueError('Operation schema requires an explicit scope')
+        G,C,K=212,48,75
+    elif CONTROL_SCOPE:raise ValueError('Control scope requires operation-v2')
     model=Policy()
     if args.input:load_artifact(model,Path(args.input))
-    out=Path(args.out);out.parent.mkdir(parents=True,exist_ok=True);metadata={'git':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'trainerSha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),'python':sys.version.split()[0],'method':args.method,'seed':args.seed,'torch':torch.__version__,'numpy':np.__version__,'threads':args.threads,'objective':'formal win within 54000 ticks; W=1,L=0,tick-cap or error-free mutual-defeat U=0; E excluded and reported','architecture':'shared flat candidate scoring over <=33 legal actions; equivalent joint probability can be factorized by launch/target/amount'}
+    out=Path(args.out);out.parent.mkdir(parents=True,exist_ok=True);metadata={'git':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'trainerSha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),'python':sys.version.split()[0],'method':args.method,'seed':args.seed,'torch':torch.__version__,'numpy':np.__version__,'threads':args.threads,'objective':'formal win within 54000 ticks; W=1,L=0,tick-cap or error-free mutual-defeat U=0; E excluded and reported','schema':SCHEMA,'controlScope':CONTROL_SCOPE,'architecture':f'shared candidate scorer; global={G}, candidate={C}, maximum actions={K}'}
     if args.method=='init':
         print(json.dumps({'sha256':export(model,out,'launch-init',metadata),'parameters':sum(p.numel() for p in model.parameters())}));return
     paths=json.loads(Path(args.episodes).read_text());episodes=[];excluded=[]
@@ -135,7 +151,9 @@ def main():
         vg,vc,vm,va,*_=tensors(validation,True)
         with torch.no_grad():
             pred=model(vg,vc,vm)[0].probs.argmax(-1);positive=va>0
-            validation_metrics={'decisionAccuracy':float((pred==va).float().mean()),'nonKeepAccuracy':float((pred[positive]==va[positive]).float().mean()) if positive.any() else None,'predictedLaunchFraction':float((pred>0).float().mean()),'teacherLaunchFraction':float(positive.float().mean())}
+            validation_metrics={'decisionAccuracy':float((pred==va).float().mean()),'nonKeepAccuracy':float((pred[positive]==va[positive]).float().mean()) if positive.any() else None,'predictedNonKeepFraction':float((pred>0).float().mean()),'teacherNonKeepFraction':float(positive.float().mean())}
+    from collections import Counter
+    metadata['teacherCoverage']=dict(Counter(r.get('teacherCoverage','legacy-projection') for e in episodes for r in e['rows']))
     metadata.update(episodes=[e['path'] for e in training],validationEpisodes=[e['path'] for e in validation],excludedEpisodes=excluded,outcomes={k:sum(e['outcome']==k for e in episodes) for k in ['W','L','U']},records=len(g),actorRecords=int(valid.sum()),history=history,validation=validation_metrics,inputSha256=hashlib.sha256(Path(args.input).read_bytes()).hexdigest() if args.input else None)
     torch.save(optimizer.state_dict(),out.with_suffix('.optimizer.pt'))
     sha=export(model,out,f'launch-{args.method}-{args.seed}',metadata)

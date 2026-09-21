@@ -12,6 +12,19 @@ export class DefenseRelief {
   private selected = new Set<string>();
   private lastContact = -Infinity;
   private point?: Point;
+  planningCopy(): DefenseRelief {
+    const copy = new DefenseRelief();
+    copy.selected = new Set(this.selected);
+    copy.lastContact = this.lastContact;
+    copy.point = this.point && { ...this.point };
+    return copy;
+  }
+
+  commitPlan(copy: DefenseRelief): void {
+    this.selected = new Set(copy.selected);
+    this.lastContact = copy.lastContact;
+    this.point = copy.point;
+  }
 
   assign(
     o: Observation,

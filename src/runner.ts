@@ -1,4 +1,10 @@
 import {
+  ExperimentalOperationProvider,
+  OPERATION_SCHEMA,
+  OPERATION_SHAPE,
+} from "./learning/operation.js";
+import type { OperationScope } from "./control/operation-provider.js";
+import {
   cdapi,
   Replay,
   type CreateOfflineOpts,
@@ -53,6 +59,7 @@ const { values } = parseArgs({
     out: { type: "string" },
     "launch-policy": { type: "string" },
     "launch-model": { type: "string" },
+    "operation-scope": { type: "string" },
     "policy-seed": { type: "string", default: "0" },
     "launch-deterministic": { type: "boolean", default: false },
     "trace-level": { type: "string", default: "full" },
@@ -71,7 +78,9 @@ const sha256 = (file: string) =>
 const trace = (event: unknown) => {
   if (
     values["trace-level"] === "launch" &&
-    (event as { kind: string }).kind !== "launch_decision" &&
+    !["launch_decision", "operation_decision"].includes(
+      (event as { kind: string }).kind,
+    ) &&
     !(
       (event as { kind: string; tick: number }).kind === "observation" &&
       (event as { tick: number }).tick % 450 === 0
@@ -96,12 +105,33 @@ async function main(): Promise<void> {
     throw new Error("Unknown launch policy");
   if (!["full", "launch"].includes(values["trace-level"]!))
     throw new Error("Unknown trace level");
+  let operationScope = values["operation-scope"] as OperationScope | undefined;
+  if (
+    operationScope &&
+    (!["launch", "operation"].includes(operationScope) ||
+      !values["launch-policy"] ||
+      values["launch-policy"] === "linear")
+  )
+    throw new Error("Invalid operation scope/policy");
   let neural: LaunchPolicy | undefined;
   if (values["launch-policy"] === "model") {
     if (!values["launch-model"]) throw new Error("Model artifact required");
     await prepareInference();
+    const artifact = JSON.parse(
+      readFileSync(values["launch-model"], "utf8"),
+    ) as LaunchModel;
+    if (artifact.schema === OPERATION_SCHEMA) {
+      if (
+        !artifact.controlScope ||
+        (operationScope && operationScope !== artifact.controlScope)
+      )
+        throw new Error("Operation artifact/scope mismatch");
+      operationScope = artifact.controlScope;
+    } else if (operationScope)
+      throw new Error("Operation scope needs operation-v2 weights");
     neural = new NeuralLaunchPolicy(
-      JSON.parse(readFileSync(values["launch-model"], "utf8")) as LaunchModel,
+      artifact,
+      operationScope ? OPERATION_SHAPE : undefined,
     );
   }
   if (values["launch-policy"] === "linear") {
@@ -113,14 +143,24 @@ async function main(): Promise<void> {
       ) as LinearLaunchModel,
     );
   }
-  const launch = values["launch-policy"]
-    ? new ExperimentalLaunchProvider(
-        values["launch-policy"],
+  const operation = operationScope
+    ? new ExperimentalOperationProvider(
+        operationScope,
+        values["launch-policy"]!,
         values["policy-seed"]!,
         neural,
         values["launch-deterministic"],
       )
     : undefined;
+  const launch =
+    values["launch-policy"] && !operation
+      ? new ExperimentalLaunchProvider(
+          values["launch-policy"],
+          values["policy-seed"]!,
+          neural,
+          values["launch-deterministic"],
+        )
+      : undefined;
   const allowedModes: readonly string[] = POLICY_MODES;
   if (
     !allowedModes.includes(values.mode!) ||
@@ -140,19 +180,19 @@ async function main(): Promise<void> {
         bot: new WarbookBot(
           policyPlayerName(
             POLICY_VERSION,
-            launch
-              ? `${values.mode}-launch-${values["launch-policy"]}`
+            launch || operation
+              ? `${values.mode}-${operation ? operationScope : "launch-v1"}-${values["launch-policy"]}`
               : values.mode!,
             "A",
           ),
           "Americans",
           values.mode as PolicyMode,
-          launch
+          launch || operation
             ? {
                 strategy:
                   values.mode === "pressure"
-                    ? new PressureStrategy(launch)
-                    : new BastionStrategy("bastion", launch),
+                    ? new PressureStrategy(launch, operation)
+                    : new BastionStrategy("bastion", launch, operation),
               }
             : undefined,
         ),
@@ -176,7 +216,7 @@ async function main(): Promise<void> {
       "A behavior shadow must share the subject mode and observation protocol",
     );
   if (
-    launch &&
+    (launch || operation) &&
     shadow &&
     (!values["launch-deterministic"] ||
       !values["launch-model"] ||
@@ -242,10 +282,13 @@ async function main(): Promise<void> {
         }
       : {}),
     observationProtocol: OBSERVATION_PROTOCOL,
-    ...(launch
+    ...(launch || operation
       ? {
           launchExperiment: {
-            schema: LAUNCH_SCHEMA,
+            schema: operation ? OPERATION_SCHEMA : LAUNCH_SCHEMA,
+            ...(operation
+              ? { controlScope: operationScope, strategyPeriod: 75 }
+              : {}),
             policy: values["launch-policy"],
             seed: values["policy-seed"],
             deterministic: values["launch-deterministic"],
@@ -285,6 +328,12 @@ async function main(): Promise<void> {
         "src/control/launch-provider.ts",
         "src/learning/launch.ts",
         "src/learning/model.ts",
+        "src/learning/operation.ts",
+        "src/control/operation-state.ts",
+        "src/control/operation-provider.ts",
+        "src/control/armor-state.ts",
+        "src/control/legacy-armor.ts",
+        "src/own-lifecycle.ts",
       ].map((path) => [path, sha256(path)]),
     ),
     resources: ["ra2.mix", "language.mix", "multi.mix"].map((name) => ({

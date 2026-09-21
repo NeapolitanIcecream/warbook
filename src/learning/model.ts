@@ -17,6 +17,7 @@ export interface LaunchModel {
   format: "warbook-launch-model-v1";
   schema: string;
   policyVersion: string;
+  controlScope?: "launch" | "operation";
   actor: DenseLayer[];
   critic: DenseLayer[];
   training?: Record<string, unknown>;

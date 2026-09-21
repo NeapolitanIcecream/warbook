@@ -23,6 +23,12 @@ export async function buildBot(
   const launchModel = modelPath
     ? JSON.parse(readFileSync(modelPath, "utf8"))
     : undefined;
+  const operationModel = launchModel?.schema === "operation-v2";
+  if (
+    operationModel &&
+    !["launch", "operation"].includes(launchModel.controlScope)
+  )
+    throw new Error("Operation artifact requires its training scope");
   const modelSha = modelPath ? fileHash(modelPath) : undefined;
   if (launchModel && !["bastion", "pressure"].includes(mode))
     throw new Error("Launch models require a supported layered mode");
@@ -60,17 +66,18 @@ export async function buildBot(
               ? `
           import { ExperimentalLaunchProvider, LinearLaunchPolicy } from './src/learning/launch.ts';
           import { NeuralLaunchPolicy, prepareInference } from './src/learning/model.ts';
+          ${operationModel ? "import { ExperimentalOperationProvider, OPERATION_SHAPE } from './src/learning/operation.ts';" : ""}
           import { BastionStrategy } from './src/control/bastion-strategy.ts';
           import { PressureStrategy } from './src/control/pressure-strategy.ts';
           const artifact = ${JSON.stringify(launchModel)};
           await prepareInference();
-          const launchPolicy = artifact.format === 'warbook-launch-linear-v1' ? new LinearLaunchPolicy(artifact) : new NeuralLaunchPolicy(artifact);
+          const launchPolicy = artifact.format === 'warbook-launch-linear-v1' ? new LinearLaunchPolicy(artifact) : new NeuralLaunchPolicy(artifact${operationModel ? ", OPERATION_SHAPE" : ""});
           `
               : ""
           }
-          export const policyVersion = POLICY_VERSION + ${JSON.stringify(launchModel ? "-learned" : "")};
+          export const policyVersion = POLICY_VERSION + ${JSON.stringify(launchModel ? (operationModel ? "-learned-" + launchModel.controlScope : "-learned") : "")};
           export const observationProtocol = OBSERVATION_PROTOCOL;
-          export const createBot = name => new WarbookBot(name, 'Americans', mode${launchModel ? `, { strategy: mode === 'pressure' ? new PressureStrategy(new ExperimentalLaunchProvider('model','frozen',launchPolicy,true)) : new BastionStrategy('bastion',new ExperimentalLaunchProvider('model','frozen',launchPolicy,true)) }` : ""});
+          export const createBot = name => new WarbookBot(name, 'Americans', mode${launchModel ? (operationModel ? `, {strategy: mode === 'pressure' ? new PressureStrategy(undefined,new ExperimentalOperationProvider(artifact.controlScope,'model','frozen',launchPolicy,true)) : new BastionStrategy('bastion',undefined,new ExperimentalOperationProvider(artifact.controlScope,'model','frozen',launchPolicy,true))}` : `, { strategy: mode === 'pressure' ? new PressureStrategy(new ExperimentalLaunchProvider('model','frozen',launchPolicy,true)) : new BastionStrategy('bastion',new ExperimentalLaunchProvider('model','frozen',launchPolicy,true)) }`) : ""});
         `,
         resolveDir: source,
         sourcefile: "frozen-bot-entry.ts",
@@ -154,7 +161,16 @@ export async function buildBot(
       mode,
       policyVersion: module.policyVersion,
       ...(launchModel
-        ? { launchModelSha256: modelSha, deterministicLaunch: true }
+        ? {
+            launchModelSha256: modelSha,
+            deterministicLaunch: true,
+            ...(operationModel
+              ? {
+                  policySchema: "operation-v2",
+                  controlScope: launchModel.controlScope,
+                }
+              : {}),
+          }
         : {}),
       observationProtocol: module.observationProtocol,
       ...engineHashes(),

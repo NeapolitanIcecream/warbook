@@ -60,6 +60,7 @@ def main():
         if 'release' in s:cmd+=['--actor-release',s['release']]
         if 'policy' in s:cmd+=['--launch-policy',s['policy'],'--policy-seed',str(plan.get('policySeed',1)*100000+repeat*31+plan['maps'].index(map_name)*7+list(plan['opponents']).index(opponent))]
         if s.get('model'):cmd+=['--launch-model',s['model']]
+        if s.get('scope'):cmd+=['--operation-scope',s['scope']]
         if s.get('deterministic'):cmd+=['--launch-deterministic']
         if plan.get('trace','launch')=='launch':cmd+=['--trace-level','launch']
         if 'native' in p:cmd+=['--opponent',p['native']]

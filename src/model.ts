@@ -106,6 +106,9 @@ export interface Observation {
     distance: number;
   }[];
   own: Unit[];
+  /** Since the preceding observation: confirmed destruction/ownership loss of known own units.
+   * Mere absence or temporary unspawn is not a departure. */
+  ownDepartures?: readonly string[];
   enemies: Contact[];
   /** Currently visible, unowned capturable cash structures, including neutral ones. */
   /** Former mobile contacts absent from their fully explored reachable neighborhood. Not a death event. */

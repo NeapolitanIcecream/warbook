@@ -1,9 +1,15 @@
+import {
+  OPERATION_SCHEMA,
+  OPERATION_SHAPE,
+} from "../src/learning/operation.js";
 import { readFileSync } from "node:fs";
 import { prepareInference, NeuralLaunchPolicy } from "../src/learning/model.js";
 import type { LaunchSnapshot } from "../src/learning/launch.js";
 await prepareInference();
+const artifact = JSON.parse(readFileSync(process.argv[2], "utf8"));
 const model = new NeuralLaunchPolicy(
-  JSON.parse(readFileSync(process.argv[2], "utf8")),
+  artifact,
+  artifact.schema === OPERATION_SCHEMA ? OPERATION_SHAPE : undefined,
 );
 const samples = JSON.parse(readFileSync(process.argv[3], "utf8"));
 if (!samples.some((s: LaunchSnapshot) => s.candidates.length > 1))

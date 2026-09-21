@@ -6,7 +6,9 @@ import {
   type GameApi,
   type UnitData,
   type TechnoRules,
+  type ApiEvent,
 } from "@chronodivide/game-api";
+import { OwnLifecycle } from "./own-lifecycle.js";
 import { baseRally, defenseRoute, guardPost } from "./defense-route.js";
 import { refinerySite } from "./refinery-site.js";
 import {
@@ -52,6 +54,7 @@ export class WarbookBot extends Bot {
   private nativeToRef = new Map<number, string>();
   private currentRefs = new Map<string, number>();
   private sequence = 0;
+  private readonly ownLifecycle = new OwnLifecycle();
   private lastObservation?: Observation;
   private lastSnapshotTick = -150;
   private intentSequence = 0;
@@ -75,6 +78,10 @@ export class WarbookBot extends Bot {
   public trace?: (event: Trace) => void;
   public autoTick = false;
   public observation?: Observation;
+  override onGameEvent(event: ApiEvent, gameApi: GameApi): void {
+    super.onGameEvent(event, gameApi);
+    this.ownLifecycle.onEvent(event, this.name);
+  }
   constructor(
     name: string,
     country = "Americans",
@@ -185,49 +192,53 @@ export class WarbookBot extends Bot {
       this.lastScoutScan = tick;
     }
     const own = this.sorted(this.player.getVisibleUnits("self")).map(
-      (u): Unit => ({
-        ref: this.ref(u),
-        name: u.name,
-        type: u.type,
-        x: u.tile.rx,
-        y: u.tile.ry,
-        position: {
-          x: u.worldPosition.x / 256,
-          y: u.worldPosition.z / 256,
-          z: u.worldPosition.y / 256,
-        },
-        attackState: u.attackState,
-        onBridge: u.onBridge,
-        sight: u.sight,
-        hp: u.hitPoints,
-        maxHp: u.maxHitPoints,
-        width: u.foundation.width,
-        height: u.foundation.height,
-        mobile: !!u.canMove,
-        idle: !!u.isIdle,
-        harvester: u.rules.harvester,
-        ...(u.rules.harvester
-          ? {
-              cargo: (u.harvestedOre ?? 0) + (u.harvestedGems ?? 0),
-            }
-          : {}),
-        mcv: !!u.rules.deploysInto && !u.rules.harvester,
-        yard: u.rules.constructionYard,
-        refinery: u.rules.refinery,
-        radar: u.rules.radar,
-        combat: u.rules.isSelectableCombatant,
-        buildStatus: u.buildStatus,
-        repairable: u.rules.repairable,
-        hasWrenchRepair: u.hasWrenchRepair,
-        deployed: u.stance === 3,
-        crusher: u.rules.crusher,
-        antiAir: combatCapabilities(u).antiAir,
-        canThreatenVehicles: combatCapabilities(u).canThreatenVehicles,
-        weaponRange: u.primaryWeapon?.maxRange,
-        deployedWeaponRange: u.secondaryWeapon?.rules.neverUse
-          ? undefined
-          : u.secondaryWeapon?.maxRange,
-      }),
+      (u): Unit => {
+        const ref = this.ref(u);
+        this.ownLifecycle.seenOwn(u.id, ref);
+        return {
+          ref,
+          name: u.name,
+          type: u.type,
+          x: u.tile.rx,
+          y: u.tile.ry,
+          position: {
+            x: u.worldPosition.x / 256,
+            y: u.worldPosition.z / 256,
+            z: u.worldPosition.y / 256,
+          },
+          attackState: u.attackState,
+          onBridge: u.onBridge,
+          sight: u.sight,
+          hp: u.hitPoints,
+          maxHp: u.maxHitPoints,
+          width: u.foundation.width,
+          height: u.foundation.height,
+          mobile: !!u.canMove,
+          idle: !!u.isIdle,
+          harvester: u.rules.harvester,
+          ...(u.rules.harvester
+            ? {
+                cargo: (u.harvestedOre ?? 0) + (u.harvestedGems ?? 0),
+              }
+            : {}),
+          mcv: !!u.rules.deploysInto && !u.rules.harvester,
+          yard: u.rules.constructionYard,
+          refinery: u.rules.refinery,
+          radar: u.rules.radar,
+          combat: u.rules.isSelectableCombatant,
+          buildStatus: u.buildStatus,
+          repairable: u.rules.repairable,
+          hasWrenchRepair: u.hasWrenchRepair,
+          deployed: u.stance === 3,
+          crusher: u.rules.crusher,
+          antiAir: combatCapabilities(u).antiAir,
+          canThreatenVehicles: combatCapabilities(u).canThreatenVehicles,
+          weaponRange: u.primaryWeapon?.maxRange,
+          deployedWeaponRange: u.secondaryWeapon?.rules.neverUse
+            ? undefined
+            : u.secondaryWeapon?.maxRange,
+        };
+      },
     );
     const enemies = this.sorted(this.player.getVisibleUnits("enemy")).map(
       (u) => ({
@@ -711,6 +722,7 @@ export class WarbookBot extends Bot {
         .getStartingLocations()
         .map((p) => ({ x: p.x, y: p.y })),
       own,
+      ownDepartures: this.ownLifecycle.takeDepartures(),
       enemies,
       routes: this.routes,
       techBuildings,
@@ -811,12 +823,16 @@ export class WarbookBot extends Bot {
   }
   decide(observation: Observation): Intent[] {
     const result = this.commander.decide(observation);
-    const record = this.commander.launchRecord as { tick?: number } | undefined;
+    const record = this.commander.launchRecord as
+      { tick?: number; schema?: string } | undefined;
     if (record?.tick === observation.tick)
       this.trace?.({
         tick: observation.tick,
         actor: this.name,
-        kind: "launch_decision",
+        kind:
+          record.schema === "operation-v2"
+            ? "operation_decision"
+            : "launch_decision",
         record,
       });
     return result;

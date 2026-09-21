@@ -1,3 +1,4 @@
+import type { OperationProvider } from "./operation-provider.js";
 import {
   distance2,
   type Contact,
@@ -19,8 +20,8 @@ import {
 export class PressureStrategy implements StrategicController {
   readonly id = "two-front-pressure-v5";
   private readonly base: BastionStrategy;
-  constructor(launch?: LaunchProvider) {
-    this.base = new BastionStrategy("cohort", launch);
+  constructor(launch?: LaunchProvider, operation?: OperationProvider) {
+    this.base = new BastionStrategy("cohort", launch, operation);
   }
   get launchRecord() {
     return this.base.launchRecord;
