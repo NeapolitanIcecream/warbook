@@ -9,6 +9,14 @@ from experiment_storage import compact_completed, require_batch_space
 def digest(path):return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 def atomic(path,value):
     p=Path(path);tmp=p.with_suffix(p.suffix+'.tmp');tmp.write_text(json.dumps(value,indent=2)+'\n');tmp.replace(p)
+def fresh_attempt(directory):
+    """A killed runner has no row marker; never append a new game to its journal."""
+    directory=Path(directory);directory.mkdir(parents=True,exist_ok=True)
+    if not any(directory.iterdir()):return directory
+    attempts=directory/'attempts';attempts.mkdir(exist_ok=True)
+    number=1
+    while (attempts/f'{number:04d}').exists():number+=1
+    attempt=attempts/f'{number:04d}';attempt.mkdir();return attempt
 def stage_release(path):
     # External SDK imports must resolve to this runner's module instance. A frozen
     # bundle under another worktree otherwise fails the driver's Bot type check.
@@ -57,6 +65,7 @@ def main():
         directory=root/map_name/opponent/f'{repeat}-{subject}';directory.mkdir(parents=True,exist_ok=True)
         completed=directory/'batch-row.json'
         if completed.exists():return json.loads(completed.read_text())
+        directory=fresh_attempt(directory)
         seconds=plan.get('seconds',300)
         cmd=[node,'--env-file-if-exists=.env','--import','./src/engine-diagnostics.mjs','--import','tsx','src/runner.ts','--units','0','--map',map_name,'--mode',s.get('mode','bastion'),'--out',str(directory),'--seconds',str(seconds)]
         if 'ref' in s:cmd+=['--actor-release',releases[(s['ref'],s.get('mode','bastion'))]]
@@ -77,6 +86,7 @@ def main():
             status,reason,training_eligible=classify(result,m)
         except Exception as exc:error=f'{type(exc).__name__}: {exc}';result={};status='E'
         row={'map':map_name,'opponent':opponent,'repeat':repeat,'subject':subject,'outcome':status,'termination':reason,'trainingEligible':training_eligible,'tick':result.get('tick'),'seconds':time.monotonic()-attempt,'dir':str(directory),'error':error}
+        if completed.parent!=directory:atomic(directory/'batch-row.json',row)
         atomic(completed,row);return row
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
         futures=[executor.submit(run,t) for t in tasks]
