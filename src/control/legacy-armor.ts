@@ -5,7 +5,7 @@ import {
   type Unit,
 } from "../model.js";
 import type { ArmorState } from "./armor-state.js";
-import type { Operations } from "./operations.js";
+import type { Operation, Operations } from "./operations.js";
 import type { LaunchProvider } from "./launch-provider.js";
 import type { ControlReport } from "./contracts.js";
 import { formedUnits, rendezvous } from "./formation.js";
@@ -186,28 +186,14 @@ export function planLegacyArmor(
     state.flankRefs.clear();
     state.flankVia = undefined;
     state.flankAttempted = false;
-    if (
-      nextOperation.reason === "formed-pressure" &&
-      committed.filter((u) => u.name === armor).length >= 12 &&
-      alternative
-    ) {
-      state.flankAttempted = true;
-      operation = operations.active = {
-        ...nextOperation,
-        reason: "two-front-pressure",
-      };
-      state.transition = {
-        operationTransition: "two-front-pressure",
-        operationTransitionTick: o.tick,
-      };
-      state.flankVia = alternative;
-      state.flankRefs = new Set(
-        [...committed]
-          .sort((a, b) => distance2(a, alternative) - distance2(b, alternative))
-          .slice(0, Math.floor(committed.length / 2))
-          .map((u) => u.ref),
-      );
-    }
+    operation = operations.active = initialArmorFlank(
+      state,
+      nextOperation,
+      committed,
+      armor,
+      alternative,
+      o.tick,
+    );
     assault = vehicles.filter((u) => state.assault.has(u.ref));
   }
   if (assault.length) {
@@ -241,29 +227,7 @@ export function planLegacyArmor(
   const joiners = vehicles.filter((u) => state.joining.has(u.ref));
   reserve = vehicles.filter(isReserve);
   const withdrawing = vehicles.filter((u) => state.withdrawing.has(u.ref));
-  if (
-    !state.flankAttempted &&
-    alternative &&
-    assault.filter((u) => u.name === armor).length >= 12 &&
-    feedback?.combat.facts.holdingContact
-  ) {
-    const available = assault
-      .filter((u) => u.name === armor && (u.attackState ?? 0) < 3)
-      .sort((a, b) => distance2(a, alternative) - distance2(b, alternative));
-    if (available.length >= 6) {
-      state.flankRefs = new Set(
-        available
-          .slice(0, Math.min(available.length, Math.floor(assault.length / 2)))
-          .map((u) => u.ref),
-      );
-      state.flankVia = alternative;
-      state.flankAttempted = true;
-      state.transition = {
-        operationTransition: "flank-blocked-contact",
-        operationTransitionTick: o.tick,
-      };
-    }
-  }
+  contactArmorFlank(state, assault, armor, alternative, feedback, o.tick);
   return {
     assault,
     joiners,
@@ -317,4 +281,66 @@ export function assignMiningGuards(
     .slice(0, guardCount);
   state.mineGuards = new Set(mineGuards.map((u) => u.ref));
   return mineGuards;
+}
+
+/** Fixed subordinate maneuvers keep the same strategic objective in both scopes. */
+export function initialArmorFlank(
+  state: ArmorState,
+  operation: Operation,
+  committed: readonly Unit[],
+  armor: string,
+  alternative: Point | undefined,
+  tick: number,
+): Operation {
+  if (
+    operation.reason !== "formed-pressure" ||
+    committed.filter((u) => u.name === armor).length < 12 ||
+    !alternative
+  )
+    return operation;
+  state.flankAttempted = true;
+  state.flankVia = alternative;
+  state.flankRefs = new Set(
+    [...committed]
+      .sort((a, b) => distance2(a, alternative) - distance2(b, alternative))
+      .slice(0, Math.floor(committed.length / 2))
+      .map((u) => u.ref),
+  );
+  state.transition = {
+    operationTransition: "two-front-pressure",
+    operationTransitionTick: tick,
+  };
+  return { ...operation, reason: "two-front-pressure" };
+}
+export function contactArmorFlank(
+  state: ArmorState,
+  assault: readonly Unit[],
+  armor: string,
+  alternative: Point | undefined,
+  feedback: ControlReport | undefined,
+  tick: number,
+): void {
+  if (
+    !state.flankAttempted &&
+    alternative &&
+    assault.filter((u) => u.name === armor).length >= 12 &&
+    feedback?.combat.facts.holdingContact
+  ) {
+    const available = assault
+      .filter((u) => u.name === armor && (u.attackState ?? 0) < 3)
+      .sort((a, b) => distance2(a, alternative) - distance2(b, alternative));
+    if (available.length >= 6) {
+      state.flankRefs = new Set(
+        available
+          .slice(0, Math.min(available.length, Math.floor(assault.length / 2)))
+          .map((u) => u.ref),
+      );
+      state.flankVia = alternative;
+      state.flankAttempted = true;
+      state.transition = {
+        operationTransition: "flank-blocked-contact",
+        operationTransitionTick: tick,
+      };
+    }
+  }
 }

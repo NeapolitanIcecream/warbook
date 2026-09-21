@@ -123,7 +123,8 @@ async function main() {
           kind = a.order?.kind ?? r.operation.kind ?? "unknown";
         operationSummary.appliedByKind[kind] =
           (operationSummary.appliedByKind[kind] ?? 0) + 1;
-        if (!r.operation.members) operationSummary.startedForces++;
+        if (r.scope === "launch" || !r.operation.members)
+          operationSummary.startedForces++;
         else if (a.addRefs.length) operationSummary.reinforcementOrders++;
       }
     }

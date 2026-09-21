@@ -2,6 +2,7 @@ import type { OperationProvider } from "./operation-provider.js";
 import {
   observeArmor,
   applyOperation,
+  applyLaunchOnly,
   syncLegacyOrder,
   describeOperation,
   operationGroups,
@@ -9,6 +10,8 @@ import {
 import {
   planLegacyArmor,
   assignMiningGuards,
+  initialArmorFlank,
+  contactArmorFlank,
   type LegacyArmorFrame,
 } from "./legacy-armor.js";
 import { armorState, authorizedArmor, copyArmorState } from "./armor-state.js";
@@ -169,8 +172,12 @@ export class BastionStrategy implements StrategicController {
       responding,
       damagedAt,
     } = this.situation.observe(o);
+    const experimentalLaunch =
+      this.launchProvider?.experimental ||
+      (this.operationProvider?.scope === "launch" &&
+        !this.operationProvider.teacher);
     const freshDefense =
-      !this.launchProvider?.experimental ||
+      !experimentalLaunch ||
       incursions.some(
         (i) =>
           !this.armor.launchThreats.has(`${i.enemy.ref}:${i.asset.ref}`) ||
@@ -185,12 +192,16 @@ export class BastionStrategy implements StrategicController {
     const suggestedRelief =
       ruleRelief?.assign(
         o,
-        allVehicles.filter((u) => !this.armor.withdrawing.has(u.ref)),
+        allVehicles.filter(
+          (u) =>
+            !this.armor.withdrawing.has(u.ref) &&
+            (freshDefense || !this.armor.assault.has(u.ref)),
+        ),
         infantry,
         localThreats,
         vehiclePost,
         this.armor.assault,
-        responding && this.armor.assault.size > 0,
+        responding && this.armor.assault.size > 0 && freshDefense,
       ) ?? [];
     const owned = authorizedArmor(this.armor);
     const delegated =
@@ -212,9 +223,8 @@ export class BastionStrategy implements StrategicController {
           vehiclePost,
           this.armor.assault,
           responding &&
-            (this.operationProvider
-              ? true
-              : this.armor.assault.size > 0 && freshDefense),
+            this.armor.assault.size > 0 &&
+            (this.operationProvider ? true : freshDefense),
         );
     let reliefRefs = new Set(relief.map((u) => u.ref));
     if (!this.operationProvider)
@@ -397,8 +407,13 @@ export class BastionStrategy implements StrategicController {
           this.operationReliefRefs = reliefRefs;
           vehicles = advisedVehicles;
         } else {
-          const newForce = !authorizedArmor(this.armor).size;
-          applyOperation(this.armor, action, o, reserve);
+          const newForce =
+            this.operationProvider.scope === "launch"
+              ? !this.armor.assault.size && !this.armor.joining.size
+              : !authorizedArmor(this.armor).size;
+          if (this.operationProvider.scope === "launch")
+            applyLaunchOnly(this.armor, action, o, reserve);
+          else applyOperation(this.armor, action, o, reserve);
           if (
             newForce &&
             action.kind === "apply" &&
@@ -422,6 +437,40 @@ export class BastionStrategy implements StrategicController {
           ? this.operations.active
           : describeOperation(this.armor, this.operations, o);
       planned = { ...operationGroups(this.armor, vehicles), operation };
+    }
+    if (
+      this.operationProvider &&
+      !this.operationProvider.teacher &&
+      this.armor.order?.kind === "advance"
+    ) {
+      const alternative =
+        o.flankApproach &&
+        distance2(o.flankApproach.towards, this.armor.order.goal.point) <=
+          10 ** 2
+          ? o.flankApproach.point
+          : undefined;
+      if (
+        this.armor.lastCommit?.tick === o.tick &&
+        this.armor.lastCommit.orderChanged &&
+        planned.operation
+      )
+        planned.operation = this.operations.active = initialArmorFlank(
+          this.armor,
+          planned.operation,
+          planned.assault,
+          armor,
+          alternative,
+          o.tick,
+        );
+      if (decisionStep)
+        contactArmorFlank(
+          this.armor,
+          planned.assault,
+          armor,
+          alternative,
+          feedback,
+          o.tick,
+        );
     }
     const { assault, joiners, withdrawing, reserve, mineGuards, operation } =
       planned;

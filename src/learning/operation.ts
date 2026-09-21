@@ -72,7 +72,7 @@ const samePurpose = (a?: OperationOrder, b?: OperationOrder) =>
     !!b &&
     a.kind === b.kind &&
     pointKey(a.goal.point) === pointKey(b.goal.point) &&
-    (!a.goal.ref || !b.goal.ref || a.goal.ref === b.goal.ref));
+    a.goal.ref === b.goal.ref);
 
 export function operationFacts(c: OperationContext): {
   features: number[];
@@ -150,6 +150,9 @@ export function buildOperationSnapshot(
     regions.get(pointKey(u)) === regions.get(pointKey(p));
   const facts = operationFacts(c),
     current = s.order;
+  const commandCurrent = scope === "operation" ? current : undefined;
+  const commandForce = scope === "operation" ? force : [];
+  const commandMembers = scope === "operation" ? owned.size : 0;
   const snapshot: OperationSnapshot = {
     tick: o.tick,
     scope,
@@ -181,7 +184,8 @@ export function buildOperationSnapshot(
     added: readonly Unit[],
     keep = false,
   ) => {
-    const result = [...force, ...added],
+    const affected = keep ? force : commandForce;
+    const result = [...affected, ...added],
       center = result.length ? rendezvous(result, true) : o.home;
     const base =
       order && result.length
@@ -193,7 +197,7 @@ export function buildOperationSnapshot(
               kind: order.goal.kind,
               contact: known.find((e) => e.ref === order.goal.ref),
             },
-            all,
+            keep || scope === "operation" ? all : reserve,
             result,
             center,
           )
@@ -201,13 +205,13 @@ export function buildOperationSnapshot(
     const extra = [
       Number(keep),
       ...kinds.map((k) => Number(order?.kind === k)),
-      Number(!sameOrder(current, order)),
+      Number(!sameOrder(keep ? current : commandCurrent, order)),
       norm(added.length, 24),
       norm(added.filter((u) => u.name === "SREF").length, 6),
       mean(added.map(hp)),
       norm(result.length, 24),
       norm(reserve.length - added.length, 24),
-      norm(owned.size, 24),
+      norm(keep ? owned.size : commandMembers, 24),
       order
         ? result.filter((u) => distance2(u, order.goal.point) <= 4 ** 2)
             .length / Math.max(1, result.length)
@@ -216,7 +220,7 @@ export function buildOperationSnapshot(
         ? result.filter((u) => !reachable(u, order.goal.point)).length /
           Math.max(1, result.length)
         : 0,
-      Number(!keep && sameOrder(current, order) && added.length > 0),
+      Number(!keep && sameOrder(commandCurrent, order) && added.length > 0),
       Number(!!order),
     ];
     return [...base, ...extra];
@@ -228,9 +232,8 @@ export function buildOperationSnapshot(
     expectedStateVersion: s.stateVersion,
   });
   snapshot.candidates.push(encode(current, [], true));
-  // The narrow scope keeps rule-owned continuation. A new force begins when the
-  // preceding force has been released by those rules, including its withdrawal.
-  if (scope === "launch" && owned.size) return snapshot;
+  // As in v1, rule-owned returning survivors do not occupy the new launch slot.
+  if (scope === "launch" && (s.assault.size || s.joining.size)) return snapshot;
   const candidates = buildLaunchSnapshot({
     observation: o,
     operations: c.operations,
@@ -243,12 +246,12 @@ export function buildOperationSnapshot(
     searchGoal: c.frame.searchGoal,
     launchSize: c.frame.launchSize,
     armor: c.frame.armor,
-    reserve: all,
+    reserve: scope === "operation" ? all : reserve,
     slotFree: true,
   });
   snapshot.sourceTargets = candidates.sourceTargets;
   snapshot.omittedTargets = candidates.omittedTargets;
-  const orders: OperationOrder[] = current ? [current] : [];
+  const orders: OperationOrder[] = commandCurrent ? [commandCurrent] : [];
   const append = (order: OperationOrder) => {
     if (!orders.some((old) => sameOrder(old, order))) orders.push(order);
   };
@@ -292,12 +295,14 @@ export function buildOperationSnapshot(
     const target = snapshot.targets.length;
     snapshot.targets.push(order.goal);
     for (const n of amounts) {
-      if ((!owned.size && !n) || (sameOrder(order, current) && !n)) continue;
-      if (!n && !force.some((u) => reachable(u, order.goal.point))) continue;
+      if ((!commandMembers && !n) || (sameOrder(order, commandCurrent) && !n))
+        continue;
+      if (!n && !commandForce.some((u) => reachable(u, order.goal.point)))
+        continue;
       const added = n ? selectLaunchMembers(sorted, n) : [];
       snapshot.actions.push({
         kind: "apply",
-        order: sameOrder(order, current) ? undefined : order,
+        order: sameOrder(order, commandCurrent) ? undefined : order,
         addRefs: added.map((u) => u.ref),
         units: added.map((u) => u.ref),
         expectedStateVersion: s.stateVersion,
@@ -331,12 +336,11 @@ export function matchTeacher(c: OperationContext, snapshot: OperationSnapshot) {
         : "released-members",
     };
   if (
+    snapshot.scope === "operation" &&
     c.advice.state.withdrawing.size &&
     (c.advice.state.assault.size || c.advice.state.joining.size)
   )
     return { action: -1, reason: "multiple-purposes" };
-  if (!sameSet(c.state.flankRefs, c.advice.state.flankRefs))
-    return { action: -1, reason: "independent-flank" };
   for (let i = 0; i < snapshot.actions.length; i++) {
     const a = snapshot.actions[i],
       resulting = new Set([...before, ...a.addRefs]);

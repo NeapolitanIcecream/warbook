@@ -6,6 +6,7 @@ import {
 } from "../model.js";
 import {
   authorizedArmor,
+  copyArmorState,
   type ArmorState,
   type OperationOrder,
 } from "./armor-state.js";
@@ -160,6 +161,35 @@ export function applyOperation(
   };
 }
 
+/** Launch-only permission leaves an earlier rule-owned withdrawal untouched. */
+export function applyLaunchOnly(
+  s: ArmorState,
+  a: OperationAction,
+  o: Observation,
+  reserve: readonly Unit[],
+): void {
+  if (a.kind === "keep") {
+    applyOperation(s, a, o, reserve);
+    return;
+  }
+  if (
+    s.assault.size ||
+    s.joining.size ||
+    a.order?.kind !== "advance" ||
+    !a.addRefs.length
+  )
+    throw new Error("Launch-only action cannot retask an existing force");
+  const next = copyArmorState(s),
+    returning = new Set(s.withdrawing),
+    returnPoint = s.withdrawalPoint;
+  next.withdrawing.clear();
+  next.order = undefined;
+  applyOperation(next, a, o, reserve);
+  next.withdrawing = returning;
+  next.withdrawalPoint = returnPoint;
+  Object.assign(s, next);
+}
+
 /** Describe the rule's actual result; mixed missions remain detectably unrepresentable. */
 export function legacyOrder(
   s: ArmorState,
@@ -223,7 +253,7 @@ export function describeOperation(
   operations: Operations,
   o: Observation,
 ) {
-  const owned = authorizedArmor(s);
+  const owned = new Set([...s.assault, ...s.joining]);
   const units = o.own.filter((u) => owned.has(u.ref));
   if (!s.order || s.order.kind !== "advance" || !units.length) {
     operations.active = undefined;
@@ -233,9 +263,8 @@ export function describeOperation(
     return undefined;
   }
   const goal = s.order.goal;
-  const ref = o.enemies.some((e) => e.ref === goal.ref) ? goal.ref : undefined;
   return (operations.active = {
-    ...operations.describe(o, units, goal.point, ref),
+    ...operations.describe(o, units, goal.point, goal.ref),
     objectiveKey: goal.key,
     objectiveRef: goal.ref,
     origin: "experiment",

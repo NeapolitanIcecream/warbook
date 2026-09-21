@@ -178,8 +178,8 @@ def read_last_line(path):
 if __name__ == '__main__':
     try:
         main()
-    except Exception as error:
+    except (Exception, KeyboardInterrupt) as error:
         if '--out' in sys.argv:
             root = Path(sys.argv[sys.argv.index('--out')+1]); root.mkdir(parents=True, exist_ok=True)
-            atomic(root/'status.json', dict(phase='failed', error=f'{type(error).__name__}: {error}', updatedAt=time.time()))
+            atomic(root/'status.json', dict(phase='interrupted' if isinstance(error, KeyboardInterrupt) else 'failed', error=f'{type(error).__name__}: {error}', updatedAt=time.time()))
         raise

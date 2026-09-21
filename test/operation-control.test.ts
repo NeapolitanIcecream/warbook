@@ -9,6 +9,7 @@ import {
 } from "../src/control/armor-state.js";
 import {
   applyOperation,
+  applyLaunchOnly,
   observeArmor,
   describeOperation,
 } from "../src/control/operation-state.js";
@@ -363,4 +364,255 @@ test("target-clear observation between policy ticks persists until a new order o
   ];
   observeArmor(c.state, c.observation);
   assert.equal(c.state.goalCleared, false);
+});
+
+test("launch-only preserves old returning units and permits a fresh wave, as v1 does", () => {
+  const c = context();
+  commit(c, withdraw, ["u0"]);
+  c.observation.own[0].x = 40;
+  c.reserve = c.observation.own.slice(1);
+  const s = buildOperationSnapshot(c, "launch");
+  const index = s.actions.findIndex(
+    (a) => a.order?.kind === "advance" && a.addRefs.length === 7,
+  );
+  assert(index > 0);
+  const before = copyArmorState(c.state);
+  applyLaunchOnly(c.state, s.actions[index], c.observation, c.reserve);
+  const after = copyArmorState(c.state);
+  assert.equal(
+    matchTeacher(
+      { ...c, state: before, advice: { ...c.advice, state: after } },
+      s,
+    ).action,
+    index,
+  );
+  assert.deepEqual([...c.state.withdrawing], ["u0"]);
+  assert.deepEqual(c.state.withdrawalPoint, withdraw.goal.point);
+  assert.equal(c.state.assault.size, 7);
+  assert.equal(c.state.order?.kind, "advance");
+  assert.throws(
+    () => applyLaunchOnly(c.state, s.actions[index], c.observation, c.reserve),
+    /existing force/,
+  );
+});
+
+test("Bastion launch-only model can attack with reserves while a depleted previous wave returns", () => {
+  const o = observation();
+  let first = true;
+  const provider: OperationProvider = {
+    scope: "launch",
+    period: 75,
+    teacher: false,
+    choose(c) {
+      if (first) {
+        first = false;
+        return {
+          kind: "apply",
+          order: advance,
+          addRefs: ["u0", "u1", "u2"],
+          expectedStateVersion: c.state.stateVersion,
+        };
+      }
+      const s = buildOperationSnapshot(c, "launch");
+      const a = s.actions
+        .filter((a) => a.order?.kind === "advance")
+        .sort((a, b) => b.addRefs.length - a.addRefs.length)[0];
+      assert(a);
+      return a;
+    },
+  };
+  const strategy = new BastionStrategy("bastion", undefined, provider),
+    tactics = new LocalCombat();
+  const plan = () =>
+    strategy.plan(o, tactics.assess(o, strategy.assessmentRequest(o)));
+  assert.equal(plan().combat.units.length, 3);
+  o.tick += 75;
+  o.ownDepartures = ["u1", "u2"];
+  o.own = o.own.filter((u) => !o.ownDepartures!.includes(u.ref));
+  o.own[0].x = 40;
+  const next = plan();
+  assert.equal(next.combat.kind, "advance");
+  assert.equal(next.combat.units.length, 5);
+  assert(!next.combat.units.includes("u0"));
+  assert.deepEqual(
+    next.additionalCombat?.find((m) => m.id === "recover-force")?.units,
+    ["u0"],
+  );
+});
+
+test("launch-only keeps v1 protection against immediate recall on unchanged evidence", () => {
+  const o = observation();
+  o.own.push({
+    ...unit("refinery", 0, 0),
+    name: "GAREFN",
+    type: 2,
+    width: 3,
+    height: 3,
+    mobile: false,
+    refinery: true,
+    combat: false,
+    hp: 1000,
+    maxHp: 1000,
+  });
+  o.enemies.push({
+    ref: "intruder",
+    name: "MTNK",
+    type: 7,
+    x: 11,
+    y: 2,
+    hp: 300,
+    maxHp: 300,
+    observedTick: o.tick,
+    weaponRange: 5,
+  });
+  let first = true;
+  const provider: OperationProvider = {
+    scope: "launch",
+    period: 75,
+    teacher: false,
+    choose(c) {
+      if (first) {
+        first = false;
+        return {
+          kind: "apply",
+          order: advance,
+          addRefs: c.reserve.filter((u) => u.name === "MTNK").map((u) => u.ref),
+          expectedStateVersion: c.state.stateVersion,
+        };
+      }
+      return {
+        kind: "keep",
+        addRefs: [],
+        expectedStateVersion: c.state.stateVersion,
+      };
+    },
+  };
+  const strategy = new BastionStrategy("bastion", undefined, provider),
+    tactics = new LocalCombat();
+  const plan = () =>
+    strategy.plan(o, tactics.assess(o, strategy.assessmentRequest(o)));
+  assert.equal(plan().combat.units.length, 8);
+  o.tick += 75;
+  assert.equal(plan().combat.units.length, 8);
+  o.tick += 75;
+  o.own.find((u) => u.ref === "refinery")!.hp = 500;
+  assert(
+    (plan().additionalCombat?.find((m) => m.id === "base-relief")?.units
+      .length ?? 0) > 0,
+  );
+});
+
+test("a remembered hidden target keeps its legal risk estimate without an object attack", () => {
+  const c = context();
+  c.observation.enemies.push(
+    ...Array.from({ length: 20 }, (_, i) => ({
+      ref: `e${i}`,
+      name: "MTNK",
+      type: 7,
+      x: 85,
+      y: 2,
+      hp: 300,
+      maxHp: 300,
+      observedTick: c.observation.tick,
+      weaponRange: 5,
+    })),
+  );
+  c.operations.observe(c.observation, []);
+  commit(c, advance, ["u0", "u1"]);
+  c.observation.enemies = [];
+  const operation = describeOperation(c.state, c.operations, c.observation);
+  assert.equal(operation?.reason, "formed-pressure");
+  assert.equal(operation?.ref, undefined);
+  assert((operation?.defenders ?? 0) >= 20);
+});
+
+test("shared flanking remains subordinate to a model advance and stops when it defends", () => {
+  const o = observation();
+  o.own = Array.from({ length: 12 }, (_, i) =>
+    unit(`u${i}`, 2 + (i % 4), 2 + Math.floor(i / 4)),
+  );
+  o.enemies.push(
+    ...Array.from({ length: 25 }, (_, i) => ({
+      ref: `e${i}`,
+      name: "MTNK",
+      type: 7,
+      x: 85,
+      y: 2,
+      hp: 300,
+      maxHp: 300,
+      observedTick: o.tick,
+      weaponRange: 5,
+    })),
+  );
+  o.flankApproach = {
+    towards: advance.goal.point,
+    point: { x: 60, y: 20 },
+    observedTick: o.tick,
+  };
+  let first = true;
+  const provider: OperationProvider = {
+    scope: "operation",
+    period: 75,
+    teacher: false,
+    choose(c) {
+      if (first) {
+        first = false;
+        return {
+          kind: "apply",
+          order: advance,
+          addRefs: c.reserve.map((u) => u.ref),
+          expectedStateVersion: c.state.stateVersion,
+        };
+      }
+      return {
+        kind: "apply",
+        order: {
+          kind: "defend",
+          goal: {
+            key: "defend:5:5:false",
+            point: { x: 5, y: 5 },
+            kind: "anchor",
+          },
+        },
+        addRefs: [],
+        expectedStateVersion: c.state.stateVersion,
+      };
+    },
+  };
+  const strategy = new BastionStrategy("bastion", undefined, provider),
+    tactics = new LocalCombat();
+  const plan = () =>
+    strategy.plan(o, tactics.assess(o, strategy.assessmentRequest(o)));
+  const firstPlan = plan();
+  assert.equal(firstPlan.combat.units.length, 6);
+  assert.equal(
+    firstPlan.additionalCombat?.find((m) => m.id === "flank-force")?.units
+      .length,
+    6,
+  );
+  o.tick += 75;
+  const next = plan();
+  assert.equal(next.combat.kind, "defend");
+  assert.equal(next.combat.units.length, 12);
+  assert(!next.additionalCombat?.some((m) => m.id === "flank-force"));
+});
+
+test("binding a visible building at a search point is an explicit teacher action, not KEEP", () => {
+  const c = context();
+  commit(
+    c,
+    {
+      kind: "advance",
+      goal: { key: "90:2:false", point: { x: 90, y: 2 }, kind: "search" },
+    },
+    ["u0", "u1"],
+  );
+  c.reserve = c.observation.own.slice(2);
+  c.advice.state = copyArmorState(c.state);
+  c.advice.state.order = advance;
+  const snapshot = buildOperationSnapshot(c, "operation"),
+    match = matchTeacher(c, snapshot);
+  assert(match.action > 0);
+  assert.equal(snapshot.actions[match.action].order?.goal.ref, "base");
+  assert.equal(snapshot.actions[match.action].addRefs.length, 0);
 });
