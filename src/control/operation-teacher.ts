@@ -34,6 +34,15 @@ export function chooseMenuTeacher(
     const anchor = c.anchors[kind][0];
     return offers
       .filter((x) => x.order?.kind === kind && (add || !x.added.length))
+      .filter(
+        (x) =>
+          s.order?.kind !== kind ||
+          f.covered(s.order.goal.point) ||
+          (sameOrder(s.order, x.order) && x.added.length > 0) ||
+          (anchor &&
+            distance2(x.order!.goal.point, anchor) <
+              distance2(s.order.goal.point, anchor)),
+      )
       .sort(
         (a, b) =>
           (anchor

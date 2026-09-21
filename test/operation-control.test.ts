@@ -737,3 +737,28 @@ test("menu teacher uses actual order kind and the policy executor, with no dropp
   assert.equal(provider.record?.action, provider.record?.teacherAction);
   assert.ok(provider.record!.action >= 0);
 });
+
+test("menu teacher holds an existing assembly instead of alternating fallback anchors without reserves", () => {
+  const c = context();
+  c.observation.own = c.observation.own.slice(0, 2);
+  c.anchors.assemble = [
+    { x: 3, y: 3 },
+    { x: 10, y: 10 },
+  ];
+  commit(
+    c,
+    {
+      kind: "assemble",
+      goal: {
+        key: "assemble:3:3:false",
+        point: { x: 3, y: 3 },
+        kind: "anchor",
+      },
+    },
+    ["u0", "u1"],
+  );
+  c.reserve = [];
+  const menu = buildOperationSnapshot(c, "operation"),
+    teacher = chooseMenuTeacher(c, menu);
+  assert.equal(teacher.action, 0);
+});

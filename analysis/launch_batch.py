@@ -51,7 +51,7 @@ def main():
     remaining=sum(not (root/m/o/f'{r}-{s}'/'batch-row.json').exists() for m,o,r,s in tasks)
     atomic(root/'storage-budget.json',require_batch_space(root,remaining,plan.get('trace','launch'),plan.get('storageMiBPerGame')))
     started=time.monotonic();rows=[];workers=args.workers or plan.get('workers',4)
-    if workers<1 or workers>128:raise ValueError('Explicit worker bound is 1..128; calibrate CPU and memory before scaling')
+    if workers<1 or workers>192:raise ValueError('Explicit worker bound is 1..192; calibrate CPU and memory before scaling')
     def run(task):
         map_name,opponent,repeat,subject=task;s=plan['subjects'][subject];p=plan['opponents'][opponent]
         directory=root/map_name/opponent/f'{repeat}-{subject}';directory.mkdir(parents=True,exist_ok=True)
