@@ -20,7 +20,7 @@ export function chooseMenuTeacher(
   const armor = (u: Unit) => [f.armor, "SREF"].includes(u.name);
   const result = (action: number, reason: string) => ({
     action,
-    reason: `menu-v1:${reason}`,
+    reason: `menu-v2:${reason}`,
   });
   const offers = menu.actions
     .map((a, index) => ({
@@ -125,7 +125,14 @@ export function chooseMenuTeacher(
     const arrived = force.every(
       (u) => !u.onBridge && distance2(u, s.order!.goal.point) <= 4 ** 2,
     );
-    if (!arrived) return result(0, "continue-withdraw");
+    if (!arrived) {
+      if (o.tick - s.orderStartedTick >= 900)
+        return result(
+          maneuver("assemble", true)?.index ?? 0,
+          "withdraw-wait-limit-regroup",
+        );
+      return result(0, "continue-withdraw");
+    }
     if (o.tick - s.orderStartedTick < 450) return result(0, "arrived-recovery");
   }
   // Unlike the old empty-slot gate, arrived/assembled/defending members are part
@@ -134,17 +141,22 @@ export function chooseMenuTeacher(
   for (const x of offers) {
     if (x.order?.kind !== "advance") continue;
     const group = [...force, ...x.added];
-    if (
-      !group.length ||
-      !group.every(
+    const core = formedUnits(
+      group.filter(
         (u) => f.outsideFactory(u) && distance2(u, f.musterPost) <= 12 ** 2,
-      ) ||
-      formedUnits(group, f.musterPost).length !== group.length
+      ),
+      f.musterPost,
+    );
+    if (
+      !core.length ||
+      (core.length !== group.length &&
+        (core.filter(armor).length < 2 ||
+          core.length < Math.ceil((group.length * 2) / 3)))
     )
       continue;
     const goal = x.order.goal;
     if (goal.ref) {
-      const proposal = c.operations.planningCopy().consider(o, group, goal.ref);
+      const proposal = c.operations.planningCopy().consider(o, core, goal.ref);
       if (
         !proposal ||
         proposal.reason === "local-counterattack" ||
@@ -163,18 +175,18 @@ export function chooseMenuTeacher(
           proposal.travelSeconds / 10 -
           proposal.defenders * 1.2 -
           proposal.productionArrivals * 1.2 +
-          group.length / 100,
+          core.length / 100,
       });
     } else if (
       !c.operations.hasKnownBase &&
-      (group.filter(armor).length >= f.launchSize ||
-        (f.firstForceFunded && !f.hasScouts && group.some(armor)))
+      (core.filter(armor).length >= f.launchSize ||
+        (f.firstForceFunded && !f.hasScouts && core.some(armor)))
     ) {
       attacks.push({
         index: x.index,
         score:
-          -Math.sqrt(distance2(rendezvous(group, true), goal.point)) / 10 +
-          group.length / 100,
+          -Math.sqrt(distance2(rendezvous(core, true), goal.point)) / 10 +
+          core.length / 100,
       });
     }
   }

@@ -635,7 +635,7 @@ test("menu teacher reuses arrived withdrawal members rather than waiting for an 
   const menu = buildOperationSnapshot(c, "operation"),
     teacher = chooseMenuTeacher(c, menu);
   assert.equal(menu.actions[teacher.action].order?.kind, "advance");
-  assert.equal(teacher.reason, "menu-v1:relaunch-owned-force");
+  assert.equal(teacher.reason, "menu-v2:relaunch-owned-force");
   applyOperation(
     c.state,
     menu.actions[teacher.action],
@@ -769,4 +769,32 @@ test("menu teacher holds an existing assembly instead of alternating fallback an
     chooseMenuTeacher(c, buildOperationSnapshot(c, "operation")).action,
     0,
   );
+});
+
+test("menu teacher does not let one stuck member lock the returned main force", () => {
+  const c = context();
+  c.observation.own.forEach((u) => {
+    u.x = 2;
+    u.y = 2;
+  });
+  c.observation.own[7].x = 60;
+  c.observation.own[7].y = 60;
+  commit(
+    c,
+    withdraw,
+    c.observation.own.map((u) => u.ref),
+  );
+  c.reserve = [];
+  c.observation.tick += 975;
+  let menu = buildOperationSnapshot(c, "operation");
+  const regroup = menu.actions[chooseMenuTeacher(c, menu).action];
+  assert.equal(regroup.order?.kind, "assemble");
+  applyOperation(c.state, regroup, c.observation, []);
+  c.observation.tick += 75;
+  menu = buildOperationSnapshot(c, "operation");
+  const advanceCore = menu.actions[chooseMenuTeacher(c, menu).action];
+  assert.equal(advanceCore.order?.kind, "advance");
+  applyOperation(c.state, advanceCore, c.observation, []);
+  assert.equal(authorizedArmor(c.state).size, 8);
+  assert.ok(authorizedArmor(c.state).has("u7"));
 });

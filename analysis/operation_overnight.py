@@ -31,6 +31,26 @@ def cutoff(value):
 def neural(path,route,scope,deterministic=True):
     return dict(policy='model',model=str(path),mode=ROUTES[route],scope=scope,deterministic=deterministic)
 
+def checkpoint_artifact(state,field,key,path):
+    # Called only after training and cross-runtime probability validation succeed.
+    state.setdefault(field,{})[key]=dict(model=str(path),sha256=digest(path))
+
+def final_subjects(state,route):
+    subjects={};seen={}
+    def add(label,path,scope,expected=None):
+        sha=digest(path)
+        if expected and sha!=expected:raise ValueError('Validated pending checkpoint changed')
+        if sha in seen:return
+        seen[sha]=label;subjects[label]=neural(path,route,scope)
+    for collection,label in [('initial','initial'),('reference','bc'),('current','latest')]:
+        for key,path in state[collection].items():
+            if key.startswith(route+'-'):add(key+'-'+label,path,'operation' if collection=='reference' else key.split('-')[1])
+    for key,record in state.get('pendingUpdated',{}).items():
+        if key.startswith(route+'-'):add(key+'-pending',record['model'],key.split('-')[1],record['sha256'])
+    for scope in ['launch','operation']:add(f'{route}-{scope}-retained',state['retained'][f'{route}-{scope}'],scope)
+    subjects['rule-016']=dict(ref='v0.1.16',mode=ROUTES[route])
+    return subjects,seen
+
 def main():
     ap=argparse.ArgumentParser()
     ap.add_argument('--previous',required=True);ap.add_argument('--out',required=True)
@@ -49,7 +69,7 @@ def main():
     identity=dict(source=source,previous=str(previous),previousAuditSha=digest(previous/'audit.json'),
                   trainUntil=a.train_until,finishBy=a.finish_by,gameBudget=a.game_budget,cycles=a.cycles,
                   workers=a.workers,calibrate=a.calibrate,smoke=a.smoke,
-                  teacher='menu-v1',evaluation='seen maps; independent uncontrolled starts; W=1,L=0,U=0; E excluded')
+                  teacher='menu-v2',evaluation='seen maps; independent uncontrolled starts; W=1,L=0,U=0; E excluded')
     if (root/'experiment.json').exists() and read(root/'experiment.json')!=identity:raise ValueError('Resume identity changed')
     atomic(root/'experiment.json',identity)
     state=read(root/'state.json') if (root/'state.json').exists() else dict(phase='initializing',cycle=0,routeIndex=0,workers=min(a.workers,4) if a.smoke else a.workers)
@@ -114,10 +134,18 @@ def main():
         command(name,cmd,estimate=600 if not a.smoke else 30)
         command(name+'-parity',[node,'--import','tsx','scripts/check-launch-model.ts',str(path),str(path.with_suffix('.golden.json'))])
         return str(path)
-    def parallel_train(tasks):
+    def parallel_train(tasks, field):
+        results={};errors=[]
         with concurrent.futures.ThreadPoolExecutor(max_workers=min(8,len(tasks))) as pool:
-            futures={key:pool.submit(train,**spec) for key,spec in tasks.items()}
-            return {key:future.result() for key,future in futures.items()}
+            futures={pool.submit(train,**spec):key for key,spec in tasks.items()}
+            for future in concurrent.futures.as_completed(futures):
+                key=futures[future]
+                try:
+                    path=future.result();results[key]=path
+                    checkpoint_artifact(state,field,key,path);save()
+                except Exception as error:errors.append(error)
+        if errors:raise next((e for e in errors if not isinstance(e,BoundaryReached)),errors[0])
+        return results
     def freeze(path,route):
         key=f'freeze-{route}-{digest(path)[:16]}';marker=root/(key+'.release.json')
         if not marker.exists():
@@ -135,7 +163,7 @@ def main():
             command('teacher-lifecycle',[sys.executable,'analysis/operation_lifecycle.py',str(root/'teacher'),'--require-menu'])
             tasks={f'{route}-{kind}-{seed}':dict(name=f'{route}-{kind}-{seed}-bc',method='bc',episodes=root/'teacher'/f'{route}-{kind}-episodes.json',seed=seed)
                    for route in ROUTES for kind in ['menu','legacy'] for seed in seeds}
-            bc=parallel_train(tasks)
+            bc=parallel_train(tasks,'bcArtifacts')
             initial={};reference={};retained={};initial_counts={}
             for route in ROUTES:
                 subjects={f'{kind}-{seed}':neural(bc[f'{route}-{kind}-{seed}'],route,'operation') for kind in ['menu','legacy'] for seed in seeds}
@@ -143,7 +171,14 @@ def main():
                     key=f'{route}-launch-{seed}'
                     step=0 if route=='main' and seed==47 else 1
                     path=previous/'models'/f'{key}-ppo-{step}.json'
-                    if not path.exists():raise FileNotFoundError(path)
+                    audit=read(previous/'audit.json')
+                    expected=next(m['sha256'] for m in audit['models'] if m['name']==path.stem)
+                    if digest(path)!=expected:raise ValueError('Narrow starting checkpoint differs from audit')
+                    prior=read(previous/'status.json')['retained'][f'{route}-launch']
+                    incumbent=(route=='main' and seed==47) or (route=='pressure' and seed==83)
+                    if incumbent and Path(prior).resolve()!=path.resolve():raise ValueError('Prior route incumbent changed')
+                    state.setdefault('narrowStarts',{})[key]=dict(model=str(path),sha256=expected,role='prior route incumbent' if incumbent else 'second seed latest endpoint')
+                    save()
                     initial[key]=str(path)
                     initial[f'{route}-operation-{seed}']=bc[f'{route}-menu-{seed}']
                     reference[f'{route}-legacy-{seed}']=bc[f'{route}-legacy-{seed}']
@@ -173,7 +208,7 @@ def main():
             subjects={key:neural(state['current'][key],route,key.split('-')[1],False) for key in keys}
             batch(name+'-rollout',subjects,1 if a.smoke else 8,pool,seed=6000+cycle*10+state['routeIndex'])
             tasks={key:dict(name=name+'-'+key+'-ppo',method='ppo',episodes=root/(name+'-rollout')/(key+'-episodes.json'),seed=7000+cycle*100+int(key.split('-')[-1]),previous_model=state['current'][key]) for key in keys}
-            updated=parallel_train(tasks)
+            updated=parallel_train(tasks,'pendingUpdated')
             candidates={f'{scope}-incumbent':neural(state['retained'][f'{route}-{scope}'],route,scope) for scope in ['launch','operation']}
             candidates.update({key:neural(path,route,key.split('-')[1]) for key,path in updated.items()})
             check=batch(name+'-development',candidates,1 if a.smoke else 2,pool,seed=8000+cycle*10+state['routeIndex'])
@@ -181,6 +216,7 @@ def main():
                 names=[f'{scope}-incumbent',*[key for key in keys if key.split('-')[1]==scope]]
                 best=choose(check['counts'],names);state['retained'][f'{route}-{scope}']=candidates[best]['model']
             state['current'].update(updated)
+            for key in updated:state.get('pendingUpdated',{}).pop(key,None)
             state['routeIndex']+=1
             if state['routeIndex']==len(ROUTES):state['routeIndex']=0;state['cycle']+=1
             save()
@@ -195,19 +231,7 @@ def main():
         state['phase']='final';state['finalPools']={route:opponents(route) for route in ROUTES};save()
     try:
         for route in ROUTES:
-            subjects={};seen={}
-            def add(label,path,scope):
-                sha=digest(path)
-                if sha in seen:return
-                seen[sha]=label;subjects[label]=neural(path,route,scope)
-            for key,path in state['initial'].items():
-                if key.startswith(route+'-'):add(key+'-initial',path,key.split('-')[1])
-            for key,path in state['reference'].items():
-                if key.startswith(route+'-'):add(key+'-bc',path,'operation')
-            for key,path in state['current'].items():
-                if key.startswith(route+'-'):add(key+'-latest',path,key.split('-')[1])
-            for scope in ['launch','operation']:add(f'{route}-{scope}-retained',state['retained'][f'{route}-{scope}'],scope)
-            subjects['rule-016']=dict(ref='v0.1.16',mode=ROUTES[route])
+            subjects,seen=final_subjects(state,route)
             check=batch('final-'+route,subjects,1 if a.smoke else 4,state['finalPools'][route],seed=9101,final=True)
             state.setdefault('final',{})[route]=dict(counts=check['counts'],modelLabels=seen);save()
         state['phase']='complete';save();status('complete',final=state['final'],retained=state['retained'],stopReason=state.get('stopReason','cycle budget completed'),hadFailure=state.get('failure',False))
