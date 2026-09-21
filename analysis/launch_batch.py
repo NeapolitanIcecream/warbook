@@ -1,18 +1,32 @@
 """Run a bounded/resumable matrix of independent full games on one machine.
 Every child receives a fixed code/model/opponent version; no laptop RPC is involved.
 """
-import argparse,concurrent.futures,hashlib,json,os,random,subprocess,time
+import argparse,concurrent.futures,hashlib,json,os,random,shutil,subprocess,time
 from pathlib import Path
 from launch_outcome import classify
 
 def digest(path):return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 def atomic(path,value):
     p=Path(path);tmp=p.with_suffix(p.suffix+'.tmp');tmp.write_text(json.dumps(value,indent=2)+'\n');tmp.replace(p)
+def stage_release(path):
+    # External SDK imports must resolve to this runner's module instance. A frozen
+    # bundle under another worktree otherwise fails the driver's Bot type check.
+    source=Path(path).resolve();release=json.loads(source.read_text());bot=source.parent/'bot.mjs'
+    if release.get('format')!='warbook-bot-v1' or digest(bot)!=release.get('sha256'):
+        raise ValueError('Invalid frozen release before runtime staging')
+    target=Path.cwd()/'dist/imported-bots'/digest(source);target.mkdir(parents=True,exist_ok=True)
+    for original,name in [(bot,'bot.mjs'),(source,'release.json')]:
+        destination=target/name
+        if original==destination:continue
+        tmp=target/(name+f'.{os.getpid()}.tmp');shutil.copyfile(original,tmp);tmp.replace(destination)
+    return str(target/'release.json')
 def main():
     ap=argparse.ArgumentParser();ap.add_argument('plan');ap.add_argument('--out',required=True);ap.add_argument('--workers',type=int);ap.add_argument('--resume',action='store_true');args=ap.parse_args()
     plan=json.loads(Path(args.plan).read_text());root=Path(args.out).resolve();root.mkdir(parents=True,exist_ok=True)
     node=os.environ.get('WARBOOK_NODE','node');commit=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
     for s in [*plan['subjects'].values(),*plan['opponents'].values()]:
+        if s.get('release'):
+            s['releaseSource']=str(Path(s['release']).resolve());s['release']=stage_release(s['release'])
         for field in ['model','release']:
             if s.get(field):s[field]=str(Path(s[field]).resolve());s[field+'Sha256']=digest(s[field])
     identity={'plan':plan,'git':commit};fingerprint=hashlib.sha256(json.dumps(identity,sort_keys=True).encode()).hexdigest();manifest=root/'batch.json'
