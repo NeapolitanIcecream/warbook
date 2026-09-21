@@ -37,7 +37,7 @@ def main():
     ap.add_argument('--train-until',required=True);ap.add_argument('--finish-by',required=True)
     ap.add_argument('--game-budget',type=int,default=80000);ap.add_argument('--cycles',type=int,default=40)
     ap.add_argument('--workers',type=int,default=128);ap.add_argument('--calibrate',action='store_true')
-    ap.add_argument('--smoke',action='store_true');a=ap.parse_args()
+    ap.add_argument('--smoke',action='store_true');ap.add_argument('--initialize-only',action='store_true');a=ap.parse_args()
     train_until,finish_by=cutoff(a.train_until),cutoff(a.finish_by)
     if train_until>=finish_by or not 1<=a.workers<=192 or not 1<=a.cycles<=40 or not 100<=a.game_budget<=100000:
         raise ValueError('Invalid bounded experiment configuration')
@@ -156,6 +156,8 @@ def main():
                     retained[f'{route}-{scope}']=subjects[best]['model']
             state.update(phase='learning',initial=initial,current=dict(initial),reference=reference,retained=retained,initialCounts=initial_counts)
             save()
+        if a.initialize_only:
+            status('initialized',initialCounts=state['initialCounts'],retained=state['retained']);return
         if a.calibrate and not a.smoke and not state.get('calibrated') and state['phase']=='learning':
             boundary(1536)
             command('calibration',[sys.executable,'analysis/launch_scale.py','--model',state['retained']['main-operation'],'--out',str(root/'calibration'),'--workers','128,160,192','--rounds','32'])
