@@ -761,4 +761,12 @@ test("menu teacher holds an existing assembly instead of alternating fallback an
   const menu = buildOperationSnapshot(c, "operation"),
     teacher = chooseMenuTeacher(c, menu);
   assert.equal(teacher.action, 0);
+  c.anchors.assemble = [
+    { x: 4, y: 4 },
+    { x: 10, y: 10 },
+  ];
+  assert.equal(
+    chooseMenuTeacher(c, buildOperationSnapshot(c, "operation")).action,
+    0,
+  );
 });

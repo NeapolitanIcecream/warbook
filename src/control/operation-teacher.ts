@@ -40,6 +40,7 @@ export function chooseMenuTeacher(
           f.covered(s.order.goal.point) ||
           (sameOrder(s.order, x.order) && x.added.length > 0) ||
           (anchor &&
+            distance2(s.order.goal.point, anchor) > 6 ** 2 &&
             distance2(x.order!.goal.point, anchor) <
               distance2(s.order.goal.point, anchor)),
       )
