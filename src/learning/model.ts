@@ -15,11 +15,16 @@ export interface DenseLayer {
 }
 export interface LaunchModel {
   format: "warbook-launch-model-v1";
-  schema: typeof LAUNCH_SCHEMA;
+  schema: string;
   policyVersion: string;
   actor: DenseLayer[];
   critic: DenseLayer[];
   training?: Record<string, unknown>;
+}
+export interface PolicyShape {
+  schema: string;
+  global: number;
+  candidate: number;
 }
 export async function prepareInference() {
   await tf.setBackend("cpu");
@@ -29,10 +34,17 @@ export async function prepareInference() {
 export class NeuralLaunchPolicy implements LaunchPolicy {
   private actor: { w: tf.Tensor2D; b: tf.Tensor1D }[];
   private critic: { w: tf.Tensor2D; b: tf.Tensor1D }[];
-  constructor(readonly model: LaunchModel) {
+  constructor(
+    readonly model: LaunchModel,
+    private readonly shape: PolicyShape = {
+      schema: LAUNCH_SCHEMA,
+      global: GLOBAL_SIZE,
+      candidate: CANDIDATE_SIZE,
+    },
+  ) {
     if (
       model.format !== "warbook-launch-model-v1" ||
-      model.schema !== LAUNCH_SCHEMA
+      model.schema !== shape.schema
     )
       throw new Error("Incompatible launch model");
     const load = (layers: DenseLayer[], input: number) =>
@@ -51,8 +63,8 @@ export class NeuralLaunchPolicy implements LaunchPolicy {
       });
     if (model.actor.at(-1)?.output !== 1 || model.critic.at(-1)?.output !== 1)
       throw new Error("Expected scalar heads");
-    this.actor = load(model.actor, GLOBAL_SIZE + CANDIDATE_SIZE);
-    this.critic = load(model.critic, GLOBAL_SIZE);
+    this.actor = load(model.actor, shape.global + shape.candidate);
+    this.critic = load(model.critic, shape.global);
   }
   predict(s: LaunchSnapshot) {
     return tf.tidy(() => {
@@ -66,12 +78,14 @@ export class NeuralLaunchPolicy implements LaunchPolicy {
       };
       const x = tf.tensor2d(
         s.candidates.map((c) => [...s.global, ...c]),
-        [s.candidates.length, GLOBAL_SIZE + CANDIDATE_SIZE],
+        [s.candidates.length, this.shape.global + this.shape.candidate],
       );
       const logits = tf.reshape(dense(x, this.actor), [s.candidates.length]);
       const probabilities = Array.from(tf.softmax(logits).dataSync());
       const value = tf
-        .sigmoid(dense(tf.tensor2d([s.global], [1, GLOBAL_SIZE]), this.critic))
+        .sigmoid(
+          dense(tf.tensor2d([s.global], [1, this.shape.global]), this.critic),
+        )
         .dataSync()[0];
       if (
         !probabilities.every((p) => Number.isFinite(p) && p >= 0) ||

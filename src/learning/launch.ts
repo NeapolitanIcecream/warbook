@@ -53,20 +53,21 @@ export interface LaunchRecord extends LaunchSnapshot {
     targetDistance: number;
   };
 }
-const isArmor = (u: { name: string }) =>
+export const isArmor = (u: { name: string }) =>
   ["MTNK", "HTNK", "SREF"].includes(u.name);
 const pkey = (p: Point) => `${p.x}:${p.y}:${Boolean(p.onBridge)}`;
-const norm = (x: number, n: number) => Math.max(-4, Math.min(4, x / n));
-const mean = (xs: readonly number[]) =>
+export const norm = (x: number, n: number) => Math.max(-4, Math.min(4, x / n));
+export const mean = (xs: readonly number[]) =>
   xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0;
-const hp = (u: { hp: number; maxHp: number }) => u.hp / Math.max(1, u.maxHp);
-const count = (
+export const hp = (u: { hp: number; maxHp: number }) =>
+  u.hp / Math.max(1, u.maxHp);
+export const count = (
   xs: readonly { type: number; name: string }[],
   names: string[],
 ) => xs.filter((x) => names.includes(x.name)).length;
-const near = (p: Point, q: Point) => distance2(p, q) <= 12 ** 2;
+export const near = (p: Point, q: Point) => distance2(p, q) <= 12 ** 2;
 
-function globalFeatures(
+export function globalFeatures(
   o: Observation,
   pool: readonly Unit[],
   known: readonly Contact[],
@@ -116,6 +117,94 @@ function globalFeatures(
     Number(pool.length > 0),
     norm(army.length - pool.length, 24),
   ];
+}
+
+export interface CandidateTarget {
+  point: Point;
+  kind: string;
+  contact?: Contact;
+}
+
+export function selectLaunchMembers(
+  sorted: readonly Unit[],
+  n: number,
+): Unit[] {
+  // Keep the observed composition approximately proportional, then fill by proximity.
+  const siege = sorted
+    .filter((u) => u.name === "SREF")
+    .slice(
+      0,
+      Math.round(
+        (n * sorted.filter((u) => u.name === "SREF").length) / sorted.length,
+      ),
+    );
+  const chosen = [
+    ...siege,
+    ...sorted
+      .filter((u) => !siege.includes(u) && u.name !== "SREF")
+      .slice(0, n - siege.length),
+  ];
+  for (const u of sorted)
+    if (chosen.length < n && !chosen.includes(u)) chosen.push(u);
+  return chosen;
+}
+
+export function launchCandidateFeatures(
+  o: Observation,
+  known: readonly Contact[],
+  t: CandidateTarget,
+  available: readonly Unit[],
+  chosen: readonly Unit[],
+  center: Point,
+  n = chosen.length,
+): number[] {
+  const allies = o.own.filter((u) => near(u, t.point)),
+    foes = o.enemies.filter((e) => near(e, t.point));
+  const target = t.contact,
+    visible = !!target && o.enemies.some((e) => e.ref === target.ref);
+  const f = [
+    Number(t.kind === "search"),
+    Number(t.kind.endsWith("CNST") || t.kind.endsWith("MCV")),
+    Number(t.kind.endsWith("WEAP")),
+    Number(t.kind.endsWith("REFN")),
+    Number(t.kind.endsWith("POWR")),
+    norm(t.point.x - o.home.x, 128),
+    norm(t.point.y - o.home.y, 128),
+    norm(Math.sqrt(distance2(t.point, center)), 128),
+    Number(!!target),
+    target ? hp(target) : 0,
+    Number(visible),
+    target ? norm(o.tick - target.observedTick, 54000) : 0,
+    norm(count(foes, ["MTNK", "HTNK", "SREF"]), 16),
+    norm(foes.filter((e) => e.type === 3).length, 16),
+    norm(
+      foes.filter((e) => e.type === 2 && (e.weaponRange ?? 0) > 0).length,
+      8,
+    ),
+    mean(foes.filter((e) => e.type === 7).map(hp)),
+    norm(allies.filter(isArmor).length, 16),
+    norm(allies.filter((u) => u.type === 3).length, 16),
+    norm(n, 24),
+    n / available.length,
+    mean(chosen.map(hp)),
+    Math.min(...chosen.map(hp)),
+    norm(chosen.filter((u) => u.name === "SREF").length, 6),
+    norm(mean(chosen.map((u) => Math.sqrt(distance2(u, center)))), 32),
+    Number(!!t.point.onBridge),
+    norm(
+      known.filter(
+        (e) => near(e, t.point) && !o.enemies.some((v) => v.ref === e.ref),
+      ).length,
+      16,
+    ),
+    norm(allies.filter((u) => u.harvester).length, 6),
+    norm(foes.filter((e) => e.deployed).length, 16),
+    norm(foes.filter((e) => e.type === 2).length, 12),
+    norm(mean(chosen.map((u) => Math.sqrt(distance2(u, t.point)))), 128),
+    norm(available.length - n, 24),
+    1,
+  ];
+  return f;
 }
 
 /** All choices originate in legal facts. No legacy risk score filters this menu. */
@@ -280,70 +369,16 @@ export function buildLaunchSnapshot(c: LegacyLaunchContext): LaunchSnapshot {
       ]),
     ];
     amounts.forEach((n, amountIndex) => {
-      // Keep the observed composition approximately proportional, then fill by proximity.
-      const siege = sorted
-        .filter((u) => u.name === "SREF")
-        .slice(
-          0,
-          Math.round(
-            (n * sorted.filter((u) => u.name === "SREF").length) /
-              sorted.length,
-          ),
-        );
-      const chosen = [
-        ...siege,
-        ...sorted
-          .filter((u) => !siege.includes(u) && u.name !== "SREF")
-          .slice(0, n - siege.length),
-      ];
-      for (const u of sorted)
-        if (chosen.length < n && !chosen.includes(u)) chosen.push(u);
-      const allies = o.own.filter((u) => near(u, t.point)),
-        foes = o.enemies.filter((e) => near(e, t.point));
-      const target = t.contact,
-        visible = !!target && o.enemies.some((e) => e.ref === target.ref);
-      const f = [
-        Number(t.kind === "search"),
-        Number(t.kind.endsWith("CNST") || t.kind.endsWith("MCV")),
-        Number(t.kind.endsWith("WEAP")),
-        Number(t.kind.endsWith("REFN")),
-        Number(t.kind.endsWith("POWR")),
-        norm(t.point.x - o.home.x, 128),
-        norm(t.point.y - o.home.y, 128),
-        norm(Math.sqrt(distance2(t.point, center)), 128),
-        Number(!!target),
-        target ? hp(target) : 0,
-        Number(visible),
-        target ? norm(o.tick - target.observedTick, 54000) : 0,
-        norm(count(foes, ["MTNK", "HTNK", "SREF"]), 16),
-        norm(foes.filter((e) => e.type === 3).length, 16),
-        norm(
-          foes.filter((e) => e.type === 2 && (e.weaponRange ?? 0) > 0).length,
-          8,
-        ),
-        mean(foes.filter((e) => e.type === 7).map(hp)),
-        norm(allies.filter(isArmor).length, 16),
-        norm(allies.filter((u) => u.type === 3).length, 16),
-        norm(n, 24),
-        n / available.length,
-        mean(chosen.map(hp)),
-        Math.min(...chosen.map(hp)),
-        norm(chosen.filter((u) => u.name === "SREF").length, 6),
-        norm(mean(chosen.map((u) => Math.sqrt(distance2(u, center)))), 32),
-        Number(!!t.point.onBridge),
-        norm(
-          known.filter(
-            (e) => near(e, t.point) && !o.enemies.some((v) => v.ref === e.ref),
-          ).length,
-          16,
-        ),
-        norm(allies.filter((u) => u.harvester).length, 6),
-        norm(foes.filter((e) => e.deployed).length, 16),
-        norm(foes.filter((e) => e.type === 2).length, 12),
-        norm(mean(chosen.map((u) => Math.sqrt(distance2(u, t.point)))), 128),
-        norm(available.length - n, 24),
-        1,
-      ];
+      const chosen = selectLaunchMembers(sorted, n);
+      const f = launchCandidateFeatures(
+        o,
+        known,
+        t,
+        available,
+        chosen,
+        center,
+        n,
+      );
       result.candidates.push(f);
       result.actions.push({
         target: targetIndex,
