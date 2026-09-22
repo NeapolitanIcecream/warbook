@@ -129,7 +129,7 @@ def main():
                        '--mode', ROUTES[route], '--launch-model', str(path)], final=True)
         return {'release': json.loads((root/(name+'.log')).read_text().splitlines()[-1])['path']}
 
-    def pool(route, cycle):
+    def pool(route, cycle, final=False):
         other = 'pressure' if route == 'main' else 'main'
         repeat = seeds[cycle % len(seeds)]
         if args.smoke:
@@ -137,8 +137,11 @@ def main():
                     'adaptive-other-local': freeze(state['current'][f'{other}-local-{repeat}'], other)}
         opponents = {'main-016': {'ref': 'v0.1.16'},
                      'pressure-016': {'ref': 'v0.1.16', 'mode': 'pressure'},
-                     'supalosa': {'native': 'supalosa'},
                      'strong-other-launch': freeze(sources[other]['launch']['model'], other)}
+        if args.experiment == 'maneuver':
+            opponents['strong-other-start'] = freeze(sources[other]['operation']['model'], other)
+        if args.experiment == 'contact' or final:
+            opponents['supalosa'] = {'native': 'supalosa'}
         for arm in arms:
             opponents[f'adaptive-other-{arm}'] = freeze(state['current'][f'{other}-{arm}-{repeat}'], other)
         return opponents
@@ -170,9 +173,7 @@ def main():
                         for i, sample in enumerate(samples):
                             sample['global'] += ([i/8, .5, 1, .25, .75] if arm == 'local' else [0]*5)
                     else:
-                        for sample in samples:
-                            for i, candidate in enumerate(sample['candidates']):
-                                candidate += [min(1, i/10), .5]
+                        samples = read(path.with_suffix('.golden.json'))
                     golden = path.with_suffix('.golden.json'); atomic(golden, samples)
                     command(name+'-parity', [node, '--import', 'tsx', 'scripts/check-launch-model.ts', str(path), str(golden)])
                     for seed in seeds:
@@ -210,7 +211,7 @@ def main():
             save()
         if state['phase'] != 'final':
             state['phase'] = 'final'
-            state['finalPools'] = {route: pool(route, state['cycle']) for route in ROUTES}; save()
+            state['finalPools'] = {route: pool(route, state['cycle'], final=True) for route in ROUTES}; save()
         for route in ROUTES:
             subjects = {k: neural(p, route) for k, p in state['current'].items() if k.startswith(route+'-')}
             subjects['unchanged-operation'] = neural(sources[route]['operation']['model'], route)
