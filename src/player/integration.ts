@@ -138,6 +138,7 @@ export async function install(): Promise<void> {
             launchPolicy,
             true,
             contactInputFor(artifact),
+            artifact.maneuverScope,
           )
         : undefined;
     const launch =

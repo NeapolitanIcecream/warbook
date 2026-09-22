@@ -28,6 +28,7 @@ export interface BotRelease {
   policySchema?: string;
   controlScope?: "launch" | "operation";
   contactInput?: "local" | "zero";
+  maneuverScope?: "base" | "local";
   apiSha256: string;
   resourceSha256: string;
   lockSha256: string;

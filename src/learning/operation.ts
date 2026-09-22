@@ -1,4 +1,12 @@
 import seedrandom from "seedrandom";
+import { OPERATION_SCHEMA, isOperationSchema } from "./schema.js";
+export { OPERATION_SCHEMA, isOperationSchema } from "./schema.js";
+import {
+  LocalManeuvers,
+  LOCAL_MAX_ACTIONS,
+  isLocalManeuver,
+  type ManeuverScope,
+} from "./local-maneuvers.js";
 import {
   CONTACT_SCHEMA,
   CONTACT_SIZE,
@@ -34,7 +42,6 @@ import {
   type LaunchSnapshot,
 } from "./launch.js";
 
-export const OPERATION_SCHEMA = "operation-v2";
 export const OPERATION_FACT_SIZE = 24;
 export const OPERATION_STEP_SIZE = BASE_GLOBAL_SIZE + OPERATION_FACT_SIZE;
 export const OPERATION_GLOBAL_SIZE = OPERATION_STEP_SIZE * 4 + 4;
@@ -45,8 +52,6 @@ export const OPERATION_SHAPE = {
   global: OPERATION_GLOBAL_SIZE,
   candidate: OPERATION_CANDIDATE_SIZE,
 };
-export const isOperationSchema = (schema: string) =>
-  schema === OPERATION_SCHEMA || schema === CONTACT_SCHEMA;
 export function operationShape(schema: string) {
   if (!isOperationSchema(schema))
     throw new Error("Unsupported operation schema");
@@ -73,6 +78,7 @@ export interface OperationSnapshot extends LaunchSnapshot {
 export interface OperationRecord extends OperationSnapshot {
   schema: string;
   contactInput?: ContactInput;
+  maneuverScope?: ManeuverScope;
   action: number;
   teacherAction: number;
   teacherCoverage: string;
@@ -153,7 +159,9 @@ export function operationFacts(c: OperationContext): {
 export function buildOperationSnapshot(
   c: OperationContext,
   scope: OperationScope,
+  localOrders: readonly OperationOrder[] = [],
 ): OperationSnapshot {
+  if (localOrders.length > 2) throw new Error("At most two local maneuvers");
   const o = c.observation,
     s = c.state,
     owned = authorizedArmor(s);
@@ -315,6 +323,7 @@ export function buildOperationSnapshot(
     const target = snapshot.targets.length;
     snapshot.targets.push(order.goal);
     for (const n of amounts) {
+      if (isLocalManeuver(order) && n) continue;
       if ((!commandMembers && !n) || (sameOrder(order, commandCurrent) && !n))
         continue;
       if (!n && !commandForce.some((u) => reachable(u, order.goal.point)))
@@ -332,8 +341,38 @@ export function buildOperationSnapshot(
       snapshot.candidates.push(encode(order, added));
     }
   }
+  for (const order of localOrders) {
+    if (
+      scope !== "operation" ||
+      !commandMembers ||
+      orders.some(
+        (existing) =>
+          existing.kind === order.kind &&
+          pointKey(existing.goal.point) === pointKey(order.goal.point),
+      )
+    )
+      continue;
+    if (!isLocalManeuver(order) || order.kind !== "withdraw")
+      throw new Error("Invalid local maneuver");
+    if (!commandForce.some((u) => reachable(u, order.goal.point))) continue;
+    const target = snapshot.targets.length;
+    snapshot.targets.push(order.goal);
+    snapshot.actions.push({
+      kind: "apply",
+      order,
+      addRefs: [],
+      units: [],
+      expectedStateVersion: s.stateVersion,
+      target,
+      amount: 0,
+    });
+    snapshot.candidates.push(encode(order, []));
+  }
   if (
-    snapshot.actions.length > OPERATION_MAX_ACTIONS ||
+    snapshot.actions.length >
+      (localOrders.length || isLocalManeuver(current)
+        ? LOCAL_MAX_ACTIONS
+        : OPERATION_MAX_ACTIONS) ||
     snapshot.global.length !== OPERATION_GLOBAL_SIZE ||
     snapshot.candidates.some(
       (f) => f.length !== OPERATION_CANDIDATE_SIZE || !f.every(Number.isFinite),
@@ -380,6 +419,7 @@ export class ExperimentalOperationProvider implements OperationProvider {
   record?: OperationRecord;
   private readonly history: number[][] = [];
   private readonly random: () => number;
+  private readonly maneuvers = new LocalManeuvers();
   constructor(
     readonly scope: OperationScope,
     readonly policyName: string,
@@ -387,9 +427,19 @@ export class ExperimentalOperationProvider implements OperationProvider {
     private readonly policy?: LaunchPolicy,
     private readonly deterministic = false,
     readonly contactInput?: ContactInput,
+    readonly maneuverScope?: ManeuverScope,
   ) {
     if (!["launch", "operation"].includes(scope))
       throw new Error("Unsupported operation scope");
+    if (
+      maneuverScope &&
+      (scope !== "operation" ||
+        !contactInput ||
+        !["base", "local"].includes(maneuverScope))
+    )
+      throw new Error(
+        "Local maneuver experiment needs contact inputs and persistent control",
+      );
     this.teacher = policyName === "teacher";
     if (policyName === "teacher-menu" && scope !== "operation")
       throw new Error("Menu teacher v1 requires persistent-operation scope");
@@ -404,7 +454,11 @@ export class ExperimentalOperationProvider implements OperationProvider {
   choose(c: OperationContext): OperationAction {
     if (c.observation.tick % this.period)
       throw new Error("Operation decision outside strategy clock");
-    const s = buildOperationSnapshot(c, this.scope),
+    const s = buildOperationSnapshot(
+        c,
+        this.scope,
+        this.maneuverScope === "local" ? this.maneuvers.observe(c) : [],
+      ),
       teacher =
         this.policyName === "teacher-menu"
           ? chooseMenuTeacher(c, s)
@@ -458,6 +512,7 @@ export class ExperimentalOperationProvider implements OperationProvider {
       ...s,
       schema: this.schema,
       ...(this.contactInput ? { contactInput: this.contactInput } : {}),
+      ...(this.maneuverScope ? { maneuverScope: this.maneuverScope } : {}),
       action,
       teacherAction: teacher.action,
       teacherCoverage: teacher.reason,

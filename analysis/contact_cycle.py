@@ -18,7 +18,6 @@ from pathlib import Path
 from launch_batch import atomic
 
 ROUTES = {'main': 'bastion', 'pressure': 'pressure'}
-ARMS = ['zero', 'local']
 
 
 def read(path):
@@ -44,6 +43,7 @@ def main():
     parser.add_argument('--train-until', required=True)
     parser.add_argument('--finish-by', required=True)
     parser.add_argument('--workers', type=int, default=192)
+    parser.add_argument('--experiment', choices=['contact', 'maneuver'], default='contact')
     parser.add_argument('--smoke', action='store_true')
     args = parser.parse_args()
     source = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
@@ -58,6 +58,7 @@ def main():
     if train_until >= finish_by or not 1 <= args.workers <= 192:
         raise ValueError('Invalid resource bounds')
     seeds = [47] if args.smoke else [47, 83]
+    arms = ['zero', 'local'] if args.experiment == 'contact' else ['base', 'local']
     maps = ['mp06t2.map'] if args.smoke else ['mp29u2.map', 'mp06t2.map', 'mp08t2.map', 'mp03t4.map']
     cycles = 1 if args.smoke else 3
     for route in ROUTES:
@@ -67,7 +68,7 @@ def main():
                 raise ValueError('Source checkpoint changed')
     identity = dict(source=source, sources=sources, trainUntil=args.train_until,
                     finishBy=args.finish_by, workers=args.workers, smoke=args.smoke,
-                    cycles=cycles, seeds=seeds, maps=maps)
+                    cycles=cycles, seeds=seeds, maps=maps, experiment=args.experiment)
     if (root / 'experiment.json').exists() and read(root / 'experiment.json') != identity:
         raise ValueError('Experiment identity changed')
     atomic(root / 'experiment.json', identity)
@@ -138,7 +139,7 @@ def main():
                      'pressure-016': {'ref': 'v0.1.16', 'mode': 'pressure'},
                      'supalosa': {'native': 'supalosa'},
                      'strong-other-launch': freeze(sources[other]['launch']['model'], other)}
-        for arm in ARMS:
+        for arm in arms:
             opponents[f'adaptive-other-{arm}'] = freeze(state['current'][f'{other}-{arm}-{repeat}'], other)
         return opponents
 
@@ -160,13 +161,14 @@ def main():
         if state['phase'] == 'initializing':
             for route in ROUTES:
                 old = Path(sources[route]['operation']['model'])
-                for arm in ARMS:
+                for arm in arms:
                     name = f'initial-{route}-{arm}'; path = models / (name+'.json')
-                    command(name, [sys.executable, 'analysis/contact_migrate.py', '--input', str(old),
-                                   '--out', str(path), '--contact-input', arm])
+                    migration = ['analysis/contact_migrate.py', '--contact-input', arm] if args.experiment == 'contact' else ['analysis/maneuver_migrate.py', '--scope', arm]
+                    command(name, [sys.executable, *migration, '--input', str(old), '--out', str(path)])
                     samples = read(old.with_suffix('.golden.json'))
-                    for i, sample in enumerate(samples):
-                        sample['global'] += ([i/8, .5, 1, .25, .75] if arm == 'local' else [0]*5)
+                    if args.experiment == 'contact':
+                        for i, sample in enumerate(samples):
+                            sample['global'] += ([i/8, .5, 1, .25, .75] if arm == 'local' else [0]*5)
                     golden = path.with_suffix('.golden.json'); atomic(golden, samples)
                     command(name+'-parity', [node, '--import', 'tsx', 'scripts/check-launch-model.ts', str(path), str(golden)])
                     for seed in seeds:
@@ -208,6 +210,8 @@ def main():
         for route in ROUTES:
             subjects = {k: neural(p, route) for k, p in state['current'].items() if k.startswith(route+'-')}
             subjects['unchanged-operation'] = neural(sources[route]['operation']['model'], route)
+            if args.experiment == 'maneuver':
+                subjects['untrained-local-menu'] = neural(state['initial'][f'{route}-local-{seeds[0]}'], route)
             subjects['strong-launch'] = neural(sources[route]['launch']['model'], route)
             subjects['rule-016'] = dict(ref='v0.1.16', mode=ROUTES[route])
             check = batch('final-'+route, subjects, state['finalPools'][route], 1 if args.smoke else 8, 91001, final=True)

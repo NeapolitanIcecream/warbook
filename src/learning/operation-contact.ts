@@ -1,8 +1,10 @@
 import { distance2, weaponDistance2 } from "../model.js";
 import type { OperationContext } from "../control/operation-provider.js";
 import { isArmor } from "./launch.js";
+import type { ManeuverScope } from "./local-maneuvers.js";
+import { CONTACT_SCHEMA } from "./schema.js";
+export { CONTACT_SCHEMA } from "./schema.js";
 
-export const CONTACT_SCHEMA = "operation-contact-v1";
 export const CONTACT_SIZE = 5;
 export type ContactInput = "local" | "zero";
 
@@ -47,7 +49,16 @@ export function operationContactFacts(c: OperationContext): number[] {
 export function contactInputFor(model: {
   schema: string;
   contactInput?: ContactInput;
+  controlScope?: "launch" | "operation";
+  maneuverScope?: ManeuverScope;
 }): ContactInput | undefined {
+  if (
+    model.maneuverScope !== undefined &&
+    (model.schema !== CONTACT_SCHEMA ||
+      model.controlScope !== "operation" ||
+      !["base", "local"].includes(model.maneuverScope))
+  )
+    throw new Error("Maneuver scope requires a persistent contact model");
   if (model.schema === CONTACT_SCHEMA) {
     if (model.contactInput !== "local" && model.contactInput !== "zero")
       throw new Error("Contact model requires local/zero observation mode");

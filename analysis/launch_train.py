@@ -13,6 +13,7 @@ G, C, K = 116, 32, 33
 SCHEMA = 'launch-v1'
 CONTROL_SCOPE = None
 CONTACT_INPUT = None
+MANEUVER_SCOPE = None
 class Policy(nn.Module):
     def __init__(self):
         super().__init__()
@@ -29,6 +30,7 @@ def export(model,path,version,metadata):
     artifact={'format':'warbook-launch-model-v1','schema':SCHEMA,'policyVersion':version,'actor':layers(model.actor),'critic':layers(model.critic),'training':{k:v for k,v in metadata.items() if k in ['method','seed','torch','numpy','inputSha256','architecture','objective']}}
     if CONTROL_SCOPE:artifact['controlScope']=CONTROL_SCOPE
     if CONTACT_INPUT:artifact['contactInput']=CONTACT_INPUT
+    if MANEUVER_SCOPE:artifact['maneuverScope']=MANEUVER_SCOPE
     path.parent.mkdir(parents=True,exist_ok=True)
     tmp=path.with_suffix('.tmp');tmp.write_text(json.dumps(artifact,separators=(',',':'))+'\n');tmp.replace(path)
     torch.save(model.state_dict(),path.with_suffix('.pt'))
@@ -77,6 +79,7 @@ def read_episode(directory):
         assert 0<=r['action']<len(r['candidates']) or r['action']==-1 and r.get('executionSource')=='teacher' and r['teacherAction']==-1
         if CONTROL_SCOPE:assert r['scope']==CONTROL_SCOPE
         if CONTACT_INPUT:assert r.get('contactInput')==CONTACT_INPUT
+        if MANEUVER_SCOPE:assert r.get('maneuverScope')==MANEUVER_SCOPE
     return {'path':str(directory),'outcome':outcome,'reward':float(outcome=='W'),'rows':rows,'modelSha':manifest.get('launchExperiment',{}).get('modelSha256')}
 
 def tensors(episodes,bc):
@@ -91,7 +94,7 @@ def tensors(episodes,bc):
     return (torch.from_numpy(g),torch.from_numpy(c),torch.from_numpy(mask),torch.tensor(action),torch.tensor(returns),torch.tensor(oldlog),torch.tensor(oldvalue),torch.tensor(valid))
 
 def main():
-    global G,C,K,SCHEMA,CONTROL_SCOPE,CONTACT_INPUT
+    global G,C,K,SCHEMA,CONTROL_SCOPE,CONTACT_INPUT,MANEUVER_SCOPE
     ap=argparse.ArgumentParser();ap.add_argument('method',choices=['init','bc','ppo']);ap.add_argument('--episodes');ap.add_argument('--input');ap.add_argument('--out',required=True);ap.add_argument('--seed',type=int,default=1);ap.add_argument('--epochs',type=int);ap.add_argument('--threads',type=int,default=4);ap.add_argument('--schema',choices=['launch-v1','operation-v2','operation-contact-v1']);ap.add_argument('--scope',choices=['launch','operation']);args=ap.parse_args()
     torch.set_num_threads(args.threads);torch.manual_seed(args.seed);np.random.seed(args.seed);random.seed(args.seed)
     artifact=json.loads(Path(args.input).read_text()) if args.input else {}
@@ -102,6 +105,7 @@ def main():
     SCHEMA=args.schema or artifact.get('schema') or first_manifest.get('schema') or 'launch-v1'
     CONTROL_SCOPE=args.scope or artifact.get('controlScope') or first_manifest.get('controlScope')
     CONTACT_INPUT=artifact.get('contactInput') or first_manifest.get('contactInput')
+    MANEUVER_SCOPE=artifact.get('maneuverScope') or first_manifest.get('maneuverScope')
     if SCHEMA in ['operation-v2','operation-contact-v1']:
         if CONTROL_SCOPE not in ['launch','operation']:raise ValueError('Operation schema requires an explicit scope')
         G,C,K=(217 if SCHEMA=='operation-contact-v1' else 212),48,75
@@ -109,10 +113,14 @@ def main():
     if SCHEMA=='operation-contact-v1':
         if CONTACT_INPUT not in ['local','zero']:raise ValueError('Contact schema requires local/zero input mode')
     elif CONTACT_INPUT:raise ValueError('Contact mode with non-contact schema')
+    if MANEUVER_SCOPE:
+        if SCHEMA!='operation-contact-v1' or CONTROL_SCOPE!='operation' or MANEUVER_SCOPE not in ['base','local']:raise ValueError('Invalid local maneuver scope')
+        K=77
     model=Policy()
     if args.input:load_artifact(model,Path(args.input))
     out=Path(args.out);out.parent.mkdir(parents=True,exist_ok=True);metadata={'git':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'trainerSha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),'python':sys.version.split()[0],'method':args.method,'seed':args.seed,'torch':torch.__version__,'numpy':np.__version__,'threads':args.threads,'objective':'formal win within 54000 ticks; W=1,L=0,tick-cap or error-free mutual-defeat U=0; E excluded and reported','schema':SCHEMA,'controlScope':CONTROL_SCOPE,'architecture':f'shared candidate scorer; global={G}, candidate={C}, maximum actions={K}'}
     if CONTACT_INPUT:metadata['contactInput']=CONTACT_INPUT
+    if MANEUVER_SCOPE:metadata['maneuverScope']=MANEUVER_SCOPE
     if args.method=='init':
         print(json.dumps({'sha256':export(model,out,'launch-init',metadata),'parameters':sum(p.numel() for p in model.parameters())}));return
     paths=json.loads(Path(args.episodes).read_text());episodes=[];excluded=[]

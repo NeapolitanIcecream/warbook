@@ -1,6 +1,7 @@
 import * as tf from "@tensorflow/tfjs-core";
 import "@tensorflow/tfjs-backend-cpu";
 import { contactInputFor, type ContactInput } from "./operation-contact.js";
+import type { ManeuverScope } from "./local-maneuvers.js";
 import {
   LAUNCH_SCHEMA,
   GLOBAL_SIZE,
@@ -20,6 +21,7 @@ export interface LaunchModel {
   policyVersion: string;
   controlScope?: "launch" | "operation";
   contactInput?: ContactInput;
+  maneuverScope?: ManeuverScope;
   actor: DenseLayer[];
   critic: DenseLayer[];
   training?: Record<string, unknown>;

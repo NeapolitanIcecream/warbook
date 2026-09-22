@@ -8,6 +8,7 @@ import {
   type ContactInput,
 } from "./learning/operation-contact.js";
 import type { OperationScope } from "./control/operation-provider.js";
+import type { ManeuverScope } from "./learning/local-maneuvers.js";
 import {
   cdapi,
   Replay,
@@ -126,6 +127,7 @@ async function main(): Promise<void> {
     throw new Error("Invalid operation scope/policy");
   let neural: LaunchPolicy | undefined;
   let contactInput: ContactInput | undefined;
+  let maneuverScope: ManeuverScope | undefined;
   if (values["launch-policy"] === "model") {
     if (!values["launch-model"]) throw new Error("Model artifact required");
     await prepareInference();
@@ -133,6 +135,7 @@ async function main(): Promise<void> {
       readFileSync(values["launch-model"], "utf8"),
     ) as LaunchModel;
     contactInput = contactInputFor(artifact);
+    maneuverScope = artifact.maneuverScope;
     if (isOperationSchema(artifact.schema)) {
       if (
         !artifact.controlScope ||
@@ -164,6 +167,7 @@ async function main(): Promise<void> {
         neural,
         values["launch-deterministic"],
         contactInput,
+        maneuverScope,
       )
     : undefined;
   const launch =
@@ -195,7 +199,7 @@ async function main(): Promise<void> {
           policyPlayerName(
             POLICY_VERSION,
             launch || operation
-              ? `${values.mode}-${operation ? operationScope : "launch-v1"}-${values["launch-policy"]}${contactInput ? "-" + contactInput : ""}`
+              ? `${values.mode}-${operation ? operationScope : "launch-v1"}-${values["launch-policy"]}${contactInput ? "-" + contactInput : ""}${maneuverScope ? "-maneuver-" + maneuverScope : ""}`
               : values.mode!,
             "A",
           ),
@@ -305,6 +309,7 @@ async function main(): Promise<void> {
                   controlScope: operationScope,
                   strategyPeriod: 75,
                   ...(contactInput ? { contactInput } : {}),
+                  ...(maneuverScope ? { maneuverScope } : {}),
                 }
               : {}),
             policy: values["launch-policy"],

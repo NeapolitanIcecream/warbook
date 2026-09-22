@@ -28,6 +28,11 @@ import { chooseMenuTeacher } from "../src/control/operation-teacher.js";
 import { BastionStrategy } from "../src/control/bastion-strategy.js";
 import { LocalCombat } from "../src/control/tactics.js";
 import {
+  LocalManeuvers,
+  isLocalManeuver,
+} from "../src/learning/local-maneuvers.js";
+import { PositionTactics } from "../src/control/position-tactics.js";
+import {
   CONTACT_SCHEMA,
   operationContactFacts,
 } from "../src/learning/operation-contact.js";
@@ -246,6 +251,91 @@ test("withdrawal contact follows the withdrawing group rather than a remote rese
   commit(c, withdraw, []);
   c.observation.own.push(unit("reserve", 90, 0));
   assert.deepEqual(operationContactFacts(c), before);
+});
+
+test("local regroup is an optional witnessed position and its movement is not replaced by nearby attacks", () => {
+  const c = contactContext(52, 40);
+  c.observation.own[0].x = 48;
+  const orders = new LocalManeuvers().observe(c);
+  const regroup = orders.find((o) => o.goal.kind === "local-regroup")!;
+  assert(regroup);
+  assert(
+    c.observation.own.some(
+      (u) => u.x === regroup.goal.point.x && u.y === regroup.goal.point.y,
+    ),
+  );
+  const base = buildOperationSnapshot(c, "operation");
+  const expanded = buildOperationSnapshot(c, "operation", orders);
+  assert.deepEqual(
+    expanded.actions.slice(0, base.actions.length),
+    base.actions,
+  );
+  assert.deepEqual(
+    expanded.candidates.slice(0, base.candidates.length),
+    base.candidates,
+  );
+  const action = expanded.actions.find(
+    (a) => a.order?.goal.key === regroup.goal.key,
+  )!;
+  assert.deepEqual(action.addRefs, []);
+  applyOperation(c.state, action, c.observation, []);
+  const result = new PositionTactics().control(
+    c.observation,
+    {
+      id: "main-force",
+      revision: 1,
+      kind: "withdraw",
+      units: [c.observation.own[0].ref],
+      destination: regroup.goal.point,
+      objective: "local-regroup",
+      engagement: { allowCrush: false },
+    },
+    [],
+  );
+  assert.equal(result.intents.length, 1);
+  assert.equal(result.intents[0].kind, "move");
+  assert.equal((result.intents[0] as { x: number }).x, regroup.goal.point.x);
+});
+
+test("local return uses a surviving member's observed trail and never adds reinforcement combinations", () => {
+  const c = contactContext(70, 60),
+    choices = new LocalManeuvers();
+  const witnessed = c.observation.own.map((u) => ({ x: u.x, y: u.y }));
+  choices.observe(c);
+  c.observation.tick += 75;
+  for (const u of c.observation.own) u.x += 5;
+  const orders = choices.observe(c),
+    returning = orders.find((o) => o.goal.kind === "local-return")!;
+  assert(returning);
+  assert(
+    witnessed.some(
+      (p) => p.x === returning.goal.point.x && p.y === returning.goal.point.y,
+    ),
+  );
+  const menu = buildOperationSnapshot(c, "operation", orders);
+  const action = menu.actions.find(
+    (a) => a.order?.goal.key === returning.goal.key,
+  )!;
+  applyOperation(c.state, action, c.observation, []);
+  c.reserve = [unit("new-tank", 4, 4)];
+  c.observation.own.push(...c.reserve);
+  const active = buildOperationSnapshot(c, "operation", choices.observe(c));
+  assert(
+    active.actions
+      .filter((a) => isLocalManeuver(a.order ?? c.state.order))
+      .every((a) => !a.addRefs.length),
+  );
+  const duplicate = {
+    ...returning,
+    goal: {
+      ...returning.goal,
+      key: "renamed-same-movement",
+      kind: "local-regroup",
+    },
+  };
+  const without = buildOperationSnapshot(c, "operation"),
+    withDuplicate = buildOperationSnapshot(c, "operation", [duplicate]);
+  assert.deepEqual(withDuplicate.actions, without.actions);
 });
 
 test("persistent group can reverse withdrawal and reinforce atomically; KEEP does not reset ages", () => {
