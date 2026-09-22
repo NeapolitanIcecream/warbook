@@ -9,7 +9,7 @@ import {
   type ApiEvent,
 } from "@chronodivide/game-api";
 import { OwnLifecycle } from "./own-lifecycle.js";
-import { isOperationSchema } from "./learning/operation.js";
+import { isOperationSchema } from "./learning/schema.js";
 import { baseRally, defenseRoute, guardPost } from "./defense-route.js";
 import { refinerySite } from "./refinery-site.js";
 import {
