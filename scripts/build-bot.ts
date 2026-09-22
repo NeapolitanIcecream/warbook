@@ -78,7 +78,7 @@ export async function buildBot(
           `
               : ""
           }
-          export const policyVersion = POLICY_VERSION + ${JSON.stringify(launchModel ? (operationModel ? "-learned-" + launchModel.controlScope : "-learned") : "")};
+          export const policyVersion = POLICY_VERSION + ${JSON.stringify(launchModel ? (operationModel ? "-learned-" + launchModel.controlScope + (contactModel ? "-" + launchModel.contactInput : "") : "-learned") : "")};
           export const observationProtocol = OBSERVATION_PROTOCOL;
           export const createBot = name => new WarbookBot(name, 'Americans', mode${launchModel ? (operationModel ? `, {strategy: mode === 'pressure' ? new PressureStrategy(undefined,new ExperimentalOperationProvider(artifact.controlScope,'model','frozen',launchPolicy,true${contactModel ? ",artifact.contactInput" : ""})) : new BastionStrategy('bastion',undefined,new ExperimentalOperationProvider(artifact.controlScope,'model','frozen',launchPolicy,true${contactModel ? ",artifact.contactInput" : ""}))}` : `, { strategy: mode === 'pressure' ? new PressureStrategy(new ExperimentalLaunchProvider('model','frozen',launchPolicy,true)) : new BastionStrategy('bastion',new ExperimentalLaunchProvider('model','frozen',launchPolicy,true)) }`) : ""});
         `,

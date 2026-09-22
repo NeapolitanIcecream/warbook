@@ -195,7 +195,7 @@ async function main(): Promise<void> {
           policyPlayerName(
             POLICY_VERSION,
             launch || operation
-              ? `${values.mode}-${operation ? operationScope : "launch-v1"}-${values["launch-policy"]}`
+              ? `${values.mode}-${operation ? operationScope : "launch-v1"}-${values["launch-policy"]}${contactInput ? "-" + contactInput : ""}`
               : values.mode!,
             "A",
           ),

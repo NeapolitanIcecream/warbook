@@ -39,6 +39,9 @@ def extend_artifact(original, mode):
         layer['weights'] = lifted.T.reshape(-1).tolist()
     artifact.update(schema='operation-contact-v1', contactInput=mode,
                     policyVersion=original['policyVersion'] + '-contact-' + mode)
+    if 'training' in artifact:
+        artifact['training']['architecture'] = 'shared candidate scorer; global=217, candidate=48, maximum actions=75'
+        artifact['training']['inputExtension'] = 'five zero-initialized contact inputs; no new training at migration'
     return artifact
 
 
