@@ -1,8 +1,9 @@
 import {
   ExperimentalOperationProvider,
-  OPERATION_SCHEMA,
-  OPERATION_SHAPE,
+  isOperationSchema,
+  operationShape,
 } from "../learning/operation.js";
+import { contactInputFor } from "../learning/operation-contact.js";
 import { WarbookBot, OBSERVATION_PROTOCOL } from "../bridge.js";
 import { POLICY_VERSION, type PolicyMode } from "../policy.js";
 import { installReplayControls } from "./replay-controls.js";
@@ -72,19 +73,18 @@ export async function install(): Promise<void> {
         launchPolicy = new LinearLaunchPolicy(artifact);
       else {
         await prepareInference();
-        const shape =
-          artifact.schema === OPERATION_SCHEMA
-            ? OPERATION_SHAPE
-            : {
-                schema: artifact.schema,
-                global: GLOBAL_SIZE,
-                candidate: CANDIDATE_SIZE,
-              };
-        if (artifact.schema === OPERATION_SCHEMA && !artifact.controlScope)
+        const shape = isOperationSchema(artifact.schema)
+          ? operationShape(artifact.schema)
+          : {
+              schema: artifact.schema,
+              global: GLOBAL_SIZE,
+              candidate: CANDIDATE_SIZE,
+            };
+        if (isOperationSchema(artifact.schema) && !artifact.controlScope)
           throw new Error("Operation model scope missing");
         launchPolicy = new NeuralLaunchPolicy(
           artifact,
-          artifact.schema === OPERATION_SCHEMA ? shape : undefined,
+          isOperationSchema(artifact.schema) ? shape : undefined,
         );
         launchPolicy.predict({
           global: Array(shape.global).fill(0),
@@ -127,7 +127,8 @@ export async function install(): Promise<void> {
     const artifact = __WARBOOK_LAUNCH_MODEL__;
     const operation =
       launchPolicy &&
-      artifact?.schema === OPERATION_SCHEMA &&
+      artifact &&
+      isOperationSchema(artifact.schema) &&
       "controlScope" in artifact &&
       artifact.controlScope
         ? new ExperimentalOperationProvider(
@@ -136,6 +137,7 @@ export async function install(): Promise<void> {
             "player",
             launchPolicy,
             true,
+            contactInputFor(artifact),
           )
         : undefined;
     const launch =
@@ -272,7 +274,7 @@ export async function install(): Promise<void> {
     "position:fixed;z-index:10000;left:12px;bottom:8px;background:#111c25e8;color:#ccd8de;font:12px system-ui;padding:6px 10px;border:1px solid #425665;border-radius:5px;pointer-events:none";
   document.body.append(bar);
   const policyLabel = __WARBOOK_LAUNCH_MODEL__
-    ? __WARBOOK_LAUNCH_MODEL__.schema === OPERATION_SCHEMA
+    ? isOperationSchema(__WARBOOK_LAUNCH_MODEL__.schema)
       ? "学习型作战（实验）"
       : "学习型出击（实验）"
     : __WARBOOK_POLICY__ === "pressure"

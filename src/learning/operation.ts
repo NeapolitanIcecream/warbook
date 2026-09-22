@@ -1,4 +1,10 @@
 import seedrandom from "seedrandom";
+import {
+  CONTACT_SCHEMA,
+  CONTACT_SIZE,
+  operationContactFacts,
+  type ContactInput,
+} from "./operation-contact.js";
 import { distance2, type Point, type Unit } from "../model.js";
 import {
   authorizedArmor,
@@ -39,6 +45,18 @@ export const OPERATION_SHAPE = {
   global: OPERATION_GLOBAL_SIZE,
   candidate: OPERATION_CANDIDATE_SIZE,
 };
+export const isOperationSchema = (schema: string) =>
+  schema === OPERATION_SCHEMA || schema === CONTACT_SCHEMA;
+export function operationShape(schema: string) {
+  if (!isOperationSchema(schema))
+    throw new Error("Unsupported operation schema");
+  return {
+    ...OPERATION_SHAPE,
+    schema,
+    global:
+      OPERATION_GLOBAL_SIZE + (schema === CONTACT_SCHEMA ? CONTACT_SIZE : 0),
+  };
+}
 type Offer = OperationAction & LaunchAction;
 export interface OperationSnapshot extends LaunchSnapshot {
   actions: Offer[];
@@ -54,6 +72,7 @@ export interface OperationSnapshot extends LaunchSnapshot {
 }
 export interface OperationRecord extends OperationSnapshot {
   schema: string;
+  contactInput?: ContactInput;
   action: number;
   teacherAction: number;
   teacherCoverage: string;
@@ -367,6 +386,7 @@ export class ExperimentalOperationProvider implements OperationProvider {
     seed: string,
     private readonly policy?: LaunchPolicy,
     private readonly deterministic = false,
+    readonly contactInput?: ContactInput,
   ) {
     if (!["launch", "operation"].includes(scope))
       throw new Error("Unsupported operation scope");
@@ -377,6 +397,9 @@ export class ExperimentalOperationProvider implements OperationProvider {
       ? "teacher"
       : "policy";
     this.random = seedrandom(seed);
+  }
+  get schema() {
+    return this.contactInput ? CONTACT_SCHEMA : OPERATION_SCHEMA;
   }
   choose(c: OperationContext): OperationAction {
     if (c.observation.tick % this.period)
@@ -396,6 +419,12 @@ export class ExperimentalOperationProvider implements OperationProvider {
       ...Array(4 - this.history.length).fill(0),
       ...Array(this.history.length).fill(1),
     ];
+    if (this.contactInput)
+      s.global.push(
+        ...(this.contactInput === "local"
+          ? operationContactFacts(c)
+          : Array(CONTACT_SIZE).fill(0)),
+      );
     let action = this.executionSource === "teacher" ? teacher.action : 0,
       logp = 0,
       value = 0;
@@ -427,7 +456,8 @@ export class ExperimentalOperationProvider implements OperationProvider {
     }
     this.record = {
       ...s,
-      schema: OPERATION_SCHEMA,
+      schema: this.schema,
+      ...(this.contactInput ? { contactInput: this.contactInput } : {}),
       action,
       teacherAction: teacher.action,
       teacherCoverage: teacher.reason,

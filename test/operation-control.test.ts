@@ -27,6 +27,10 @@ import {
 import { chooseMenuTeacher } from "../src/control/operation-teacher.js";
 import { BastionStrategy } from "../src/control/bastion-strategy.js";
 import { LocalCombat } from "../src/control/tactics.js";
+import {
+  CONTACT_SCHEMA,
+  operationContactFacts,
+} from "../src/learning/operation-contact.js";
 
 const unit = (ref: string, x = 3, y = 3): Unit => ({
   ref,
@@ -135,6 +139,114 @@ const commit = (c: OperationContext, order: OperationOrder, refs: string[]) =>
     c.observation,
     c.reserve,
   );
+
+function contactContext(enemyX: number, enemyY: number) {
+  const c = context();
+  for (const u of c.observation.own) {
+    u.x += 38;
+    u.y += 38;
+  }
+  c.observation.enemies.push(
+    ...Array.from({ length: 8 }, (_, i) => ({
+      ...unit(`e${i}`, enemyX + (i % 3), enemyY + Math.floor(i / 3)),
+      observedTick: 6000,
+    })),
+  );
+  c.operations.observe(c.observation, []);
+  commit(
+    c,
+    advance,
+    c.observation.own.map((u) => u.ref),
+  );
+  c.reserve = [];
+  return c;
+}
+
+test("contact input distinguishes nearby threats missed by target-centered facts without changing the menu", () => {
+  const near = contactContext(48, 40),
+    far = contactContext(70, 60);
+  const oldNear = buildOperationSnapshot(near, "operation"),
+    oldFar = buildOperationSnapshot(far, "operation");
+  assert.deepEqual(oldNear.global, oldFar.global);
+  assert.deepEqual(oldNear.candidates, oldFar.candidates);
+  const a = new ExperimentalOperationProvider(
+    "operation",
+    "random",
+    "probe",
+    undefined,
+    false,
+    "local",
+  );
+  const b = new ExperimentalOperationProvider(
+    "operation",
+    "random",
+    "probe",
+    undefined,
+    false,
+    "local",
+  );
+  a.choose(near);
+  b.choose(far);
+  assert.equal(a.record!.schema, CONTACT_SCHEMA);
+  assert.equal(a.record!.global.length, 217);
+  assert.notDeepEqual(a.record!.global, b.record!.global);
+  assert.deepEqual(a.record!.actions, b.record!.actions);
+  assert.deepEqual(a.record!.candidates, b.record!.candidates);
+  assert.equal(a.record!.global[214], 0.5);
+  assert.equal(b.record!.global[214], 0);
+});
+
+test("zero contact arm preserves the entire existing observation history and action menu", () => {
+  const c = contactContext(48, 40);
+  const legacy = new ExperimentalOperationProvider(
+    "operation",
+    "random",
+    "probe",
+  );
+  const control = new ExperimentalOperationProvider(
+    "operation",
+    "random",
+    "probe",
+    undefined,
+    false,
+    "zero",
+  );
+  for (let i = 0; i < 6; i++) {
+    legacy.choose(c);
+    control.choose(c);
+    assert.deepEqual(
+      control.record!.global.slice(0, 212),
+      legacy.record!.global,
+    );
+    assert.deepEqual(control.record!.global.slice(212), [0, 0, 0, 0, 0]);
+    assert.deepEqual(control.record!.actions, legacy.record!.actions);
+    assert.equal(control.record!.action, legacy.record!.action);
+    c.observation.tick += 75;
+  }
+});
+
+test("contact geometry uses main members, visible threats and 3D weapon distances", () => {
+  const c = contactContext(70, 60);
+  c.observation.own.push(unit("joining", 70, 60));
+  c.state.joining.add("joining");
+  assert.equal(operationContactFacts(c)[2], 0);
+  c.observation.enemies = [{ ...unit("enemy", 40, 40), observedTick: 6000 }];
+  assert.equal(operationContactFacts(c)[3], 1);
+  assert.equal(operationContactFacts(c)[4], 1);
+  for (const u of c.observation.own) u.position = { ...u, z: 0 };
+  c.observation.enemies[0].position = { x: 40, y: 40, z: 10 };
+  assert.deepEqual(operationContactFacts(c).slice(3), [0, 0]);
+  c.observation.enemies = [];
+  assert.deepEqual(operationContactFacts(c), [1, 0, 0, 0, 0]);
+});
+
+test("withdrawal contact follows the withdrawing group rather than a remote reserve", () => {
+  const c = contactContext(48, 40);
+  const before = operationContactFacts(c);
+  commit(c, withdraw, []);
+  c.observation.own.push(unit("reserve", 90, 0));
+  assert.deepEqual(operationContactFacts(c), before);
+});
 
 test("persistent group can reverse withdrawal and reinforce atomically; KEEP does not reset ages", () => {
   const c = context();

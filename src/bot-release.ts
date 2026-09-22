@@ -27,6 +27,7 @@ export interface BotRelease {
   deterministicLaunch?: boolean;
   policySchema?: string;
   controlScope?: "launch" | "operation";
+  contactInput?: "local" | "zero";
   apiSha256: string;
   resourceSha256: string;
   lockSha256: string;

@@ -23,7 +23,10 @@ export async function buildBot(
   const launchModel = modelPath
     ? JSON.parse(readFileSync(modelPath, "utf8"))
     : undefined;
-  const operationModel = launchModel?.schema === "operation-v2";
+  const contactModel = launchModel?.schema === "operation-contact-v1";
+  const operationModel = launchModel?.schema === "operation-v2" || contactModel;
+  if (contactModel && !["local", "zero"].includes(launchModel.contactInput))
+    throw new Error("Contact artifact requires its observation mode");
   if (
     operationModel &&
     !["launch", "operation"].includes(launchModel.controlScope)
@@ -66,18 +69,18 @@ export async function buildBot(
               ? `
           import { ExperimentalLaunchProvider, LinearLaunchPolicy } from './src/learning/launch.ts';
           import { NeuralLaunchPolicy, prepareInference } from './src/learning/model.ts';
-          ${operationModel ? "import { ExperimentalOperationProvider, OPERATION_SHAPE } from './src/learning/operation.ts';" : ""}
+          ${operationModel ? `import { ExperimentalOperationProvider, ${contactModel ? "operationShape" : "OPERATION_SHAPE"} } from './src/learning/operation.ts';` : ""}
           import { BastionStrategy } from './src/control/bastion-strategy.ts';
           import { PressureStrategy } from './src/control/pressure-strategy.ts';
           const artifact = ${JSON.stringify(launchModel)};
           await prepareInference();
-          const launchPolicy = artifact.format === 'warbook-launch-linear-v1' ? new LinearLaunchPolicy(artifact) : new NeuralLaunchPolicy(artifact${operationModel ? ", OPERATION_SHAPE" : ""});
+          const launchPolicy = artifact.format === 'warbook-launch-linear-v1' ? new LinearLaunchPolicy(artifact) : new NeuralLaunchPolicy(artifact${operationModel ? (contactModel ? ", operationShape(artifact.schema)" : ", OPERATION_SHAPE") : ""});
           `
               : ""
           }
           export const policyVersion = POLICY_VERSION + ${JSON.stringify(launchModel ? (operationModel ? "-learned-" + launchModel.controlScope : "-learned") : "")};
           export const observationProtocol = OBSERVATION_PROTOCOL;
-          export const createBot = name => new WarbookBot(name, 'Americans', mode${launchModel ? (operationModel ? `, {strategy: mode === 'pressure' ? new PressureStrategy(undefined,new ExperimentalOperationProvider(artifact.controlScope,'model','frozen',launchPolicy,true)) : new BastionStrategy('bastion',undefined,new ExperimentalOperationProvider(artifact.controlScope,'model','frozen',launchPolicy,true))}` : `, { strategy: mode === 'pressure' ? new PressureStrategy(new ExperimentalLaunchProvider('model','frozen',launchPolicy,true)) : new BastionStrategy('bastion',new ExperimentalLaunchProvider('model','frozen',launchPolicy,true)) }`) : ""});
+          export const createBot = name => new WarbookBot(name, 'Americans', mode${launchModel ? (operationModel ? `, {strategy: mode === 'pressure' ? new PressureStrategy(undefined,new ExperimentalOperationProvider(artifact.controlScope,'model','frozen',launchPolicy,true${contactModel ? ",artifact.contactInput" : ""})) : new BastionStrategy('bastion',undefined,new ExperimentalOperationProvider(artifact.controlScope,'model','frozen',launchPolicy,true${contactModel ? ",artifact.contactInput" : ""}))}` : `, { strategy: mode === 'pressure' ? new PressureStrategy(new ExperimentalLaunchProvider('model','frozen',launchPolicy,true)) : new BastionStrategy('bastion',new ExperimentalLaunchProvider('model','frozen',launchPolicy,true)) }`) : ""});
         `,
         resolveDir: source,
         sourcefile: "frozen-bot-entry.ts",
@@ -166,8 +169,11 @@ export async function buildBot(
             deterministicLaunch: true,
             ...(operationModel
               ? {
-                  policySchema: "operation-v2",
+                  policySchema: launchModel.schema,
                   controlScope: launchModel.controlScope,
+                  ...(contactModel
+                    ? { contactInput: launchModel.contactInput }
+                    : {}),
                 }
               : {}),
           }

@@ -1,5 +1,6 @@
 import * as tf from "@tensorflow/tfjs-core";
 import "@tensorflow/tfjs-backend-cpu";
+import { contactInputFor, type ContactInput } from "./operation-contact.js";
 import {
   LAUNCH_SCHEMA,
   GLOBAL_SIZE,
@@ -18,6 +19,7 @@ export interface LaunchModel {
   schema: string;
   policyVersion: string;
   controlScope?: "launch" | "operation";
+  contactInput?: ContactInput;
   actor: DenseLayer[];
   critic: DenseLayer[];
   training?: Record<string, unknown>;
@@ -43,6 +45,7 @@ export class NeuralLaunchPolicy implements LaunchPolicy {
       candidate: CANDIDATE_SIZE,
     },
   ) {
+    contactInputFor(model);
     if (
       model.format !== "warbook-launch-model-v1" ||
       model.schema !== shape.schema

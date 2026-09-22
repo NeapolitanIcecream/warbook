@@ -9,6 +9,7 @@ import {
   type ApiEvent,
 } from "@chronodivide/game-api";
 import { OwnLifecycle } from "./own-lifecycle.js";
+import { isOperationSchema } from "./learning/operation.js";
 import { baseRally, defenseRoute, guardPost } from "./defense-route.js";
 import { refinerySite } from "./refinery-site.js";
 import {
@@ -830,7 +831,7 @@ export class WarbookBot extends Bot {
         tick: observation.tick,
         actor: this.name,
         kind:
-          record.schema === "operation-v2"
+          record.schema && isOperationSchema(record.schema)
             ? "operation_decision"
             : "launch_decision",
         record,

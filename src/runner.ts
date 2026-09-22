@@ -1,8 +1,12 @@
 import {
   ExperimentalOperationProvider,
-  OPERATION_SCHEMA,
-  OPERATION_SHAPE,
+  isOperationSchema,
+  operationShape,
 } from "./learning/operation.js";
+import {
+  contactInputFor,
+  type ContactInput,
+} from "./learning/operation-contact.js";
 import type { OperationScope } from "./control/operation-provider.js";
 import {
   cdapi,
@@ -121,13 +125,15 @@ async function main(): Promise<void> {
   )
     throw new Error("Invalid operation scope/policy");
   let neural: LaunchPolicy | undefined;
+  let contactInput: ContactInput | undefined;
   if (values["launch-policy"] === "model") {
     if (!values["launch-model"]) throw new Error("Model artifact required");
     await prepareInference();
     const artifact = JSON.parse(
       readFileSync(values["launch-model"], "utf8"),
     ) as LaunchModel;
-    if (artifact.schema === OPERATION_SCHEMA) {
+    contactInput = contactInputFor(artifact);
+    if (isOperationSchema(artifact.schema)) {
       if (
         !artifact.controlScope ||
         (operationScope && operationScope !== artifact.controlScope)
@@ -135,10 +141,10 @@ async function main(): Promise<void> {
         throw new Error("Operation artifact/scope mismatch");
       operationScope = artifact.controlScope;
     } else if (operationScope)
-      throw new Error("Operation scope needs operation-v2 weights");
+      throw new Error("Operation scope needs operation weights");
     neural = new NeuralLaunchPolicy(
       artifact,
-      operationScope ? OPERATION_SHAPE : undefined,
+      operationScope ? operationShape(artifact.schema) : undefined,
     );
   }
   if (values["launch-policy"] === "linear") {
@@ -157,6 +163,7 @@ async function main(): Promise<void> {
         values["policy-seed"]!,
         neural,
         values["launch-deterministic"],
+        contactInput,
       )
     : undefined;
   const launch =
@@ -292,9 +299,13 @@ async function main(): Promise<void> {
     ...(launch || operation
       ? {
           launchExperiment: {
-            schema: operation ? OPERATION_SCHEMA : LAUNCH_SCHEMA,
+            schema: operation ? operation.schema : LAUNCH_SCHEMA,
             ...(operation
-              ? { controlScope: operationScope, strategyPeriod: 75 }
+              ? {
+                  controlScope: operationScope,
+                  strategyPeriod: 75,
+                  ...(contactInput ? { contactInput } : {}),
+                }
               : {}),
             policy: values["launch-policy"],
             seed: values["policy-seed"],
