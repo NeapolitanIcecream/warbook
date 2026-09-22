@@ -169,6 +169,10 @@ def main():
                     if args.experiment == 'contact':
                         for i, sample in enumerate(samples):
                             sample['global'] += ([i/8, .5, 1, .25, .75] if arm == 'local' else [0]*5)
+                    else:
+                        for sample in samples:
+                            for i, candidate in enumerate(sample['candidates']):
+                                candidate += [min(1, i/10), .5]
                     golden = path.with_suffix('.golden.json'); atomic(golden, samples)
                     command(name+'-parity', [node, '--import', 'tsx', 'scripts/check-launch-model.ts', str(path), str(golden)])
                     for seed in seeds:

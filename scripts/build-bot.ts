@@ -23,11 +23,16 @@ export async function buildBot(
   const launchModel = modelPath
     ? JSON.parse(readFileSync(modelPath, "utf8"))
     : undefined;
-  const contactModel = launchModel?.schema === "operation-contact-v1";
+  const contactModel = [
+    "operation-contact-v1",
+    "operation-maneuver-v1",
+  ].includes(launchModel?.schema);
   const operationModel = launchModel?.schema === "operation-v2" || contactModel;
   if (contactModel && !["local", "zero"].includes(launchModel.contactInput))
     throw new Error("Contact artifact requires its observation mode");
-  const maneuverModel = launchModel?.maneuverScope !== undefined;
+  const maneuverModel = launchModel?.schema === "operation-maneuver-v1";
+  if (!maneuverModel && launchModel?.maneuverScope !== undefined)
+    throw new Error("Maneuver scope requires the maneuver schema");
   if (
     maneuverModel &&
     (!contactModel ||

@@ -12,6 +12,7 @@ import {
   applyLaunchOnly,
   observeArmor,
   describeOperation,
+  pointKey,
 } from "../src/control/operation-state.js";
 import { Operations } from "../src/control/operations.js";
 import type {
@@ -321,6 +322,15 @@ test("local return uses a surviving member's observed trail and never adds reinf
   c.observation.own.push(...c.reserve);
   const active = buildOperationSnapshot(c, "operation", choices.observe(c));
   assert(
+    !active.actions.some(
+      (a) =>
+        a.kind === "apply" &&
+        a.order?.kind === "withdraw" &&
+        pointKey(a.order.goal.point) === pointKey(returning.goal.point),
+    ),
+    "Keeping a local destination must not create a normal-withdraw alias or reinforcement action",
+  );
+  assert(
     active.actions
       .filter((a) => isLocalManeuver(a.order ?? c.state.order))
       .every((a) => !a.addRefs.length),
@@ -336,6 +346,94 @@ test("local return uses a surviving member's observed trail and never adds reinf
   const without = buildOperationSnapshot(c, "operation"),
     withDuplicate = buildOperationSnapshot(c, "operation", [duplicate]);
   assert.deepEqual(withDuplicate.actions, without.actions);
+});
+
+test("local orders reject added reserves at the transaction boundary", () => {
+  const c = contactContext(70, 60);
+  c.reserve = [unit("reserve")];
+  c.observation.own.push(...c.reserve);
+  const order: OperationOrder = {
+    kind: "withdraw",
+    goal: {
+      key: "local-return:40:40:false",
+      point: { x: 40, y: 40 },
+      kind: "local-return",
+    },
+  };
+  assert.throws(
+    () =>
+      applyOperation(
+        c.state,
+        {
+          kind: "apply",
+          order,
+          addRefs: ["reserve"],
+          expectedStateVersion: c.state.stateVersion,
+        },
+        c.observation,
+        c.reserve,
+      ),
+    /local|Local/,
+  );
+});
+
+test("a visible member on a bridge cannot offer an expired ground trail", () => {
+  const c = contactContext(70, 60),
+    choices = new LocalManeuvers();
+  choices.observe(c);
+  c.observation.tick += 975;
+  c.observation.own = c.observation.own.slice(0, 2);
+  c.observation.own[0].onBridge = true;
+  c.observation.own[1].x = 46;
+  c.observation.own[1].y = 40;
+  assert(
+    !choices.observe(c).some((order) => order.goal.kind === "local-return"),
+  );
+});
+
+test("destination facts distinguish an in-range return point from an equally distant enemy on the other side", () => {
+  const scenario = (enemyX: number) => {
+    const c = context();
+    c.observation.own = [unit("u0", 44, 40)];
+    c.reserve = c.observation.own;
+    c.observation.enemies.push({
+      ...unit("enemy", enemyX, 40),
+      observedTick: 6000,
+    });
+    c.operations.observe(c.observation, []);
+    commit(c, advance, ["u0"]);
+    c.reserve = [];
+    const provider = new ExperimentalOperationProvider(
+      "operation",
+      "random",
+      "probe",
+      undefined,
+      false,
+      "local",
+      "local",
+    );
+    provider.choose(c);
+    c.observation.tick += 75;
+    c.observation.own[0].x = 40;
+    provider.choose(c);
+    return provider.record!;
+  };
+  const near = scenario(47),
+    far = scenario(33);
+  assert.deepEqual(near.global, far.global);
+  assert.deepEqual(near.actions, far.actions);
+  assert.deepEqual(
+    near.candidates.map((c) => c.slice(0, 48)),
+    far.candidates.map((c) => c.slice(0, 48)),
+  );
+  const i = near.actions.findIndex(
+    (a) => a.order?.goal.kind === "local-return",
+  );
+  assert(i >= 0);
+  assert.equal(near.schema, "operation-maneuver-v1");
+  assert.equal(near.candidates[i].length, 50);
+  assert.deepEqual(near.candidates[i].slice(48), [3 / 32, 1 / 16]);
+  assert.deepEqual(far.candidates[i].slice(48), [11 / 32, 0]);
 });
 
 test("persistent group can reverse withdrawal and reinforce atomically; KEEP does not reset ages", () => {

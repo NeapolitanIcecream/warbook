@@ -5,6 +5,8 @@ export interface OperationOrder {
   kind: OperationPosture;
   goal: { key: string; point: Point; ref?: string; kind: string };
 }
+export const isLocalManeuver = (order?: OperationOrder) =>
+  order?.goal.kind === "local-regroup" || order?.goal.kind === "local-return";
 export interface OperationCommitReceipt {
   tick: number;
   source: "policy" | "fixed-rule" | "teacher";

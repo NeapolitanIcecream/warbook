@@ -2,7 +2,7 @@ import { distance2, weaponDistance2 } from "../model.js";
 import type { OperationContext } from "../control/operation-provider.js";
 import { isArmor } from "./launch.js";
 import type { ManeuverScope } from "./local-maneuvers.js";
-import { CONTACT_SCHEMA } from "./schema.js";
+import { CONTACT_SCHEMA, MANEUVER_SCHEMA } from "./schema.js";
 export { CONTACT_SCHEMA } from "./schema.js";
 
 export const CONTACT_SIZE = 5;
@@ -52,14 +52,16 @@ export function contactInputFor(model: {
   controlScope?: "launch" | "operation";
   maneuverScope?: ManeuverScope;
 }): ContactInput | undefined {
-  if (
-    model.maneuverScope !== undefined &&
-    (model.schema !== CONTACT_SCHEMA ||
+  if (model.schema === MANEUVER_SCHEMA) {
+    if (
       model.controlScope !== "operation" ||
-      !["base", "local"].includes(model.maneuverScope))
-  )
-    throw new Error("Maneuver scope requires a persistent contact model");
-  if (model.schema === CONTACT_SCHEMA) {
+      (model.maneuverScope !== "base" && model.maneuverScope !== "local")
+    )
+      throw new Error("Maneuver model requires an explicit menu scope");
+  } else if (model.maneuverScope !== undefined) {
+    throw new Error("Maneuver scope requires the maneuver schema");
+  }
+  if (model.schema === CONTACT_SCHEMA || model.schema === MANEUVER_SCHEMA) {
     if (model.contactInput !== "local" && model.contactInput !== "zero")
       throw new Error("Contact model requires local/zero observation mode");
     return model.contactInput;

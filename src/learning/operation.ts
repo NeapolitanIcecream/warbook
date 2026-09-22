@@ -1,10 +1,15 @@
 import seedrandom from "seedrandom";
-import { OPERATION_SCHEMA, isOperationSchema } from "./schema.js";
+import {
+  OPERATION_SCHEMA,
+  MANEUVER_SCHEMA,
+  isOperationSchema,
+} from "./schema.js";
 export { OPERATION_SCHEMA, isOperationSchema } from "./schema.js";
 import {
   LocalManeuvers,
   LOCAL_MAX_ACTIONS,
   isLocalManeuver,
+  destinationContactFacts,
   type ManeuverScope,
 } from "./local-maneuvers.js";
 import {
@@ -59,7 +64,8 @@ export function operationShape(schema: string) {
     ...OPERATION_SHAPE,
     schema,
     global:
-      OPERATION_GLOBAL_SIZE + (schema === CONTACT_SCHEMA ? CONTACT_SIZE : 0),
+      OPERATION_GLOBAL_SIZE + (schema === OPERATION_SCHEMA ? 0 : CONTACT_SIZE),
+    candidate: OPERATION_CANDIDATE_SIZE + (schema === MANEUVER_SCHEMA ? 2 : 0),
   };
 }
 type Offer = OperationAction & LaunchAction;
@@ -288,12 +294,22 @@ export function buildOperationSnapshot(
   if (scope === "operation")
     for (const kind of ["assemble", "defend", "withdraw"] as const) {
       const points = [
-        ...(current?.kind === kind ? [current.goal.point] : []),
+        ...(current?.kind === kind && !isLocalManeuver(current)
+          ? [current.goal.point]
+          : []),
         ...c.anchors[kind],
       ];
       const unique = new Map(points.map((p) => [pointKey(p), p]));
       for (const point of [...unique.values()]
         .filter((p) => !c.frame.covered(p))
+        .filter(
+          (p) =>
+            !(
+              kind === "withdraw" &&
+              isLocalManeuver(current) &&
+              pointKey(p) === pointKey(current!.goal.point)
+            ),
+        )
         .slice(0, 2))
         append({
           kind,
@@ -449,7 +465,11 @@ export class ExperimentalOperationProvider implements OperationProvider {
     this.random = seedrandom(seed);
   }
   get schema() {
-    return this.contactInput ? CONTACT_SCHEMA : OPERATION_SCHEMA;
+    return this.maneuverScope
+      ? MANEUVER_SCHEMA
+      : this.contactInput
+        ? CONTACT_SCHEMA
+        : OPERATION_SCHEMA;
   }
   choose(c: OperationContext): OperationAction {
     if (c.observation.tick % this.period)
@@ -479,6 +499,11 @@ export class ExperimentalOperationProvider implements OperationProvider {
           ? operationContactFacts(c)
           : Array(CONTACT_SIZE).fill(0)),
       );
+    if (this.maneuverScope)
+      s.candidates = s.candidates.map((features, i) => [
+        ...features,
+        ...destinationContactFacts(c, s.actions[i].order ?? c.state.order),
+      ]);
     let action = this.executionSource === "teacher" ? teacher.action : 0,
       logp = 0,
       value = 0;

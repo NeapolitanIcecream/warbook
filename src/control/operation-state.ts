@@ -7,6 +7,7 @@ import {
 import {
   authorizedArmor,
   copyArmorState,
+  isLocalManeuver,
   type ArmorState,
   type OperationOrder,
 } from "./armor-state.js";
@@ -105,6 +106,8 @@ export function applyOperation(
   const order = a.order ?? s.order;
   if (!order || (!owned.size && !a.addRefs.length))
     throw new Error("Operation needs an order and members");
+  if (isLocalManeuver(order) && a.addRefs.length)
+    throw new Error("Local movement cannot add reserves");
   const changed = !sameOrder(s.order, order);
   if (!owned.size) {
     s.operationId++;

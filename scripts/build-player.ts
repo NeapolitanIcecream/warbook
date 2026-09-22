@@ -64,7 +64,11 @@ let release = {
   sha256,
   version: POLICY_VERSION,
   mode: launchModel
-    ? ["operation-v2", "operation-contact-v1"].includes(launchModel.schema)
+    ? [
+        "operation-v2",
+        "operation-contact-v1",
+        "operation-maneuver-v1",
+      ].includes(launchModel.schema)
       ? "learned-" + launchModel.controlScope
       : "learned-launch"
     : mode,

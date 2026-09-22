@@ -43,7 +43,7 @@ def load_artifact(model,path):
                 dst.weight.copy_(torch.tensor(src['weights']).reshape(src['input'],src['output']).T)
                 dst.bias.copy_(torch.tensor(src['bias']))
 
-def write_golden(model,path,g,c,mask,act):
+def write_golden(model,path,g,c,mask,act,preferred=()):
     # Early PPO records usually have only forced KEEP. Include real choices and
     # distinct menu sizes so parity actually checks the candidate scorer too.
     sizes=mask.sum(-1);ids=[]
@@ -52,6 +52,7 @@ def write_golden(model,path,g,c,mask,act):
             i=int(i)
             if i not in ids and len(ids)<6:ids.append(i)
     take(torch.nonzero(sizes==1).flatten()[:1])
+    take(preferred)
     take(torch.nonzero((sizes>1)&(act>0)).flatten()[:1])
     for size in sorted(set(sizes.tolist()),reverse=True):
         take(torch.nonzero(sizes==size).flatten()[:1])
@@ -82,8 +83,11 @@ def read_episode(directory):
         if MANEUVER_SCOPE:assert r.get('maneuverScope')==MANEUVER_SCOPE
     return {'path':str(directory),'outcome':outcome,'reward':float(outcome=='W'),'rows':rows,'modelSha':manifest.get('launchExperiment',{}).get('modelSha256')}
 
+def records_for(episodes,bc):
+    return [(e,r) for e in episodes for r in e['rows'] if not bc or r['trainable'] and r['teacherAction']>=0]
+
 def tensors(episodes,bc):
-    records=[(e,r) for e in episodes for r in e['rows'] if not bc or r['trainable'] and r['teacherAction']>=0]
+    records=records_for(episodes,bc)
     if not records:raise ValueError('No trainable launch decisions')
     n=len(records);g=np.zeros((n,G),np.float32);c=np.zeros((n,K,C),np.float32);mask=np.zeros((n,K),bool)
     action=[];returns=[];oldlog=[];oldvalue=[];valid=[]
@@ -95,7 +99,7 @@ def tensors(episodes,bc):
 
 def main():
     global G,C,K,SCHEMA,CONTROL_SCOPE,CONTACT_INPUT,MANEUVER_SCOPE
-    ap=argparse.ArgumentParser();ap.add_argument('method',choices=['init','bc','ppo']);ap.add_argument('--episodes');ap.add_argument('--input');ap.add_argument('--out',required=True);ap.add_argument('--seed',type=int,default=1);ap.add_argument('--epochs',type=int);ap.add_argument('--threads',type=int,default=4);ap.add_argument('--schema',choices=['launch-v1','operation-v2','operation-contact-v1']);ap.add_argument('--scope',choices=['launch','operation']);args=ap.parse_args()
+    ap=argparse.ArgumentParser();ap.add_argument('method',choices=['init','bc','ppo']);ap.add_argument('--episodes');ap.add_argument('--input');ap.add_argument('--out',required=True);ap.add_argument('--seed',type=int,default=1);ap.add_argument('--epochs',type=int);ap.add_argument('--threads',type=int,default=4);ap.add_argument('--schema',choices=['launch-v1','operation-v2','operation-contact-v1','operation-maneuver-v1']);ap.add_argument('--scope',choices=['launch','operation']);args=ap.parse_args()
     torch.set_num_threads(args.threads);torch.manual_seed(args.seed);np.random.seed(args.seed);random.seed(args.seed)
     artifact=json.loads(Path(args.input).read_text()) if args.input else {}
     first_manifest={}
@@ -106,16 +110,17 @@ def main():
     CONTROL_SCOPE=args.scope or artifact.get('controlScope') or first_manifest.get('controlScope')
     CONTACT_INPUT=artifact.get('contactInput') or first_manifest.get('contactInput')
     MANEUVER_SCOPE=artifact.get('maneuverScope') or first_manifest.get('maneuverScope')
-    if SCHEMA in ['operation-v2','operation-contact-v1']:
+    if SCHEMA in ['operation-v2','operation-contact-v1','operation-maneuver-v1']:
         if CONTROL_SCOPE not in ['launch','operation']:raise ValueError('Operation schema requires an explicit scope')
-        G,C,K=(217 if SCHEMA=='operation-contact-v1' else 212),48,75
+        G,C,K=(212 if SCHEMA=='operation-v2' else 217),48,75
     elif CONTROL_SCOPE:raise ValueError('Control scope requires operation-v2')
-    if SCHEMA=='operation-contact-v1':
+    if SCHEMA in ['operation-contact-v1','operation-maneuver-v1']:
         if CONTACT_INPUT not in ['local','zero']:raise ValueError('Contact schema requires local/zero input mode')
     elif CONTACT_INPUT:raise ValueError('Contact mode with non-contact schema')
-    if MANEUVER_SCOPE:
-        if SCHEMA!='operation-contact-v1' or CONTROL_SCOPE!='operation' or MANEUVER_SCOPE not in ['base','local']:raise ValueError('Invalid local maneuver scope')
-        K=77
+    if SCHEMA=='operation-maneuver-v1':
+        if CONTROL_SCOPE!='operation' or MANEUVER_SCOPE not in ['base','local']:raise ValueError('Invalid local maneuver scope')
+        C,K=50,77
+    elif MANEUVER_SCOPE is not None:raise ValueError('Maneuver scope without maneuver schema')
     model=Policy()
     if args.input:load_artifact(model,Path(args.input))
     out=Path(args.out);out.parent.mkdir(parents=True,exist_ok=True);metadata={'git':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'trainerSha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),'python':sys.version.split()[0],'method':args.method,'seed':args.seed,'torch':torch.__version__,'numpy':np.__version__,'threads':args.threads,'objective':'formal win within 54000 ticks; W=1,L=0,tick-cap or error-free mutual-defeat U=0; E excluded and reported','schema':SCHEMA,'controlScope':CONTROL_SCOPE,'architecture':f'shared candidate scorer; global={G}, candidate={C}, maximum actions={K}'}
@@ -175,7 +180,12 @@ def main():
     metadata.update(episodes=[e['path'] for e in training],validationEpisodes=[e['path'] for e in validation],excludedEpisodes=excluded,outcomes={k:sum(e['outcome']==k for e in episodes) for k in ['W','L','U']},records=len(g),actorRecords=int(valid.sum()),history=history,validation=validation_metrics,inputSha256=hashlib.sha256(Path(args.input).read_bytes()).hexdigest() if args.input else None)
     torch.save(optimizer.state_dict(),out.with_suffix('.optimizer.pt'))
     sha=export(model,out,f'launch-{args.method}-{args.seed}',metadata)
-    write_golden(model,out.with_suffix('.golden.json'),g,c,mask,act)
+    preferred=[]
+    if MANEUVER_SCOPE=='local':
+        preferred=next(([i] for i,(_,r) in enumerate(records_for(training,bc))
+                        if any(a.get('order',{}).get('goal',{}).get('kind') in ['local-regroup','local-return'] for a in r['actions'])),[])
+        metadata['goldenLocalMenuCovered']=bool(preferred)
+    write_golden(model,out.with_suffix('.golden.json'),g,c,mask,act,preferred)
     out.with_suffix('.training.json').write_text(json.dumps(metadata,indent=2)+'\n')
     print(json.dumps({'sha256':sha,'parameters':sum(p.numel() for p in model.parameters()),'episodes':len(episodes),'records':len(g),'validation':validation_metrics,'lastUpdate':history[-1]}))
 if __name__=='__main__':main()
