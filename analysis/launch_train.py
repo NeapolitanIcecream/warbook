@@ -8,6 +8,7 @@ import torch
 from torch import nn
 from launch_outcome import classify
 from experiment_storage import open_text
+from advantages import terminal_advantages
 
 G, C, K = 116, 32, 33
 SCHEMA = 'launch-v1'
@@ -27,7 +28,7 @@ class Policy(nn.Module):
 def layers(module):
     return [dict(input=m.in_features,output=m.out_features,weights=m.weight.detach().cpu().numpy().T.reshape(-1).tolist(),bias=m.bias.detach().cpu().tolist()) for m in module if isinstance(m,nn.Linear)]
 def export(model,path,version,metadata):
-    artifact={'format':'warbook-launch-model-v1','schema':SCHEMA,'policyVersion':version,'actor':layers(model.actor),'critic':layers(model.critic),'training':{k:v for k,v in metadata.items() if k in ['method','seed','torch','numpy','inputSha256','architecture','objective']}}
+    artifact={'format':'warbook-launch-model-v1','schema':SCHEMA,'policyVersion':version,'actor':layers(model.actor),'critic':layers(model.critic),'training':{k:v for k,v in metadata.items() if k in ['method','seed','torch','numpy','inputSha256','architecture','objective','advantageEstimator','gamma','gaeLambda','criticTarget']}}
     if CONTROL_SCOPE:artifact['controlScope']=CONTROL_SCOPE
     if CONTACT_INPUT:artifact['contactInput']=CONTACT_INPUT
     if MANEUVER_SCOPE:artifact['maneuverScope']=MANEUVER_SCOPE
@@ -81,7 +82,8 @@ def read_episode(directory):
         if CONTROL_SCOPE:assert r['scope']==CONTROL_SCOPE
         if CONTACT_INPUT:assert r.get('contactInput')==CONTACT_INPUT
         if MANEUVER_SCOPE:assert r.get('maneuverScope')==MANEUVER_SCOPE
-    return {'path':str(directory),'outcome':outcome,'reward':float(outcome=='W'),'rows':rows,'modelSha':manifest.get('launchExperiment',{}).get('modelSha256')}
+    return {'path':str(directory),'outcome':outcome,'reward':float(outcome=='W'),'rows':rows,'modelSha':manifest.get('launchExperiment',{}).get('modelSha256'),
+            'period':manifest.get('launchExperiment',{}).get('strategyPeriod',manifest['decisionInterval']),'terminalTick':result['tick']}
 
 def records_for(episodes,bc):
     return [(e,r) for e in episodes for r in e['rows'] if not bc or r['trainable'] and r['teacherAction']>=0]
@@ -111,9 +113,11 @@ def tensors(episodes,bc):
 
 def main():
     global G,C,K,SCHEMA,CONTROL_SCOPE,CONTACT_INPUT,MANEUVER_SCOPE
-    ap=argparse.ArgumentParser();ap.add_argument('method',choices=['init','bc','ppo']);ap.add_argument('--episodes');ap.add_argument('--input');ap.add_argument('--out',required=True);ap.add_argument('--seed',type=int,default=1);ap.add_argument('--epochs',type=int);ap.add_argument('--threads',type=int,default=4);ap.add_argument('--schema',choices=['launch-v1','operation-v2','operation-contact-v1','operation-maneuver-v1']);ap.add_argument('--scope',choices=['launch','operation']);args=ap.parse_args()
+    ap=argparse.ArgumentParser();ap.add_argument('method',choices=['init','bc','ppo']);ap.add_argument('--episodes');ap.add_argument('--input');ap.add_argument('--out',required=True);ap.add_argument('--seed',type=int,default=1);ap.add_argument('--epochs',type=int);ap.add_argument('--threads',type=int,default=4);ap.add_argument('--schema',choices=['launch-v1','operation-v2','operation-contact-v1','operation-maneuver-v1']);ap.add_argument('--scope',choices=['launch','operation']);ap.add_argument('--gae-lambda',type=float);args=ap.parse_args()
     torch.set_num_threads(args.threads);torch.manual_seed(args.seed);np.random.seed(args.seed);random.seed(args.seed)
     artifact=json.loads(Path(args.input).read_text()) if args.input else {}
+    if args.gae_lambda is None:args.gae_lambda=artifact.get('training',{}).get('gaeLambda',1.) if args.method=='ppo' else 1.
+    if not 0<=args.gae_lambda<=1 or (args.method!='ppo' and args.gae_lambda!=1):raise ValueError('GAE lambda only configures PPO, within [0,1]')
     first_manifest={}
     if args.episodes:
         paths=json.loads(Path(args.episodes).read_text())
@@ -138,6 +142,7 @@ def main():
     out=Path(args.out);out.parent.mkdir(parents=True,exist_ok=True);metadata={'git':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'trainerSha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),'python':sys.version.split()[0],'method':args.method,'seed':args.seed,'torch':torch.__version__,'numpy':np.__version__,'threads':args.threads,'objective':'formal win within 54000 ticks; W=1,L=0,tick-cap or error-free mutual-defeat U=0; E excluded and reported','schema':SCHEMA,'controlScope':CONTROL_SCOPE,'architecture':f'shared candidate scorer; global={G}, candidate={C}, maximum actions={K}'}
     if CONTACT_INPUT:metadata['contactInput']=CONTACT_INPUT
     if MANEUVER_SCOPE:metadata['maneuverScope']=MANEUVER_SCOPE
+    if args.method=='ppo':metadata.update(advantageEstimator='terminal-mc' if args.gae_lambda==1 else 'gae',gamma=1.,gaeLambda=args.gae_lambda,criticTarget='terminal-mc')
     if args.method=='init':
         print(json.dumps({'sha256':export(model,out,'launch-init',metadata),'parameters':sum(p.numel() for p in model.parameters())}));return
     paths=json.loads(Path(args.episodes).read_text());episodes=[];excluded=[]
@@ -160,6 +165,9 @@ def main():
         if previous_optimizer.exists() and json.loads(Path(args.input).read_text()).get('training',{}).get('method')=='ppo':optimizer.load_state_dict(torch.load(previous_optimizer,map_location='cpu',weights_only=True))
     launch_weight=max(1.,min(8.,float((act==0).sum())/max(1,int((act>0).sum()))))
     adv=ret-oldvalue
+    if not bc and args.gae_lambda!=1:
+        adv=torch.tensor(terminal_advantages(training,args.gae_lambda),dtype=oldvalue.dtype)
+        if len(adv)!=len(ret):raise ValueError('Advantage/record alignment changed')
     if not bc:
         if not valid.any():raise ValueError('Batch has no actionable policy decisions')
         mean=adv[valid].mean();std=adv[valid].std(unbiased=False).clamp_min(1e-6);adv=(adv-mean)/std
