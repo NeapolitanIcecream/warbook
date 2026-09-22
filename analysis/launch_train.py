@@ -86,6 +86,18 @@ def read_episode(directory):
 def records_for(episodes,bc):
     return [(e,r) for e in episodes for r in e['rows'] if not bc or r['trainable'] and r['teacherAction']>=0]
 
+def local_menu_usage(episodes):
+    from collections import Counter
+    usage=Counter()
+    def local(a):return a.get('order',{}).get('goal',{}).get('kind') in ['local-regroup','local-return']
+    for e in episodes:
+        for r in e['rows']:
+            usage['decisions']+=1
+            usage['offered']+=any(local(a) for a in r['actions'])
+            if r['action']>=0 and local(r['actions'][r['action']]):
+                usage[r['actions'][r['action']]['order']['goal']['kind']]+=1
+    return dict(usage)
+
 def tensors(episodes,bc):
     records=records_for(episodes,bc)
     if not records:raise ValueError('No trainable launch decisions')
@@ -178,6 +190,7 @@ def main():
     from collections import Counter
     metadata['teacherCoverage']=dict(Counter(r.get('teacherCoverage','legacy-projection') for e in episodes for r in e['rows']))
     metadata.update(episodes=[e['path'] for e in training],validationEpisodes=[e['path'] for e in validation],excludedEpisodes=excluded,outcomes={k:sum(e['outcome']==k for e in episodes) for k in ['W','L','U']},records=len(g),actorRecords=int(valid.sum()),history=history,validation=validation_metrics,inputSha256=hashlib.sha256(Path(args.input).read_bytes()).hexdigest() if args.input else None)
+    if MANEUVER_SCOPE:metadata['localMenuUsage']=local_menu_usage(training)
     torch.save(optimizer.state_dict(),out.with_suffix('.optimizer.pt'))
     sha=export(model,out,f'launch-{args.method}-{args.seed}',metadata)
     preferred=[]
