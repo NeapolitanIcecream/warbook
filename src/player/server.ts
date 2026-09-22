@@ -279,7 +279,7 @@ app.get("/watch", (c) =>
 );
 app.get("/replays", (c) =>
   c.html(
-    `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Warbook · 学习实验回放</title><style>body{max-width:850px;margin:60px auto;padding:0 24px;background:#0b1119;color:#e5ebf0;font:17px/1.7 system-ui}a{color:#e1c582}li{margin:24px 0}small,p{color:#adbac7}</style><h1>学习实验回放</h1><p>0.1.17-dev.1 实验模型。对手为 0.1.16 规则主线；模型方名字以 A 结尾，对手以 B 结尾。</p><ul>${[...watchCatalog].map(([id, entry]) => `<li><a href="/watch/${id}">${escapeHtml(entry.title)}</a><br><small>${Math.floor(entry.result.tick / 900)}:${String(Math.floor(entry.result.tick / 15) % 60).padStart(2, "0")} · 完整对局</small></li>`).join("")}</ul><p>按各类胜负样本的对局时长选取居中场次。这些回放用于观察行为，整体成绩见实验记录。</p><a href="/">返回本地入口</a></html>`,
+    `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Warbook · 学习实验回放</title><style>body{max-width:850px;margin:60px auto;padding:0 24px;background:#0b1119;color:#e5ebf0;font:17px/1.7 system-ui}a{color:#e1c582}li{margin:24px 0}small,p{color:#adbac7}</style><h1>学习实验回放</h1><p>A 为本条目评估的策略，B 为对手；双方名称带版本号。</p><ul>${[...watchCatalog].map(([id, entry]) => `<li><a href="/watch/${id}">${escapeHtml(entry.title)}</a><br><small>${Math.floor(entry.result.tick / 900)}:${String(Math.floor(entry.result.tick / 15) % 60).padStart(2, "0")} · 完整对局</small></li>`).join("")}</ul><p>按各类胜负样本的对局时长选取居中场次。这些回放用于观察行为，整体成绩见实验记录。</p><a href="/">返回本地入口</a></html>`,
   ),
 );
 app.get("/watch/:id", (c) =>
