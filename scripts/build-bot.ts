@@ -6,6 +6,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  renameSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -178,7 +179,9 @@ export async function buildBot(
     const sha256 = createHash("sha256").update(code).digest("hex");
     const directory = resolve(`dist/bots/${git}/${sha256}`);
     mkdirSync(directory, { recursive: true });
-    writeFileSync(`${directory}/bot.mjs`, code);
+    const temporaryBot = `${directory}/bot.mjs.${process.pid}.tmp`;
+    writeFileSync(temporaryBot, code);
+    renameSync(temporaryBot, `${directory}/bot.mjs`);
     const module = await import(pathToFileURL(`${directory}/bot.mjs`).href);
     const layered = existsSync(`${source}/src/control/coordinator.ts`);
     const sourceHashes = layered
@@ -277,7 +280,9 @@ export async function buildBot(
       throw new Error(
         "An existing frozen release has different build metadata",
       );
-    writeFileSync(`${directory}/release.json`, metadata);
+    const temporaryMetadata = `${directory}/release.json.${process.pid}.tmp`;
+    writeFileSync(temporaryMetadata, metadata);
+    renameSync(temporaryMetadata, `${directory}/release.json`);
     return { path: `${directory}/release.json`, ...release };
   } finally {
     rmSync(source, { recursive: true, force: true });

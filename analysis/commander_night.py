@@ -82,6 +82,11 @@ def main():
         p.update(initial=model,current=model,retained=model);return name,p
     try:
         save()
+        rules={}
+        # Shared frozen controls must be built once before concurrent matrices.
+        for route,mode in [('main','bastion'),('pressure','pressure')]:
+            log=root/(route+'-rule-freeze.log');command([node,'--import','tsx','scripts/build-bot.ts','--ref','v0.1.16','--mode',mode],log)
+            rules[route]=json.loads(log.read_text().splitlines()[-1])['path']
         with concurrent.futures.ThreadPoolExecutor(max_workers=len(plan['profiles'])) as ex:
             for name,p in ex.map(initialize,plan['profiles']):state['profiles'][name]=p;save()
         for cycle in range(plan.get('maxCycles',40)):
@@ -97,7 +102,7 @@ def main():
             def step(name):
                 p=profiles[name];d=root/f'cycle-{cycle:02d}'/name
                 peer=next(n for n,q in profiles.items() if q['arm']==p['arm'] and q['route']!=p['route'])
-                opponents={'supalosa':{'native':'supalosa'},'opposite-rule':{'ref':'v0.1.16','mode':'pressure' if p['route']=='main' else 'bastion'},'current-peer':{'release':releases[peer]},'strong-history':{'release':plan['strongReference']}}
+                opponents={'supalosa':{'native':'supalosa'},'opposite-rule':{'release':rules['pressure' if p['route']=='main' else 'main']},'current-peer':{'release':releases[peer]},'strong-history':{'release':plan['strongReference']}}
                 learning=p['stage']=='ppo';sampling=batch(d/'sample',{'learner':spec(p,p['current'],not learning)},opponents,plan.get('rounds',4),plan.get('workersPerProfile',16),10000+cycle*37+p['seed'])
                 new=json.loads((d/'sample/games/learner-episodes.json').read_text())
                 recent=[*p['recent'],new][-2:]
@@ -135,7 +140,7 @@ def main():
                 key=hashlib.sha256(Path(model).read_bytes()).hexdigest()
                 if key in seen:continue
                 seen.add(key);subjects[name+'-'+which]=spec(p,model)
-            opponents={'supalosa':{'native':'supalosa'},'main-rule':{'ref':'v0.1.16','mode':'bastion'},'pressure-rule':{'ref':'v0.1.16','mode':'pressure'},'strong-history':{'release':plan['strongReference']}}
+            opponents={'supalosa':{'native':'supalosa'},'main-rule':{'release':rules['main']},'pressure-rule':{'release':rules['pressure']},'strong-history':{'release':plan['strongReference']}}
             final=batch(root/'final'/name,subjects,opponents,2,plan.get('finalWorkers',96),29024);state['games']=completed_games(root);final_counts.update(final['counts']);state['final']=final_counts;save()
         state.update(phase='complete',finishedAt=time.time());save()
     except BaseException as error:
