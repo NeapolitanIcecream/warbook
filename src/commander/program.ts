@@ -73,6 +73,10 @@ export class ProgramController {
       const i = this.teacherSlots.get(m.id)!,
         old = this.state.slots[i];
       let kind = TASK_KINDS.indexOf(m.kind);
+      // Legacy capture-without-target explicitly sends the engineer home.
+      // Encode that movement, rather than trying to capture an unrelated visible object.
+      if (m.kind === "capture" && !m.target)
+        kind = TASK_KINDS.indexOf("withdraw");
       if (!m.destination && m.kind !== "harvest") kind = 10;
       let mask = goalMask(w, kind);
       if (kind !== 10 && !mask.some(Boolean)) kind = 10;

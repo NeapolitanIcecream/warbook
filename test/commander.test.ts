@@ -270,3 +270,37 @@ test("semantic goal metadata cannot overwrite a native movement command kind", (
   assert(intents.some((i) => i.kind === "move"));
   assert(intents.every((i) => i.kind !== ("start" as any)));
 });
+
+test("a teacher's targetless capture recovery remains a move home when other capture targets exist", () => {
+  const o = observation();
+  o.own = [
+    unit("engineer", {
+      name: "ENGINEER",
+      type: 3,
+      engineer: true,
+      x: 40,
+      y: 40,
+    }),
+  ];
+  o.techBuildings = [{ ref: "oil", name: "CAOILD", x: 60, y: 60 }];
+  const p = new ProgramController(),
+    w = buildWorld(o, p.state, new ContactMemory());
+  const desired = {
+    tick: 0,
+    combat: {
+      id: "capture-income",
+      revision: 1,
+      kind: "capture" as const,
+      units: ["engineer"],
+      destination: o.home,
+      objective: "capture-visible-income",
+      engagement: { allowCrush: false },
+    },
+    production: production(),
+  };
+  const a = p.teacherAction(o, w, desired);
+  assert.equal(a.kinds[0], 5);
+  p.apply(o, w, a);
+  assert.equal(p.plan(o).combat.kind, "withdraw");
+  assert.deepEqual(p.plan(o).combat.destination, o.home);
+});
