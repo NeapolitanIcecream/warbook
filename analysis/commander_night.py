@@ -71,6 +71,7 @@ def main():
         cmd=[str(Path(python).with_name('torchrun')),'--standalone','--nproc-per-node',str(plan.get('ranks',8)),'analysis/commander_train.py',method,'--episodes',str(episode_file),'--out',str(target),'--seed',str(profile['seed']),'--epochs','24' if method=='bc' else '3','--batch',str(plan.get('localBatch',4)),'--sequence','16','--burn','8','--threads','1','--validation-fraction','0','--action-encoding',profile['encoding']]
         if method=='bc':cmd+=['--bc-loss','factor','--bc-event-weight','32','--max-updates',str(updates)]
         if source:cmd+=['--input',str(source)]
+        elif method=='bc':cmd+=['--checkpoints','4','8','12']
         command(cmd,target.with_suffix('.log'));parity(target,target.with_suffix('.parity.log'));return str(target)
     def initialize(item):
         name=item['name'];directory=root/name;directory.mkdir();p={**item,'stage':'bc','recent':[]}
