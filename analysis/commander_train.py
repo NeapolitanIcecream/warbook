@@ -8,6 +8,7 @@ from torch.nn.parallel import DistributedDataParallel
 from commander_model import CommanderModel,pack,pack_actions,export,HIDDEN
 from experiment_storage import open_text
 from launch_outcome import classify
+from commander_sequence import stream_batches,unique_batches,event_weight
 
 def read_episode(path):
     path=Path(path);manifest=json.loads((path/'manifest.json').read_text());result=json.loads((path/'result.json').read_text())
@@ -43,23 +44,29 @@ def windows(episodes,length,burn):
     return out
 
 def batch_steps(batch,model,args,train):
-    """Pad time only with masked copies; real episode and hidden-state boundaries remain separate."""
-    burn=args.burn;length=args.sequence;worlds=[];actions=[];valid=[];returns=[];oldlog=[];adv=[];first_hidden=[]
-    for e,before,rows in batch:
-        first=(before or rows)[0]
-        first_hidden.append(first['hidden'] if e.get('ppo') else [0.]*HIDDEN)
+    """BC carries the forward state across adjacent blocks; PPO uses recorded state plus burn-in."""
+    if not batch:
+        zero=sum((p.sum()*0 for p in model.parameters()))
+        return zero,0.,0,torch.zeros((0,HIDDEN))
+    burn=0 if args.method=='bc' else args.burn;length=args.sequence
+    worlds=[];actions=[];valid=[];present=[];returns=[];oldlog=[];adv=[];weights=[];first_hidden=[]
+    for item in batch:
+        e,before,rows=item[:3];first=(before or rows)[0]
+        first_hidden.append(item[3] if len(item)>3 else first['hidden'] if e.get('ppo') else [0.]*HIDDEN)
     for t in range(burn+length):
-        for e,before,rows in batch:
+        for item in batch:
+            e,before,rows=item[:3]
             if t<burn:
-                index=t-(burn-len(before));r=before[max(0,index)] if before else rows[0];active=index>=0 and bool(before)
+                index=t-(burn-len(before));r=before[max(0,index)] if before else rows[0];exists=index>=0 and bool(before);active=exists
             else:
-                index=t-burn;r=rows[min(index,len(rows)-1)];active=index<len(rows) and (not e.get('ppo') or r['executionSource']=='policy')
-            worlds.append(r['world']);actions.append(r['action']);valid.append(active);returns.append(e['reward']);oldlog.append(r['logp']);adv.append(r.get('_advantage',0.))
-    d=pack(worlds,model.vocabulary);a=pack_actions(actions,d);b=len(batch);n=len(worlds)
-    valid=torch.tensor(valid,dtype=torch.bool).reshape(burn+length,b);ret=torch.tensor(returns,dtype=torch.float32).reshape(burn+length,b)
+                index=t-burn;r=rows[min(index,len(rows)-1)];exists=index<len(rows);active=exists and (not e.get('ppo') or r['executionSource']=='policy')
+            worlds.append(r['world']);actions.append(r['action']);valid.append(active);present.append(exists);returns.append(e['reward']);oldlog.append(r['logp']);adv.append(r.get('_advantage',0.))
+            weights.append(event_weight(r['action'],getattr(args,'bc_event_weight',1)) if train and args.method=='bc' else 1.)
+    d=pack(worlds,model.vocabulary);a=pack_actions(actions,d);b=len(batch)
+    valid=torch.tensor(valid,dtype=torch.bool).reshape(burn+length,b);present=torch.tensor(present,dtype=torch.bool).reshape(burn+length,b)
+    ret=torch.tensor(returns,dtype=torch.float32).reshape(burn+length,b);weights=torch.tensor(weights,dtype=torch.float32).reshape(burn+length,b)
     old=torch.tensor(oldlog,dtype=torch.float64).reshape(burn+length,b);advantages=torch.tensor(adv,dtype=torch.float32).reshape(burn+length,b)
-    h=torch.tensor(first_hidden,dtype=torch.float32);losses=[];kls=[];accuracies=[]
-    # Encode the full block together; sparse edges carry per-world batch offsets.
+    h=torch.tensor(first_hidden,dtype=torch.float32);losses=[];kls=[]
     encoded=model.encode_world(d)
     for t in range(burn+length):
         start=t*b;end=start+b
@@ -67,18 +74,18 @@ def batch_steps(batch,model,args,train):
         at={k:v[start:end] for k,v in a.items()};et=tuple(v[start:end] for v in encoded)
         if t<burn:
             with torch.no_grad():p=model(dt,h,at,encoded=et)
-            h=torch.where(valid[t,:,None],p['hidden'],h).detach();continue
-        p=model(dt,h,at,encoded=et);h=p['hidden'];active=valid[t]
+            h=torch.where(present[t,:,None],p['hidden'],h).detach();continue
+        p=model(dt,h,at,encoded=et);h=torch.where(present[t,:,None],p['hidden'],h);active=valid[t]
         if not active.any():continue
-        if args.method=='bc':policy=p['bcLoss'][active].mean();kl=policy.detach()*0
+        if args.method=='bc':policy=(p['bcLoss']*weights[t])[active].mean();kl=policy.detach()*0
         else:
             delta=p['logp']-old[t];ratio=delta.exp();aa=advantages[t]
             policy=torch.maximum(-aa*ratio,-aa*ratio.clamp(.9,1.1))[active].mean()-args.entropy*p['entropy'][active].mean()
             kl=((ratio-1)-delta)[active].mean().detach()
         losses.append((policy+.5*((p['value']-ret[t])**2)[active].mean())*active.sum());kls.append(kl)
-    if not losses:return None
     frames=valid[burn:].sum().item()
-    return torch.stack(losses).sum()/frames,float(torch.stack(kls).mean()),frames
+    if not losses:return sum(p.sum()*0 for p in model.parameters()),0.,0,h.detach()
+    return torch.stack(losses).sum()/frames,float(torch.stack(kls).mean()),frames,h.detach()
 
 class SequenceObjective(torch.nn.Module):
     def __init__(self,model,args):super().__init__();self.model=model;self.args=args
@@ -106,11 +113,11 @@ def golden(model,episodes,path):
 def main():
     ap=argparse.ArgumentParser();ap.add_argument('method',choices=['bc','ppo']);ap.add_argument('--episodes',required=True);ap.add_argument('--input');ap.add_argument('--out',required=True);ap.add_argument('--seed',type=int,default=47)
     ap.add_argument('--epochs',type=int);ap.add_argument('--batch',type=int,default=4);ap.add_argument('--sequence',type=int,default=16);ap.add_argument('--burn',type=int,default=8);ap.add_argument('--threads',type=int,default=1)
-    ap.add_argument('--max-updates',type=int);ap.add_argument('--entropy',type=float,default=.001);ap.add_argument('--checkpoints',type=int,nargs='*',default=[]);args=ap.parse_args()
+    ap.add_argument('--bc-event-weight',type=float,default=1.);ap.add_argument('--max-updates',type=int);ap.add_argument('--entropy',type=float,default=.001);ap.add_argument('--checkpoints',type=int,nargs='*',default=[]);args=ap.parse_args()
     world_size=int(os.environ.get('WORLD_SIZE','1'));rank=int(os.environ.get('RANK','0'))
     torch.set_num_threads(args.threads)
     if world_size>1:dist.init_process_group('gloo',timeout=datetime.timedelta(minutes=10))
-    start=time.monotonic();paths=json.loads(Path(args.episodes).read_text());random.Random(args.seed).shuffle(paths)
+    training_started=time.monotonic();paths=json.loads(Path(args.episodes).read_text());random.Random(args.seed).shuffle(paths)
     validation_paths=paths[-max(1,len(paths)//5):] if args.method=='bc' else []
     train_paths=paths[:-len(validation_paths)] if validation_paths else paths
     # Balance whole episodes by measured length. No rank loads all other ranks' raw journals.
@@ -149,19 +156,28 @@ def main():
     optimizer=torch.optim.Adam(model.parameters(),lr=3e-4 if args.method=='bc' else 1e-4)
     if args.method=='ppo' and Path(args.input).with_suffix('.optimizer.pt').exists():optimizer.load_state_dict(torch.load(Path(args.input).with_suffix('.optimizer.pt'),weights_only=True,map_location='cpu'))
     samples=windows(train,args.sequence,args.burn)
-    window_counts=all_objects(len(samples),world_size);steps=max(math.ceil(n/args.batch) for n in window_counts)
+    window_counts=all_objects(len(samples),world_size)
     history=[];updates=0;epochs=args.epochs or (12 if args.method=='bc' else 3)
     for epoch in range(epochs):
-        random.shuffle(samples);losses=[];kls=[];count=0;epoch_start=time.monotonic()
+        losses=[];kls=[];count=0;epoch_start=time.monotonic();carry={}
+        if args.method=='bc':
+            ordered=list(train);random.shuffle(ordered);schedule=stream_batches(ordered,args.sequence,args.batch)
+        else:
+            random.shuffle(samples);schedule=unique_batches(samples,args.batch)
+        steps=max(all_objects(len(schedule),world_size))
         for i in range(steps):
-            batch=[samples[(i*args.batch+j)%len(samples)] for j in range(args.batch)]
+            descriptors=schedule[i] if i<len(schedule) else []
+            batch=[(e,[],e['rows'][start:start+args.sequence],carry.get(e['path'],[0.]*HIDDEN) if start else [0.]*HIDDEN) for e,start in descriptors] if args.method=='bc' else descriptors
             result=objective(batch)
             if result is None:raise ValueError('Empty training block')
-            loss,kl,frames=result
+            loss,kl,frames,last_hidden=result
+            if args.method=='bc':
+                for j,(e,start) in enumerate(descriptors):carry[e['path']]=last_hidden[j].tolist()
             if not torch.isfinite(loss):raise ValueError('Nonfinite update')
             # DDP averages gradients. Scale by the actual non-padding decision count.
             total=torch.tensor(float(frames),dtype=torch.float64)
             if world_size>1:dist.all_reduce(total)
+            if float(total)<=0:raise ValueError('Global empty optimization step')
             optimizer.zero_grad();(loss*(frames*world_size/float(total))).backward()
             nnorm=torch.nn.utils.clip_grad_norm_(model.parameters(),.5)
             if not torch.isfinite(nnorm):raise ValueError('Nonfinite gradient')
@@ -175,7 +191,7 @@ def main():
             if rank==0:
                 base=Path(args.out);base.parent.mkdir(parents=True,exist_ok=True);checkpoint=base.with_name(base.stem+f'-after-{epoch+1}.json')
                 info={'method':args.method,'seed':args.seed,'epochs':epoch+1,'updates':updates,'encoderSha256':next(iter(hashes)),
-                    'worldSize':world_size,'sequence':args.sequence,'burnIn':args.burn,'objective':'terminal MC; checkpoint before final validation'}
+                    'worldSize':world_size,'sequence':args.sequence,'burnIn':args.burn,'bcEventWeight':args.bc_event_weight,'bcMemory':'continuous episode carry','objective':'terminal MC; checkpoint before final validation'}
                 sha=export(model,checkpoint,info);torch.save(optimizer.state_dict(),checkpoint.with_suffix('.optimizer.pt'));golden(model,train,checkpoint.with_suffix('.golden.json'))
                 checkpoint.with_suffix('.done.json').write_text(json.dumps({'sha256':sha,'epoch':epoch+1,'updates':updates})+'\n')
             if world_size>1:dist.barrier()
@@ -190,21 +206,21 @@ def main():
                 e=read_episode(path)
                 if e is None:continue
                 validation.append(e['path'])
-                batches=windows([e],args.sequence,args.burn)
-                for item in batches[::max(1,len(batches)//4)]:
-                    r=batch_steps([item],model,args,False)
-                    if r:losses.append(float(r[0]))
-        metrics={'sequenceLoss':float(np.mean(losses)),'windows':len(losses),'scope':'Held-out games in development sources; not playing strength'}
+                h=[0.]*HIDDEN
+                for start in range(0,len(e['rows']),args.sequence):
+                    r=batch_steps([(e,[],e['rows'][start:start+args.sequence],h)],model,args,False)
+                    losses.append(float(r[0]));h=r[3][0].tolist()
+        metrics={'sequenceLoss':float(np.mean(losses)),'windows':len(losses),'scope':'Continuous held-out whole-game forward states; not playing strength'}
     out=Path(args.out);out.parent.mkdir(parents=True,exist_ok=True)
     metadata={'method':args.method,'seed':args.seed,'git':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),
       'trainerSha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),'modelCodeSha256':hashlib.sha256(Path(__file__).with_name('commander_model.py').read_bytes()).hexdigest(),
       'encoderSha256':next(iter(hashes)),'worldSize':world_size,'localBatch':args.batch,'globalBatch':args.batch*world_size,'windowCounts':window_counts,
-      'paddedWindowsPerEpoch':steps*args.batch*world_size-sum(window_counts),
+      'padding':'Zero-loss empty ranks, no repeated training windows','bcEventWeight':args.bc_event_weight,'bcMemory':'Chronological whole episodes with detached carried hidden state',
       'trainingEpisodes':[p for d in details for p in d['paths']],'validationEpisodes':validation,'excluded':[p for d in details for p in d['excluded']],
       'inputSha256':hashlib.sha256(Path(args.input).read_bytes()).hexdigest() if args.input else None,
       'history':history,'validation':metrics,'sequence':args.sequence,'burnIn':args.burn,'updates':updates,
       'objective':'terminal W=1,L/U=0; E excluded; PPO gamma1 terminal MC; prefix teacher actor steps excluded',
-      'seconds':time.monotonic()-start,'parameters':sum(p.numel() for p in model.parameters())}
+      'seconds':time.monotonic()-training_started,'parameters':sum(p.numel() for p in model.parameters())}
     torch.save(optimizer.state_dict(),out.with_suffix('.optimizer.pt'))
     sha=export(model,out,{k:v for k,v in metadata.items() if k not in ['trainingEpisodes','validationEpisodes','excluded','history']})
     out.with_suffix('.training.json').write_text(json.dumps(metadata,indent=2)+'\n');golden(model,train,out.with_suffix('.golden.json'))

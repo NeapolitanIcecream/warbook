@@ -10,6 +10,7 @@ import {
 } from "@chronodivide/game-api";
 import { OwnLifecycle } from "./own-lifecycle.js";
 import { isOperationSchema } from "./learning/schema.js";
+import { shouldScanPlacement } from "./commander/placement-clock.js";
 import { baseRally, defenseRoute, guardPost } from "./defense-route.js";
 import { refinerySite } from "./refinery-site.js";
 import {
@@ -642,8 +643,16 @@ export class WarbookBot extends Bot {
       const name = q.items[0]?.name;
       if (!name) continue;
       const buildingRules = this.game.rules.getBuilding(name);
+      if (
+        !shouldScanPlacement(
+          fullStrategy,
+          !!(buildingRules.isBaseDefense && buildingRules.primary),
+          tick,
+          this.lastFortSiteTick,
+        )
+      )
+        continue;
       if (buildingRules.isBaseDefense && buildingRules.primary) {
-        if (tick - this.lastFortSiteTick < 30) continue;
         this.lastFortSiteTick = tick;
       }
       const { foundation } = this.game.getBuildingPlacementData(name);

@@ -17,6 +17,8 @@ export class CommanderTactics extends PositionTactics {
     m: CombatMission,
     evidence: readonly ExecutionEvidence[],
   ): ControlResult {
+    if (m.kind !== "harvest")
+      for (const ref of m.units) this.miningTargets.delete(ref);
     if (m.kind !== "hold") {
       for (const ref of m.units) this.holding.delete(ref);
       const filtered =
@@ -64,6 +66,9 @@ export class CommanderTactics extends PositionTactics {
           }
         : result;
     }
+    this.prepareMission(m);
+    if (m.objective === "preserve-native")
+      for (const ref of m.units) this.holding.delete(ref);
     const refs =
       m.objective === "preserve-native"
         ? []

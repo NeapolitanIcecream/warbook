@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Observation, Unit } from "../src/model.js";
 import { ProgramProduction } from "../src/control/program-production.js";
+import { shouldScanPlacement } from "../src/commander/placement-clock.js";
 import { ProgramController } from "../src/commander/program.js";
 import { CommanderTactics } from "../src/commander/tactics.js";
 import {
@@ -303,4 +304,47 @@ test("a teacher's targetless capture recovery remains a move home when other cap
   p.apply(o, w, a);
   assert.equal(p.plan(o).combat.kind, "withdraw");
   assert.deepEqual(p.plan(o).combat.destination, o.home);
+});
+
+test("Ready fortifications reach every subsequent strategy clock regardless of Ready offset", () => {
+  for (const ready of [72, 75, 78]) {
+    let last = -30;
+    const offered: number[] = [];
+    for (let tick = ready; tick <= 1500; tick += 3)
+      if (shouldScanPlacement(true, true, tick, last)) {
+        last = tick;
+        offered.push(tick);
+      }
+    assert.equal(offered[0], Math.ceil(ready / 75) * 75);
+    assert(offered.every((t, i) => !i || t - offered[i - 1] === 75));
+  }
+});
+
+test("harvest, explicit hold, and the same harvest task produce Gather, Stop, Gather", () => {
+  const o = observation();
+  o.own = [unit("miner", { name: "CMIN", harvester: true })];
+  const t = new CommanderTactics();
+  const harvest = {
+    id: "same-slot",
+    revision: 1,
+    kind: "harvest" as const,
+    units: ["miner"],
+    destination: { x: 30, y: 30 },
+    objective: "mine",
+    engagement: { allowCrush: false },
+  };
+  assert.equal(t.control(o, harvest, []).intents[0]?.kind, "gather");
+  o.tick += 3;
+  assert.equal(t.control(o, harvest, []).intents.length, 0);
+  o.tick += 75;
+  assert.equal(
+    t.control(o, { ...harvest, kind: "hold", objective: "explicit-hold" }, [])
+      .intents[0]?.kind,
+    "stop",
+  );
+  o.own[0].idle = true;
+  o.tick += 75;
+  assert.equal(t.control(o, harvest, []).intents[0]?.kind, "gather");
+  o.tick += 3;
+  assert.equal(t.control(o, harvest, []).intents.length, 0);
 });

@@ -32,6 +32,11 @@ export class HarvesterTactics {
   private escaping = new Map<string, { refinery: string; since: number }>();
   private unsafe: { point: Point; until: number }[] = [];
   private readonly orders = new NativeOrders();
+  handoff(ref: string) {
+    this.hp.delete(ref);
+    this.escaping.delete(ref);
+    this.orders.forget(ref);
+  }
 
   control(
     o: Observation,

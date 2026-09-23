@@ -46,6 +46,7 @@ export class PositionTactics extends LocalCombat {
         this.motion.delete(ref);
         this.yieldingUntil.delete(ref);
         this.strike.handoff(ref, mission.id);
+        this.harvesters.handoff(ref);
         if (!continuingDefense) {
           this.lastPositionOrders.delete(ref);
           this.targets.delete(ref);
