@@ -23,6 +23,7 @@ export async function buildBot(
   const launchModel = modelPath
     ? JSON.parse(readFileSync(modelPath, "utf8"))
     : undefined;
+  const commanderModel = launchModel?.format === "warbook-commander-model-v1";
   const contactModel = [
     "operation-contact-v1",
     "operation-maneuver-v1",
@@ -78,8 +79,18 @@ export async function buildBot(
           export const mode = ${JSON.stringify(mode)};
           if (!POLICY_MODES.includes(mode)) throw new Error('Unknown frozen policy mode');
           ${
-            launchModel
+            commanderModel
               ? `
+          import { NeuralCommanderPolicy, prepareCommander } from './src/commander/network.ts';
+          import { FullCommander } from './src/commander/controller.ts';
+          import { CommanderTactics } from './src/commander/tactics.ts';
+          import { ProgramProduction } from './src/control/program-production.ts';
+          const artifact = ${JSON.stringify(launchModel)};
+          await prepareCommander();
+          const commanderPolicy = new NeuralCommanderPolicy(artifact);
+          `
+              : launchModel
+                ? `
           import { ExperimentalLaunchProvider, LinearLaunchPolicy } from './src/learning/launch.ts';
           import { NeuralLaunchPolicy, prepareInference } from './src/learning/model.ts';
           ${operationModel ? `import { ExperimentalOperationProvider, ${contactModel ? "operationShape" : "OPERATION_SHAPE"} } from './src/learning/operation.ts';` : ""}
@@ -90,11 +101,11 @@ export async function buildBot(
           await prepareInference();
           const launchPolicy = artifact.format === 'warbook-launch-linear-v1' ? new LinearLaunchPolicy(artifact) : new NeuralLaunchPolicy(artifact${operationModel ? (contactModel ? ", operationShape(artifact.schema)" : ", OPERATION_SHAPE") : ""});
           `
-              : ""
+                : ""
           }
-          export const policyVersion = POLICY_VERSION + ${JSON.stringify(launchModel ? (operationModel ? "-learned-" + launchModel.controlScope + (contactModel ? "-" + launchModel.contactInput : "") + (maneuverModel ? "-maneuver-" + launchModel.maneuverScope : "") : "-learned") : "")};
+          export const policyVersion = POLICY_VERSION + ${JSON.stringify(commanderModel ? "-learned-commander" : launchModel ? (operationModel ? "-learned-" + launchModel.controlScope + (contactModel ? "-" + launchModel.contactInput : "") + (maneuverModel ? "-maneuver-" + launchModel.maneuverScope : "") : "-learned") : "")};
           export const observationProtocol = OBSERVATION_PROTOCOL;
-          export const createBot = name => new WarbookBot(name, 'Americans', mode${launchModel ? (operationModel ? `, {strategy: mode === 'pressure' ? new PressureStrategy(undefined,new ExperimentalOperationProvider(artifact.controlScope,'model','frozen',launchPolicy,true${contactModel ? ",artifact.contactInput" : ""}${maneuverModel ? ",artifact.maneuverScope" : ""})) : new BastionStrategy('bastion',undefined,new ExperimentalOperationProvider(artifact.controlScope,'model','frozen',launchPolicy,true${contactModel ? ",artifact.contactInput" : ""}${maneuverModel ? ",artifact.maneuverScope" : ""}))}` : `, { strategy: mode === 'pressure' ? new PressureStrategy(new ExperimentalLaunchProvider('model','frozen',launchPolicy,true)) : new BastionStrategy('bastion',new ExperimentalLaunchProvider('model','frozen',launchPolicy,true)) }`) : ""});
+          export const createBot = name => new WarbookBot(name, 'Americans', mode${commanderModel ? ", {strategy:new FullCommander(mode,commanderPolicy,'frozen',true),tactics:new CommanderTactics(),production:new ProgramProduction()}" : launchModel ? (operationModel ? `, {strategy: mode === 'pressure' ? new PressureStrategy(undefined,new ExperimentalOperationProvider(artifact.controlScope,'model','frozen',launchPolicy,true${contactModel ? ",artifact.contactInput" : ""}${maneuverModel ? ",artifact.maneuverScope" : ""})) : new BastionStrategy('bastion',undefined,new ExperimentalOperationProvider(artifact.controlScope,'model','frozen',launchPolicy,true${contactModel ? ",artifact.contactInput" : ""}${maneuverModel ? ",artifact.maneuverScope" : ""}))}` : `, { strategy: mode === 'pressure' ? new PressureStrategy(new ExperimentalLaunchProvider('model','frozen',launchPolicy,true)) : new BastionStrategy('bastion',new ExperimentalLaunchProvider('model','frozen',launchPolicy,true)) }`) : ""});
         `,
         resolveDir: source,
         sourcefile: "frozen-bot-entry.ts",

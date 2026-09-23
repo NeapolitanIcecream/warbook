@@ -23,8 +23,20 @@ import {
 } from "../learning/model.js";
 import { BastionStrategy } from "../control/bastion-strategy.js";
 import { PressureStrategy } from "../control/pressure-strategy.js";
+import {
+  NeuralCommanderPolicy,
+  prepareCommander,
+  type CommanderModel,
+} from "../commander/network.js";
+import { FullCommander } from "../commander/controller.js";
+import { CommanderTactics } from "../commander/tactics.js";
+import { ProgramProduction } from "../control/program-production.js";
 declare const __WARBOOK_POLICY__: PolicyMode;
-declare const __WARBOOK_LAUNCH_MODEL__: LaunchModel | LinearLaunchModel | null;
+declare const __WARBOOK_LAUNCH_MODEL__:
+  | LaunchModel
+  | LinearLaunchModel
+  | CommanderModel
+  | null;
 
 declare global {
   var SystemJS: { import(name: string): Promise<any> };
@@ -64,11 +76,17 @@ export async function install(): Promise<void> {
     bots: [],
   } as typeof WarbookSession);
   let launchPolicy: LaunchPolicy | undefined;
+  let commanderPolicy: NeuralCommanderPolicy | undefined;
   let launchReady: Promise<void> | undefined;
   const prepareLaunch = () =>
     (launchReady ??= (async () => {
       const artifact = __WARBOOK_LAUNCH_MODEL__;
       if (!artifact) return;
+      if (artifact.format === "warbook-commander-model-v1") {
+        await prepareCommander();
+        commanderPolicy = new NeuralCommanderPolicy(artifact);
+        return;
+      }
       if (artifact.format === "warbook-launch-linear-v1")
         launchPolicy = new LinearLaunchPolicy(artifact);
       else {
@@ -122,9 +140,12 @@ export async function install(): Promise<void> {
     }
   };
   BotFactory.prototype.create = function (player: any) {
-    if (__WARBOOK_LAUNCH_MODEL__ && !launchPolicy)
+    if (__WARBOOK_LAUNCH_MODEL__ && !launchPolicy && !commanderPolicy)
       throw new Error("Launch model was not prepared before game creation");
-    const artifact = __WARBOOK_LAUNCH_MODEL__;
+    const artifact =
+      __WARBOOK_LAUNCH_MODEL__?.format === "warbook-commander-model-v1"
+        ? null
+        : __WARBOOK_LAUNCH_MODEL__;
     const operation =
       launchPolicy &&
       artifact &&
@@ -149,14 +170,25 @@ export async function install(): Promise<void> {
       player.name,
       player.country.name,
       __WARBOOK_POLICY__,
-      launch || operation
+      commanderPolicy
         ? {
-            strategy:
-              __WARBOOK_POLICY__ === "pressure"
-                ? new PressureStrategy(launch, operation)
-                : new BastionStrategy("bastion", launch, operation),
+            strategy: new FullCommander(
+              __WARBOOK_POLICY__ as "bastion" | "pressure",
+              commanderPolicy,
+              "player",
+              true,
+            ),
+            tactics: new CommanderTactics(),
+            production: new ProgramProduction(),
           }
-        : undefined,
+        : launch || operation
+          ? {
+              strategy:
+                __WARBOOK_POLICY__ === "pressure"
+                  ? new PressureStrategy(launch, operation)
+                  : new BastionStrategy("bastion", launch, operation),
+            }
+          : undefined,
     );
     bot.autoTick = true;
     session.bots.push(bot);

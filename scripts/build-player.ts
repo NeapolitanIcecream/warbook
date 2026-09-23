@@ -6,7 +6,8 @@ import { POLICY_VERSION, POLICY_MODES } from "../src/policy.js";
 import { PINNED_CLIENT, SDK_RESOURCE_SHA } from "../src/player/client.js";
 mkdirSync("dist/player", { recursive: true });
 const mode = process.env.PLAYER_POLICY ?? "bastion";
-const modelPath = process.env.PLAYER_LAUNCH_MODEL;
+const modelPath =
+  process.env.PLAYER_COMMANDER_MODEL ?? process.env.PLAYER_LAUNCH_MODEL;
 const launchModel = modelPath
   ? JSON.parse(readFileSync(modelPath, "utf8"))
   : null;
@@ -64,13 +65,15 @@ let release = {
   sha256,
   version: POLICY_VERSION,
   mode: launchModel
-    ? [
-        "operation-v2",
-        "operation-contact-v1",
-        "operation-maneuver-v1",
-      ].includes(launchModel.schema)
-      ? "learned-" + launchModel.controlScope
-      : "learned-launch"
+    ? launchModel.format === "warbook-commander-model-v1"
+      ? "learned-commander"
+      : [
+            "operation-v2",
+            "operation-contact-v1",
+            "operation-maneuver-v1",
+          ].includes(launchModel.schema)
+        ? "learned-" + launchModel.controlScope
+        : "learned-launch"
     : mode,
   ...(launchModel ? { launchModelSha256: modelSha256, baseMode: mode } : {}),
   git: execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(),

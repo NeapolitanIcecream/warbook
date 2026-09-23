@@ -92,7 +92,7 @@ class CommanderModel(nn.Module):
         self.building0=nn.Linear(192,64);self.building1=nn.Linear(64,4)
         self.placeQuery=nn.Linear(160,64);self.placeKeep=nn.Linear(64,1)
         self.value0=nn.Linear(HIDDEN,64);self.value1=nn.Linear(64,1)
-    def encode(self,d,hidden):
+    def encode_world(self,d):
         e=torch.tanh(self.entity0(torch.cat([d['entities'],self.names(d['entityIds'])],-1)))
         e=torch.tanh(self.entity1(torch.cat([e,neighbor_mean(e,d['entityEdges'])],-1)))
         r=torch.tanh(self.region0(d['regions']));r=torch.tanh(self.region1(torch.cat([r,neighbor_mean(r,d['regionEdges'])],-1)))
@@ -102,10 +102,10 @@ class CommanderModel(nn.Module):
         places=torch.tanh(self.place0(d['placements']));tasks=torch.tanh(self.task0(d['tasks']))
         x=torch.cat([d['global'],summary(e,d['entitiesMask']),summary(r,d['regionsMask']),summary(p,d['productsMask']),
                      summary(tasks,d['tasksMask']),d['queues'].flatten(1),self.names(d['queueIds']).flatten(1)],-1)
-        h=self.memory(torch.tanh(self.world0(x)),hidden)
-        return e,p,goals,places,tasks,h
-    def forward(self,d,hidden,a,return_probabilities=False):
-        e,p,g,places,tasks,h=self.encode(d,hidden);b=len(h)
+        return e,p,goals,places,tasks,torch.tanh(self.world0(x))
+    def forward(self,d,hidden,a,return_probabilities=False,encoded=None):
+        e,p,g,places,tasks,x=self.encode_world(d) if encoded is None else encoded
+        h=self.memory(x,hidden);b=len(h)
         zero=torch.zeros(b,dtype=h.dtype);logp=zero.double();entropy=zero;factors=zero;bc=zero;bc_weight=zero
         probabilities={}
         def choice(name,logits,mask,selected,valid=None,keep=None):
