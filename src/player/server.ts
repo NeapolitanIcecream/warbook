@@ -70,15 +70,17 @@ const specialistBotPath = specialistRelease
   ? `dist/player/${specialistRelease.sha256}/bot.js`
   : undefined;
 const policyName = (mode: string) =>
-  mode === "learned-operation"
-    ? "学习型作战（实验）"
-    : mode === "learned-launch"
-      ? "学习型出击（实验）"
-      : mode === "pressure"
-        ? "步兵压制（实验）"
-        : mode === "bastion"
-          ? "阵地反击"
-          : "历史策略";
+  mode === "learned-commander"
+    ? "完整战略学习（实验）"
+    : mode === "learned-operation"
+      ? "学习型作战（实验）"
+      : mode === "learned-launch"
+        ? "学习型出击（实验）"
+        : mode === "pressure"
+          ? "步兵压制（实验）"
+          : mode === "bastion"
+            ? "阵地反击"
+            : "历史策略";
 const pending = new Map<string, Promise<{ body: Buffer; type: string }>>();
 // Explicitly selected evidence only; local filesystem paths are never URL inputs.
 function loadWatch(resultPath: string) {

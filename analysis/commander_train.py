@@ -8,7 +8,7 @@ from torch.nn.parallel import DistributedDataParallel
 from commander_model import CommanderModel,pack,pack_actions,export,HIDDEN
 from experiment_storage import open_text
 from launch_outcome import classify
-from commander_sequence import stream_batches,unique_batches,event_weight
+from commander_sequence import stream_batches,unique_batches,event_weight,training_action
 
 def read_episode(path):
     path=Path(path);manifest=json.loads((path/'manifest.json').read_text());result=json.loads((path/'result.json').read_text())
@@ -60,8 +60,9 @@ def batch_steps(batch,model,args,train):
                 index=t-(burn-len(before));r=before[max(0,index)] if before else rows[0];exists=index>=0 and bool(before);active=exists
             else:
                 index=t-burn;r=rows[min(index,len(rows)-1)];exists=index<len(rows);active=exists and (not e.get('ppo') or r['executionSource']=='policy')
-            worlds.append(r['world']);actions.append(r['action']);valid.append(active);present.append(exists);returns.append(e['reward']);oldlog.append(r['logp']);adv.append(r.get('_advantage',0.))
-            weights.append(event_weight(r['action'],getattr(args,'bc_event_weight',1)) if train and args.method=='bc' else 1.)
+            label=training_action(r,args.method)
+            worlds.append(r['world']);actions.append(label);valid.append(active);present.append(exists);returns.append(e['reward']);oldlog.append(r['logp']);adv.append(r.get('_advantage',0.))
+            weights.append(event_weight(label,getattr(args,'bc_event_weight',1)) if train and args.method=='bc' else 1.)
     d=pack(worlds,model.vocabulary);a=pack_actions(actions,d);b=len(batch)
     valid=torch.tensor(valid,dtype=torch.bool).reshape(burn+length,b);present=torch.tensor(present,dtype=torch.bool).reshape(burn+length,b)
     ret=torch.tensor(returns,dtype=torch.float32).reshape(burn+length,b);weights=torch.tensor(weights,dtype=torch.float32).reshape(burn+length,b)
@@ -218,6 +219,7 @@ def main():
       'padding':'Zero-loss empty ranks, no repeated training windows','bcEventWeight':args.bc_event_weight,'bcMemory':'Chronological whole episodes with detached carried hidden state',
       'trainingEpisodes':[p for d in details for p in d['paths']],'validationEpisodes':validation,'excluded':[p for d in details for p in d['excluded']],
       'inputSha256':hashlib.sha256(Path(args.input).read_bytes()).hexdigest() if args.input else None,
+      'labels':'BC uses explicit teacherAction where recorded; PPO uses executed action only',
       'history':history,'validation':metrics,'sequence':args.sequence,'burnIn':args.burn,'updates':updates,
       'objective':'terminal W=1,L/U=0; E excluded; PPO gamma1 terminal MC; prefix teacher actor steps excluded',
       'seconds':time.monotonic()-training_started,'parameters':sum(p.numel() for p in model.parameters())}

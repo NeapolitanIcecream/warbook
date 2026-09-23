@@ -6,6 +6,10 @@ import { shouldScanPlacement } from "../src/commander/placement-clock.js";
 import { ProgramController } from "../src/commander/program.js";
 import { CommanderTactics } from "../src/commander/tactics.js";
 import {
+  FullCommander,
+  type CommanderPolicy,
+} from "../src/commander/controller.js";
+import {
   buildWorld,
   ContactMemory,
   keepAction,
@@ -65,6 +69,37 @@ const production = (): ProgramProductionPlan => ({
   revision: 1,
   deploymentUnits: [],
   program: { queues: [], placements: [], repair: [], sell: [] },
+});
+
+test("DAgger labels learner states without silently applying the expert action", () => {
+  const o = observation();
+  o.own = [unit("mcv", { name: "AMCV", mcv: true, combat: false })];
+  const policy: CommanderPolicy = {
+    hiddenSize: 128,
+    predict(w, hidden, _random, _deterministic, forced) {
+      return {
+        action: forced ?? keepAction(w),
+        logp: -2,
+        value: 0.5,
+        entropy: 1,
+        hidden: [...hidden],
+      };
+    },
+  };
+  const assessment = { army: [], observedArmor: 0, armorOutsideFactories: 0 };
+  const learner = new FullCommander("bastion", policy, "test", true, 0, 0);
+  const plan = learner.plan(o, assessment);
+  assert.deepEqual(plan.production.deploymentUnits, []);
+  assert.deepEqual(learner.record?.action.units, [KEEP_UNIT]);
+  assert.deepEqual(learner.record?.teacherAction?.units, [17]);
+  assert.equal(learner.record?.executionSource, "policy");
+  assert.equal(learner.record?.logp, -2);
+  const expert = new FullCommander("bastion", policy, "test", true, 0, 1);
+  assert.deepEqual(expert.plan(o, assessment).production.deploymentUnits, [
+    "mcv",
+  ]);
+  assert.equal(expert.record?.executionSource, "teacher");
+  assert.equal(expert.record?.logp, 0);
 });
 
 test("an explicit plan does not invent power, repairs or army production", () => {

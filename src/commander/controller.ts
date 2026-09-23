@@ -51,6 +51,8 @@ export interface CommanderRecord {
   entropy: number;
   hidden: number[];
   executionSource: "teacher" | "policy";
+  /** Expert label at the learner's actual state; never substituted in PPO. */
+  teacherAction?: CommanderAction;
   projectionMaximum?: number;
 }
 /** Owns all strategic plans. In policy-only runs no legacy strategy is constructed. */
@@ -69,8 +71,18 @@ export class FullCommander implements StrategicController {
     seed = "0",
     private deterministic = false,
     private prefixUntil = 0,
+    private daggerBeta?: number,
   ) {
-    if (!policy || prefixUntil > 0) this.teacher = new CommanderTeacher(route);
+    if (
+      daggerBeta !== undefined &&
+      (!policy ||
+        !Number.isFinite(daggerBeta) ||
+        daggerBeta < 0 ||
+        daggerBeta > 1)
+    )
+      throw new Error("DAgger requires a policy and beta in [0,1]");
+    if (!policy || prefixUntil > 0 || daggerBeta !== undefined)
+      this.teacher = new CommanderTeacher(route);
     this.hidden = Array(policy?.hiddenSize ?? 128).fill(0);
     this.random = seedrandom(seed);
   }
@@ -96,14 +108,24 @@ export class FullCommander implements StrategicController {
         if (role === DEPLOY) this.program.state.roles.set(ref, RESERVE);
       const world = buildWorld(o, this.program.state, this.memory),
         hidden = [...this.hidden];
-      const teacher = !this.policy || o.tick < this.prefixUntil;
+      const teacher =
+        !this.policy ||
+        o.tick < this.prefixUntil ||
+        (this.daggerBeta !== undefined && this.random() < this.daggerBeta);
+      const teacherAction =
+        teacher || this.daggerBeta !== undefined
+          ? this.program.teacherAction(
+              o,
+              world,
+              this.teacher!.plan(o, assessment, feedback),
+            )
+          : undefined;
       let action: CommanderAction,
         logp = 0,
         value = 0,
         entropy = 0;
       if (teacher) {
-        const desired = this.teacher!.plan(o, assessment, feedback);
-        action = this.program.teacherAction(o, world, desired);
+        action = teacherAction!;
         if (this.policy) {
           const p = this.policy.predict(
             world,
@@ -140,6 +162,7 @@ export class FullCommander implements StrategicController {
         entropy,
         hidden,
         executionSource: teacher ? "teacher" : "policy",
+        ...(this.daggerBeta !== undefined ? { teacherAction } : {}),
         ...(teacher
           ? {
               projectionMaximum: Math.max(

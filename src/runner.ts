@@ -79,6 +79,7 @@ const { values } = parseArgs({
     "commander-model": { type: "string" },
     "commander-deterministic": { type: "boolean", default: false },
     "commander-prefix": { type: "string", default: "0" },
+    "commander-dagger-beta": { type: "string" },
     "launch-model": { type: "string" },
     "operation-scope": { type: "string" },
     "policy-seed": { type: "string", default: "0" },
@@ -131,6 +132,12 @@ async function main(): Promise<void> {
   const prefix = Number(values["commander-prefix"]);
   if (!Number.isInteger(prefix) || prefix < 0 || prefix % 75 !== 0)
     throw new Error("Prefix must end on the strategy clock");
+  const daggerBeta =
+    values["commander-dagger-beta"] === undefined
+      ? undefined
+      : Number(values["commander-dagger-beta"]);
+  if (daggerBeta !== undefined && values["commander-policy"] !== "model")
+    throw new Error("DAgger requires commander model mode");
   const fullStrategy = values["commander-policy"]
     ? new FullCommander(
         values.mode as "bastion" | "pressure",
@@ -138,6 +145,7 @@ async function main(): Promise<void> {
         values["policy-seed"],
         values["commander-deterministic"],
         prefix,
+        daggerBeta,
       )
     : undefined;
   if (
@@ -374,6 +382,7 @@ async function main(): Promise<void> {
             seed: values["policy-seed"],
             deterministic: values["commander-deterministic"],
             prefixUntil: prefix,
+            daggerBeta,
             modelSha256: values["commander-model"]
               ? sha256(values["commander-model"])
               : undefined,

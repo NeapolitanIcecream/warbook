@@ -27,3 +27,7 @@ def event_weight(action,boost):
     if any(action['placements']):return min(float(boost),8.)
     if any(q>=4 for q in action['queues']) or any(u!=18 for u in action['units']):return min(float(boost),4.)
     return 1.
+
+def training_action(record,method):
+    # DAgger queries the expert without pretending it executed that action.
+    return record.get('teacherAction',record['action']) if method=='bc' else record['action']

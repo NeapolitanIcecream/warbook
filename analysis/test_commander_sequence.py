@@ -1,5 +1,5 @@
 import unittest
-from commander_sequence import stream_batches,unique_batches,event_weight
+from commander_sequence import stream_batches,unique_batches,event_weight,training_action
 
 class SequenceTests(unittest.TestCase):
     def test_adjacent_chunks_carry_episode_identity_and_use_every_frame_once(self):
@@ -16,5 +16,10 @@ class SequenceTests(unittest.TestCase):
         self.assertEqual(event_weight(a,32),1)
         a['units']=[17];self.assertEqual(event_weight(a,32),32)
         self.assertEqual(a['units'],[17])
+    def test_expert_labels_never_replace_executed_ppo_actions(self):
+        row={'action':{'units':[18]},'teacherAction':{'units':[17]}}
+        self.assertEqual(training_action(row,'bc'),{'units':[17]})
+        self.assertEqual(training_action(row,'ppo'),{'units':[18]})
+        self.assertEqual(row['action'],{'units':[18]})
 
 if __name__=='__main__':unittest.main()

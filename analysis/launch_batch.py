@@ -75,6 +75,7 @@ def main():
         if s.get('scope'):cmd+=['--operation-scope',s['scope']]
         if s.get('deterministic'):cmd+=['--commander-deterministic' if s.get('commander') else '--launch-deterministic']
         if s.get('commander') and s.get('prefixUntil'):cmd+=['--commander-prefix',str(s['prefixUntil'])]
+        if s.get('commander') and 'daggerBeta' in s:cmd+=['--commander-dagger-beta',str(s['daggerBeta'])]
         if plan.get('trace','launch')=='launch':cmd+=['--trace-level','launch']
         if 'native' in p:cmd+=['--opponent',p['native']]
         elif 'release' in p:cmd+=['--opponent-release',p['release']]
