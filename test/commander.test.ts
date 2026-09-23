@@ -5,6 +5,7 @@ import { ProgramProduction } from "../src/control/program-production.js";
 import { shouldScanPlacement } from "../src/commander/placement-clock.js";
 import { ProgramController } from "../src/commander/program.js";
 import { CommanderTactics } from "../src/commander/tactics.js";
+import { commanderRoleMask } from "../src/commander/action-mask.js";
 import {
   FullCommander,
   type CommanderPolicy,
@@ -100,6 +101,39 @@ test("DAgger labels learner states without silently applying the expert action",
   ]);
   assert.equal(expert.record?.executionSource, "teacher");
   assert.equal(expert.record?.logp, 0);
+});
+
+test("retyping a mining task requires an explicit member choice, without banning deliberate miner scouting", () => {
+  const o = observation();
+  o.own = [unit("miner", { name: "CMIN", harvester: true })];
+  const p = new ProgramController(),
+    w0 = buildWorld(o, p.state, new ContactMemory()),
+    a0 = keepAction(w0);
+  a0.kinds[0] = 8;
+  a0.units[0] = 0;
+  p.apply(o, w0, a0);
+  const w = buildWorld(o, p.state, new ContactMemory()),
+    a = keepAction(w);
+  a.kinds[0] = 6;
+  a.goals[0] = 1;
+  assert.equal(
+    commanderRoleMask(w, 0, a.kinds, "graph-plan-v1")[KEEP_UNIT],
+    true,
+  );
+  assert.equal(
+    commanderRoleMask(w, 0, a.kinds, "graph-plan-v2")[KEEP_UNIT],
+    false,
+  );
+  assert.throws(() => p.apply(o, w, a), /Invalid unit role/);
+  a.units[0] = 0;
+  p.apply(o, w, a);
+  assert.equal(p.plan(o).combat.kind, "scout");
+  assert.deepEqual(p.plan(o).combat.units, ["miner"]);
+  const w1 = buildWorld(o, p.state, new ContactMemory()),
+    hold = keepAction(w1),
+    mask = commanderRoleMask(w1, 0, hold.kinds, "graph-plan-v2");
+  assert.equal(mask[0], false);
+  assert.equal(mask[KEEP_UNIT], true);
 });
 
 test("an explicit plan does not invent power, repairs or army production", () => {

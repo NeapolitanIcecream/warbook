@@ -31,3 +31,13 @@ def event_weight(action,boost):
 def training_action(record,method):
     # DAgger queries the expert without pretending it executed that action.
     return record.get('teacherAction',record['action']) if method=='bc' else record['action']
+
+def canonical_action(action,world,encoding):
+    if encoding=='graph-plan-v1':return action
+    result={**action,'units':list(action['units'])}
+    for i,selected in enumerate(result['units']):
+        old=world['previousRoles'][i]
+        changed=old<16 and action['kinds'][old] not in [0,world['previousKinds'][old]]
+        if selected==18 and changed:result['units'][i]=old
+        elif selected==old and old!=17 and not changed:result['units'][i]=18
+    return result

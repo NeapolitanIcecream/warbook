@@ -8,7 +8,7 @@ from torch.nn.parallel import DistributedDataParallel
 from commander_model import CommanderModel,pack,pack_actions,export,HIDDEN
 from experiment_storage import open_text
 from launch_outcome import classify
-from commander_sequence import stream_batches,unique_batches,event_weight,training_action
+from commander_sequence import stream_batches,unique_batches,event_weight,training_action,canonical_action
 
 def read_episode(path):
     path=Path(path);manifest=json.loads((path/'manifest.json').read_text());result=json.loads((path/'result.json').read_text())
@@ -21,7 +21,7 @@ def read_episode(path):
             e=json.loads(line)
             if e.get('actor')==actor and e.get('kind')=='commander_decision':rows.append(e['record'])
     if not rows:return None
-    if any(r.get('encoding')!='graph-plan-v1' or r['schema']!='commander-v1' for r in rows):raise ValueError('Mixed commander encodings')
+    if any(r.get('encoding') not in ['graph-plan-v1','graph-plan-v2'] or r['schema']!='commander-v1' for r in rows):raise ValueError('Unsupported commander encoding')
     if any(b['tick']-a['tick']!=75 for a,b in zip(rows,rows[1:])):raise ValueError('Missing strategy step')
     if not 0<=result['tick']-rows[-1]['tick']<=75:raise ValueError('Invalid terminal boundary')
     return {'path':str(path),'rows':rows,'reward':float(outcome=='W'),'outcome':outcome,
@@ -29,7 +29,7 @@ def read_episode(path):
       'encoderSha':manifest.get('sourceHashes',{}).get('src/commander/world.ts')}
 
 def load_model(artifact):
-    model=CommanderModel(artifact['vocabulary'])
+    model=CommanderModel(artifact['vocabulary'],artifact['encoding'])
     model.load_state_dict({name:torch.tensor(x['values'],dtype=torch.float32).reshape(x['shape']) for name,x in artifact['tensors'].items()})
     return model
 
@@ -61,6 +61,7 @@ def batch_steps(batch,model,args,train):
             else:
                 index=t-burn;r=rows[min(index,len(rows)-1)];exists=index<len(rows);active=exists and (not e.get('ppo') or r['executionSource']=='policy')
             label=training_action(r,args.method)
+            if args.method=='bc':label=canonical_action(label,r['world'],model.encoding)
             worlds.append(r['world']);actions.append(label);valid.append(active);present.append(exists);returns.append(e['reward']);oldlog.append(r['logp']);adv.append(r.get('_advantage',0.))
             weights.append(event_weight(label,getattr(args,'bc_event_weight',1)) if train and args.method=='bc' and getattr(args,'bc_loss','legacy')=='legacy' else 1.)
     d=pack(worlds,model.vocabulary);a=pack_actions(actions,d);b=len(batch)
@@ -106,20 +107,22 @@ def golden(model,episodes,path):
     samples=[];h=torch.zeros(1,HIDDEN)
     with torch.no_grad():
         for r in selected:
-            w=r['world'];d=pack([w],model.vocabulary);a=pack_actions([r['action']],d);before=h[0].tolist();p=model(d,h,a,True)
+            w=r['world'];action=canonical_action(r['action'],w,model.encoding);d=pack([w],model.vocabulary);a=pack_actions([action],d);before=h[0].tolist();p=model(d,h,a,True)
             probs={k:(v[0,:len(w['unitRefs'])].tolist() if k=='unit' else v[0,:len(w['buildingRefs'])].tolist() if k=='building' else v[0].tolist() if v.ndim==3 else v[:,:len(w['placementObjects'])+1].tolist() if k.startswith('place') else v.tolist()) for k,v in p['probabilities'].items()}
-            samples.append({'world':w,'action':r['action'],'hidden':before,'expected':{'logp':p['logp'].item(),'value':p['value'].item(),'hidden':p['hidden'][0].tolist(),'probabilities':probs}});h=p['hidden']
+            samples.append({'world':w,'action':action,'hidden':before,'expected':{'logp':p['logp'].item(),'value':p['value'].item(),'hidden':p['hidden'][0].tolist(),'probabilities':probs}});h=p['hidden']
     path.write_text(json.dumps(samples)+'\n')
 
 def main():
     ap=argparse.ArgumentParser();ap.add_argument('method',choices=['bc','ppo']);ap.add_argument('--episodes',required=True);ap.add_argument('--input');ap.add_argument('--out',required=True);ap.add_argument('--seed',type=int,default=47)
     ap.add_argument('--epochs',type=int);ap.add_argument('--batch',type=int,default=4);ap.add_argument('--sequence',type=int,default=16);ap.add_argument('--burn',type=int,default=8);ap.add_argument('--threads',type=int,default=1)
-    ap.add_argument('--bc-event-weight',type=float,default=32.);ap.add_argument('--bc-loss',choices=['legacy','factor'],default='factor');ap.add_argument('--max-updates',type=int);ap.add_argument('--entropy',type=float,default=.001);ap.add_argument('--checkpoints',type=int,nargs='*',default=[]);args=ap.parse_args()
+    ap.add_argument('--bc-event-weight',type=float,default=32.);ap.add_argument('--bc-loss',choices=['legacy','factor'],default='factor');ap.add_argument('--max-updates',type=int);ap.add_argument('--entropy',type=float,default=.001);ap.add_argument('--checkpoints',type=int,nargs='*',default=[])
+    ap.add_argument('--action-encoding',choices=['graph-plan-v1','graph-plan-v2']);ap.add_argument('--validation-fraction',type=float,default=.2);args=ap.parse_args()
+    if not 0<=args.validation_fraction<1:raise ValueError('Invalid validation fraction')
     world_size=int(os.environ.get('WORLD_SIZE','1'));rank=int(os.environ.get('RANK','0'))
     torch.set_num_threads(args.threads)
     if world_size>1:dist.init_process_group('gloo',timeout=datetime.timedelta(minutes=10))
     training_started=time.monotonic();paths=json.loads(Path(args.episodes).read_text());random.Random(args.seed).shuffle(paths)
-    validation_paths=paths[-max(1,len(paths)//5):] if args.method=='bc' else []
+    validation_paths=paths[-max(1,int(len(paths)*args.validation_fraction)):] if args.method=='bc' and args.validation_fraction else []
     train_paths=paths[:-len(validation_paths)] if validation_paths else paths
     # Balance whole episodes by measured length. No rank loads all other ranks' raw journals.
     shards=[[] for _ in range(world_size)];loads=[0]*world_size
@@ -142,9 +145,13 @@ def main():
         if args.method=='ppo':raise ValueError('PPO needs a behavior checkpoint')
         local_names={n for e in train for r in e['rows'] for f in ['entityNames','productNames','goalNames'] for n in r['world'][f] if n}
         vocabulary=sorted({n for names in all_objects(list(local_names),world_size) for n in names});model=CommanderModel(vocabulary)
+    if args.action_encoding:
+        if args.method=='ppo' and args.action_encoding!=model.encoding:raise ValueError('PPO cannot change behavior encoding')
+        model.encoding=args.action_encoding
     if args.method=='ppo':
         expected=hashlib.sha256(Path(args.input).read_bytes()).hexdigest()
         if any(e['modelSha']!=expected for e in train):raise ValueError('Mixed behavior checkpoints')
+        if any(r['encoding']!=model.encoding for e in train for r in e['rows']):raise ValueError('PPO behavior encoding mismatch')
         values=np.asarray([e['reward']-r['value'] for e in train for r in e['rows'] if r['executionSource']=='policy'])
         moments=torch.tensor([values.sum(),(values**2).sum(),len(values)],dtype=torch.float64)
         if world_size>1:dist.all_reduce(moments)
@@ -213,13 +220,14 @@ def main():
                 for start in range(0,len(e['rows']),args.sequence):
                     r=batch_steps([(e,[],e['rows'][start:start+args.sequence],h)],model,args,False)
                     losses.append(float(r[0]));h=r[3][0].tolist()
-        metrics={'sequenceLoss':float(np.mean(losses)),'windows':len(losses),'scope':'Continuous held-out whole-game forward states; not playing strength'}
+        metrics={'sequenceLoss':float(np.mean(losses)),'windows':len(losses),'scope':'Per-invocation whole-episode split; warm starts may already have seen these sources; not independent holdout or playing strength'}
     out=Path(args.out);out.parent.mkdir(parents=True,exist_ok=True)
     metadata={'method':args.method,'seed':args.seed,'git':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),
       'trainerSha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),'modelCodeSha256':hashlib.sha256(Path(__file__).with_name('commander_model.py').read_bytes()).hexdigest(),
       'encoderSha256':next(iter(hashes)),'worldSize':world_size,'localBatch':args.batch,'globalBatch':args.batch*world_size,'windowCounts':window_counts,
       'padding':'Zero-loss empty ranks, no repeated training windows','bcEventWeight':args.bc_event_weight,'bcMemory':'Chronological whole episodes with detached carried hidden state',
       'bcLoss':args.bc_loss,'bcFactorNormalization':'Per frame: mean across active domains; changed factors weighted directly; one mean KEEP negative per domain; global valid-frame DDP mean',
+      'encoding':model.encoding,'validationFraction':args.validation_fraction,'labelAdapter':'v2 confirms retained members on task retyping and canonicalizes redundant same-role assignments',
       'trainingEpisodes':[p for d in details for p in d['paths']],'validationEpisodes':validation,'excluded':[p for d in details for p in d['excluded']],
       'inputSha256':hashlib.sha256(Path(args.input).read_bytes()).hexdigest() if args.input else None,
       'labels':'BC uses explicit teacherAction where recorded; PPO uses executed action only',

@@ -74,8 +74,8 @@ def summary(x,mask):
     return torch.cat([mean,maximum],-1)
 
 class CommanderModel(nn.Module):
-    def __init__(self,vocabulary):
-        super().__init__();self.vocabulary=vocabulary
+    def __init__(self,vocabulary,encoding='graph-plan-v2'):
+        super().__init__();self.vocabulary=vocabulary;self.encoding=encoding
         self.names=nn.Embedding(len(vocabulary)+1,16)
         self.entity0=nn.Linear(80,64);self.entity1=nn.Linear(128,64)
         self.region0=nn.Linear(16,32);self.region1=nn.Linear(64,32)
@@ -180,6 +180,13 @@ class CommanderModel(nn.Module):
         previous=d['previousRole'];previous_allowed=allowed.gather(-1,previous.clamp_max(SLOTS-1).unsqueeze(-1)).squeeze(-1)
         special=torch.stack([torch.ones_like(previous,dtype=torch.bool),d['unitCap'][:,:,2],(previous>=SLOTS)|previous_allowed,torch.ones_like(previous,dtype=torch.bool)],-1)
         um=torch.cat([allowed,special],-1)
+        if self.encoding=='graph-plan-v2':
+            before=d['previousKind'].gather(1,previous.clamp_max(SLOTS-1))
+            after=actual_kind.gather(1,previous.clamp_max(SLOTS-1))
+            changed=(previous<SLOTS)&(before!=after)
+            um[:,:,18]&=~changed
+            duplicate=(previous!=17)&um[:,:,18]
+            um=um&~(torch.nn.functional.one_hot(previous,20).bool()&duplicate[:,:,None])
         choice('unit',ul,um,a['units'],valid=d['unitIndexMask'],keep=18)
         building_e=gather_rows(e,d['buildingIndex']);bq=torch.tanh(self.building0(torch.cat([building_e,h[:,None].expand(-1,building_e.shape[1],-1)],-1)))
         bm=torch.stack([torch.ones_like(d['buildingCap'][:,:,0]),d['buildingCap'][:,:,0],d['buildingCap'][:,:,0],d['buildingCap'][:,:,1]],-1)
@@ -206,7 +213,7 @@ class CommanderModel(nn.Module):
 
 def export(model,path,metadata):
     import json,hashlib
-    artifact={'format':'warbook-commander-model-v1','schema':'commander-v1','encoding':'graph-plan-v1','hidden':HIDDEN,
+    artifact={'format':'warbook-commander-model-v1','schema':'commander-v1','encoding':model.encoding,'hidden':HIDDEN,
       'vocabulary':model.vocabulary,'tensors':{name:{'shape':list(t.shape),'values':t.detach().cpu().reshape(-1).tolist()} for name,t in model.state_dict().items()},'training':metadata}
     path.write_text(json.dumps(artifact,separators=(',',':'))+'\n')
     return hashlib.sha256(path.read_bytes()).hexdigest()

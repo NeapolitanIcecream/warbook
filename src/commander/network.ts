@@ -3,17 +3,17 @@ import "@tensorflow/tfjs-backend-cpu";
 import type { CommanderPolicy, CommanderPrediction } from "./controller.js";
 import {
   goalMask,
-  roleMask,
   TASK_SLOTS,
   TASK_KINDS,
   type CommanderAction,
   type CommanderWorld,
 } from "./world.js";
+import { commanderRoleMask, type CommanderEncoding } from "./action-mask.js";
 
 export interface CommanderModel {
   format: "warbook-commander-model-v1";
   schema: "commander-v1";
-  encoding: "graph-plan-v1";
+  encoding: CommanderEncoding;
   hidden: number;
   vocabulary: string[];
   tensors: Record<string, { shape: number[]; values: number[] }>;
@@ -26,6 +26,9 @@ export async function prepareCommander() {
 
 /** Mirrors the small PyTorch model; recurrent state belongs to each game controller. */
 export class NeuralCommanderPolicy implements CommanderPolicy {
+  get encoding() {
+    return this.artifact.encoding;
+  }
   readonly hiddenSize: number;
   private tensors: Record<string, tf.Tensor> = {};
   private names: Map<string, number>;
@@ -36,7 +39,7 @@ export class NeuralCommanderPolicy implements CommanderPolicy {
     if (
       artifact.format !== "warbook-commander-model-v1" ||
       artifact.schema !== "commander-v1" ||
-      artifact.encoding !== "graph-plan-v1" ||
+      !["graph-plan-v1", "graph-plan-v2"].includes(artifact.encoding) ||
       artifact.hidden !== 128
     )
       throw new Error("Unsupported commander artifact");
@@ -105,15 +108,23 @@ export class NeuralCommanderPolicy implements CommanderPolicy {
         if (!edges.length) return tf.zerosLike(x) as tf.Tensor2D;
         // CPU UnsortedSegmentSum loops over every segment. The existing sparse
         // kernel visits edges directly; sorting preserves their within-node order.
-        const sorted = [...edges].sort((a,b)=>a[1]-b[1]);
+        const sorted = [...edges].sort((a, b) => a[1] - b[1]);
         let data = x;
-        if(sorted.at(-1)![1]!==x.shape[0]-1) {
-          data=tf.concat([x,tf.zeros([1,x.shape[1]])],0) as tf.Tensor2D;
-          sorted.push([x.shape[0],x.shape[0]-1]);
+        if (sorted.at(-1)![1] !== x.shape[0] - 1) {
+          data = tf.concat([x, tf.zeros([1, x.shape[1]])], 0) as tf.Tensor2D;
+          sorted.push([x.shape[0], x.shape[0] - 1]);
         }
-        return tf.sparse.sparseSegmentMean(data,
-          tf.tensor1d(sorted.map(e=>e[0]),"int32"),
-          tf.tensor1d(sorted.map(e=>e[1]),"int32")) as tf.Tensor2D;
+        return tf.sparse.sparseSegmentMean(
+          data,
+          tf.tensor1d(
+            sorted.map((e) => e[0]),
+            "int32",
+          ),
+          tf.tensor1d(
+            sorted.map((e) => e[1]),
+            "int32",
+          ),
+        ) as tf.Tensor2D;
       };
       const summary = (x: tf.Tensor2D, n: number) =>
         n
@@ -364,7 +375,9 @@ export class NeuralCommanderPolicy implements CommanderPolicy {
       a.units = choose(
         "unit",
         tf.div(tf.matMul(uq, roleKeys, false, true), 8) as tf.Tensor2D,
-        w.unitRefs.map((_, i) => roleMask(w, i, a.kinds)),
+        w.unitRefs.map((_, i) =>
+          commanderRoleMask(w, i, a.kinds, this.encoding),
+        ),
         forced?.units,
       );
       const bq = dense(

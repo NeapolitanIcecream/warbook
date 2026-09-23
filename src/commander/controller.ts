@@ -13,6 +13,7 @@ import {
   COMMANDER_SCHEMA,
 } from "./teacher.js";
 import { ProgramController } from "./program.js";
+import type { CommanderEncoding } from "./action-mask.js";
 import {
   buildWorld,
   ContactMemory,
@@ -32,6 +33,7 @@ export interface CommanderPrediction {
 }
 export interface CommanderPolicy {
   readonly hiddenSize: number;
+  readonly encoding?: CommanderEncoding;
   predict(
     world: CommanderWorld,
     hidden: readonly number[],
@@ -42,7 +44,7 @@ export interface CommanderPolicy {
 }
 export interface CommanderRecord {
   schema: typeof COMMANDER_SCHEMA;
-  encoding: "graph-plan-v1";
+  encoding: CommanderEncoding;
   tick: number;
   world: CommanderWorld;
   action: CommanderAction;
@@ -59,7 +61,10 @@ export interface CommanderRecord {
 export class FullCommander implements StrategicController {
   readonly id = "full-commander-v1";
   readonly observationScope = "commander-v1" as const;
-  private program = new ProgramController();
+  private program: ProgramController;
+  get encoding() {
+    return this.program.encoding;
+  }
   private memory = new ContactMemory();
   private teacher?: CommanderTeacher;
   private random: () => number;
@@ -73,6 +78,7 @@ export class FullCommander implements StrategicController {
     private prefixUntil = 0,
     private daggerBeta?: number,
   ) {
+    this.program = new ProgramController(policy?.encoding ?? "graph-plan-v2");
     if (
       daggerBeta !== undefined &&
       (!policy ||
@@ -153,7 +159,7 @@ export class FullCommander implements StrategicController {
       this.program.apply(o, world, action);
       this.record = {
         schema: COMMANDER_SCHEMA,
-        encoding: "graph-plan-v1",
+        encoding: this.encoding,
         tick: o.tick,
         world,
         action,

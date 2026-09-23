@@ -18,12 +18,12 @@ import {
   goalMask,
   initialProgram,
   keepAction,
-  roleMask,
   type CommanderAction,
   type CommanderWorld,
   type Goal,
   type ProgramState,
 } from "./world.js";
+import { commanderRoleMask, type CommanderEncoding } from "./action-mask.js";
 
 const sameGoal = (a?: Goal, b?: Goal) =>
   !!a === !!b &&
@@ -35,6 +35,10 @@ const sameGoal = (a?: Goal, b?: Goal) =>
       a.ref === b.ref &&
       (a.kind === "native") === (b.kind === "native")));
 export class ProgramController {
+  constructor(readonly encoding: CommanderEncoding = "graph-plan-v2") {}
+  private roleMask(w: CommanderWorld, i: number, kinds: readonly number[]) {
+    return commanderRoleMask(w, i, kinds, this.encoding);
+  }
   readonly state: ProgramState = initialProgram();
   private teacherSlots = new Map<string, number>();
   private revisions = Array.from(
@@ -125,10 +129,10 @@ export class ProgramController {
     w.unitRefs.forEach((ref, i) => {
       const role = roles.get(ref) ?? UNASSIGNED;
       a.units[i] =
-        role === w.previousRoles[i] && roleMask(w, i, a.kinds)[KEEP_UNIT]
+        role === w.previousRoles[i] && this.roleMask(w, i, a.kinds)[KEEP_UNIT]
           ? KEEP_UNIT
           : role;
-      if (!roleMask(w, i, a.kinds)[a.units[i]])
+      if (!this.roleMask(w, i, a.kinds)[a.units[i]])
         throw new Error(`Unsupported teacher assignment ${ref}/${role}`);
     });
     for (const desiredQueue of desired.production.program.queues) {
@@ -214,7 +218,7 @@ export class ProgramController {
     }
     for (const ref of o.ownDepartures ?? []) this.state.roles.delete(ref);
     w.unitRefs.forEach((ref, i) => {
-      if (!roleMask(w, i, a.kinds)[a.units[i]])
+      if (!this.roleMask(w, i, a.kinds)[a.units[i]])
         throw new Error("Invalid unit role");
       const role = a.units[i] === KEEP_UNIT ? w.previousRoles[i] : a.units[i];
       if (role === UNASSIGNED) this.state.roles.delete(ref);

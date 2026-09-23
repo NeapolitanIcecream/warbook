@@ -1,5 +1,5 @@
 import unittest
-from commander_sequence import stream_batches,unique_batches,event_weight,training_action
+from commander_sequence import stream_batches,unique_batches,event_weight,training_action,canonical_action
 
 class SequenceTests(unittest.TestCase):
     def test_adjacent_chunks_carry_episode_identity_and_use_every_frame_once(self):
@@ -21,5 +21,11 @@ class SequenceTests(unittest.TestCase):
         self.assertEqual(training_action(row,'bc'),{'units':[17]})
         self.assertEqual(training_action(row,'ppo'),{'units':[18]})
         self.assertEqual(row['action'],{'units':[18]})
+    def test_v2_migration_preserves_explicit_teacher_membership_semantics(self):
+        world={'previousRoles':[2,3,19],'previousKinds':[0,0,8,4]+[0]*12}
+        action={'kinds':[0,0,6,0]+[0]*12,'units':[18,3,19]}
+        self.assertEqual(canonical_action(action,world,'graph-plan-v2')['units'],[2,18,18])
+        self.assertEqual(action['units'],[18,3,19])
+        self.assertIs(canonical_action(action,world,'graph-plan-v1'),action)
 
 if __name__=='__main__':unittest.main()
