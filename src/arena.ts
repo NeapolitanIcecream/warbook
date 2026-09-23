@@ -183,6 +183,7 @@ export async function runArena(options: {
   map: string;
   tanks: number;
   unitCount: number;
+  swap?: boolean;
   policies: [ArenaPolicy, ArenaPolicy];
   decisionPeriod?: number;
   maxBattleTicks?: number;
@@ -210,7 +211,7 @@ export async function runArena(options: {
       credits: 0,
       unitCount: options.unitCount,
       buildOffAlly: false,
-      agents: [...bots],
+      agents: options.swap ? [...bots].reverse() : [...bots],
     });
     const army = bots.map((b) =>
       b
@@ -369,6 +370,7 @@ export async function runArena(options: {
       center: { x: center.x, y: center.y },
       radius,
       nativeUnitCount: options.unitCount,
+      swappedCreationOrder: !!options.swap,
       scope:
         "Local task result, not an ordinary full-game victory; preparation simulation cost included",
     };

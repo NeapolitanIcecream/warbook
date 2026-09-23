@@ -156,6 +156,8 @@ def main():
     if world_size>1:objective=DistributedDataParallel(objective,broadcast_buffers=False)
     optimizer=torch.optim.Adam(model.parameters(),lr=3e-4 if args.method=='bc' else 1e-4)
     if args.method=='ppo' and Path(args.input).with_suffix('.optimizer.pt').exists():optimizer.load_state_dict(torch.load(Path(args.input).with_suffix('.optimizer.pt'),weights_only=True,map_location='cpu'))
+    # Restoring Adam moments must not silently restore the BC learning rate for PPO.
+    for group in optimizer.param_groups:group['lr']=3e-4 if args.method=='bc' else 1e-4
     samples=windows(train,args.sequence,args.burn)
     window_counts=all_objects(len(samples),world_size)
     history=[];updates=0;epochs=args.epochs or (12 if args.method=='bc' else 3)
