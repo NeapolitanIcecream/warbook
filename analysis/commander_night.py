@@ -4,6 +4,12 @@ from pathlib import Path
 from launch_batch import atomic
 from experiment_storage import require_batch_space
 
+def next_learning_state(stage,incumbent,candidate,old_wins,new_wins,threshold):
+    ready=stage=='ppo' or max(old_wins,new_wins)>=threshold
+    retained=candidate if new_wins>old_wins else incumbent
+    current=(candidate if new_wins>=old_wins else incumbent) if ready else candidate
+    return current,retained,'ppo' if ready else 'bc'
+
 def main():
     ap=argparse.ArgumentParser();ap.add_argument('plan');ap.add_argument('--out',required=True);args=ap.parse_args()
     plan=json.loads(Path(args.plan).read_text());root=Path(args.out).resolve();root.mkdir(parents=True,exist_ok=True)
@@ -76,11 +82,10 @@ def main():
                 episodes=new if learning else [*plan['anchors'][p['route']],*[x for chunk in recent for x in chunk]]
                 candidate=train(p,episodes,p['current'],d/'candidate.json','ppo' if learning else 'bc',plan.get('updates',400))
                 check=batch(d/'check',{'incumbent':spec(p,p['retained']),'candidate':spec(p,candidate)},opponents,1,plan.get('workersPerProfile',16),20000+cycle*37+p['seed'])
-                old=check['counts']['incumbent']['W'];won=check['counts']['candidate']['W'];kept=candidate if won>old else p['retained']
+                old=check['counts']['incumbent']['W'];won=check['counts']['candidate']['W']
                 # Bootstrap can make useful partial progress before first wins; RL
                 # keeps the directly compared incumbent when its update regresses.
-                current=candidate if not learning or won>=old else p['retained']
-                stage='ppo' if p['stage']=='ppo' or max(old,won)>=plan.get('readyWins',4) else 'bc'
+                current,kept,stage=next_learning_state(p['stage'],p['retained'],candidate,old,won,plan.get('readyWins',4))
                 return name,{**p,'current':current,'retained':kept,'recent':recent,'stage':stage}, {'cycle':cycle,'name':name,'method':'ppo' if learning else 'dagger-bc','sampling':sampling['counts'],'check':check['counts'],'candidate':candidate,'retained':kept,'games':sampling['completed']+check['completed']}
             with concurrent.futures.ThreadPoolExecutor(max_workers=len(profiles)) as ex:
                 results=list(ex.map(step,list(profiles)))
