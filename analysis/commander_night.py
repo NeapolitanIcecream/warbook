@@ -4,6 +4,22 @@ from pathlib import Path
 from launch_batch import atomic
 from experiment_storage import require_batch_space
 
+class TrainingBoundary(TimeoutError):pass
+
+def verified_candidate_receipts(root):
+    result={}
+    for path in Path(root).rglob('candidate-verified.json'):
+        row=json.loads(path.read_text())
+        if row['name'] not in result or row['cycle']>result[row['name']]['cycle']:result[row['name']]=row
+    for row in result.values():
+        model=Path(row['model'])
+        if not model.resolve().is_relative_to(Path(root).resolve()):raise ValueError('Candidate outside this experiment')
+        if hashlib.sha256(model.read_bytes()).hexdigest()!=row['sha256']:raise ValueError('Candidate receipt hash changed')
+    return result
+
+def completed_games(root):
+    return sum(json.loads(p.read_text())['completed'] for p in Path(root).rglob('batch-complete.json'))
+
 def next_learning_state(stage,incumbent,candidate,old_wins,new_wins,threshold):
     ready=stage=='ppo' or max(old_wins,new_wins)>=threshold
     retained=candidate if new_wins>old_wins else incumbent
@@ -16,19 +32,23 @@ def main():
     if (root/'state.json').exists():raise ValueError('Use a fresh night directory; never append interrupted runs')
     node=os.environ.get('WARBOOK_NODE','node');python=sys.executable
     cutoff=datetime.datetime.fromisoformat(plan['trainingCutoff']).timestamp();end=datetime.datetime.fromisoformat(plan['hardDeadline']).timestamp()
+    phase_end=datetime.datetime.fromisoformat(plan.get('trainingPhaseDeadline',plan['trainingCutoff'])).timestamp()
     state={'phase':'initializing','profiles':{},'history':[],'games':0,'source':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'startedAt':time.time()}
     atomic(root/'plan.json',plan)
     def save():atomic(root/'state.json',state)
     def command(cmd,log):
-        remaining=end-time.time()
-        if remaining<30:raise TimeoutError('Hard deadline reached')
+        training=state['phase']!='final-evaluation'
+        remaining=(min(end,phase_end) if training else end)-time.time()
+        if remaining<30:raise TrainingBoundary('Training phase deadline') if training else TimeoutError('Hard deadline reached')
         with Path(log).open('w') as f:
             p=subprocess.Popen(cmd,stdout=f,stderr=subprocess.STDOUT,start_new_session=True)
             try:code=p.wait(timeout=remaining)
-            except BaseException:
-                os.killpg(p.pid,signal.SIGTERM)
+            except BaseException as error:
+                try:os.killpg(p.pid,signal.SIGTERM)
+                except ProcessLookupError:pass
                 try:p.wait(timeout=10)
                 except subprocess.TimeoutExpired:os.killpg(p.pid,signal.SIGKILL);p.wait()
+                if training and isinstance(error,subprocess.TimeoutExpired):raise TrainingBoundary('Training phase deadline') from error
                 raise
         if code:raise RuntimeError(f'Command failed ({code}); see {log}')
     def parity(model,log):command([node,'--import','tsx','scripts/check-commander-model.ts',str(model),str(Path(model).with_suffix('.golden.json'))],log)
@@ -44,6 +64,7 @@ def main():
         atomic(directory/'plan.json',p);command([python,'analysis/launch_batch.py',str(directory/'plan.json'),'--out',str(directory/'games')],directory/'batch.log')
         s=json.loads((directory/'games/summary.json').read_text())
         if not s['complete'] or any(c['E'] for c in s['counts'].values()):raise RuntimeError('Incomplete/error batch cannot train or select')
+        atomic(directory/'batch-complete.json',{'completed':s['completed'],'counts':s['counts'],'at':time.time()})
         return s
     def train(profile,episodes,source,target,method,updates):
         episode_file=target.with_suffix('.episodes.json');atomic(episode_file,episodes)
@@ -81,26 +102,40 @@ def main():
                 recent=[*p['recent'],new][-2:]
                 episodes=new if learning else [*plan['anchors'][p['route']],*[x for chunk in recent for x in chunk]]
                 candidate=train(p,episodes,p['current'],d/'candidate.json','ppo' if learning else 'bc',plan.get('updates',400))
+                atomic(d/'candidate-verified.json',{'name':name,'cycle':cycle,'model':candidate,'sha256':hashlib.sha256(Path(candidate).read_bytes()).hexdigest(),'encoding':p['encoding'],'verifiedAt':time.time(),'source':state['source']})
                 check=batch(d/'check',{'incumbent':spec(p,p['retained']),'candidate':spec(p,candidate)},opponents,1,plan.get('workersPerProfile',16),20000+cycle*37+p['seed'])
                 old=check['counts']['incumbent']['W'];won=check['counts']['candidate']['W']
                 # Bootstrap can make useful partial progress before first wins; RL
                 # keeps the directly compared incumbent when its update regresses.
                 current,kept,stage=next_learning_state(p['stage'],p['retained'],candidate,old,won,plan.get('readyWins',4))
-                return name,{**p,'current':current,'retained':kept,'recent':recent,'stage':stage}, {'cycle':cycle,'name':name,'method':'ppo' if learning else 'dagger-bc','sampling':sampling['counts'],'check':check['counts'],'candidate':candidate,'retained':kept,'games':sampling['completed']+check['completed']}
+                updated={**p,'current':current,'retained':kept,'recent':recent,'stage':stage}
+                row={'cycle':cycle,'name':name,'method':'ppo' if learning else 'dagger-bc','sampling':sampling['counts'],'check':check['counts'],'candidate':candidate,'retained':kept,'games':sampling['completed']+check['completed']}
+                atomic(d/'profile-complete.json',{'profile':updated,'result':row})
+                return name,updated,row
+            boundary=False;failures=[]
             with concurrent.futures.ThreadPoolExecutor(max_workers=len(profiles)) as ex:
-                results=list(ex.map(step,list(profiles)))
-            for name,p,row in results:profiles[name]=p;state['history'].append(row);state['games']+=row['games']
+                futures={ex.submit(step,name):name for name in profiles}
+                for future in concurrent.futures.as_completed(futures):
+                    try:
+                        name,p,row=future.result();profiles[name]=p;state['history'].append(row)
+                    except TrainingBoundary:boundary=True
+                    except Exception as error:failures.append({'name':futures[future],'error':str(error)})
+                    state['games']=completed_games(root);state['pending']=verified_candidate_receipts(root);save()
+            if failures:state['failures']=failures;save();raise RuntimeError('A profile failed; verified candidates are preserved')
             state['phase']='cycle-complete';save()
+            if boundary:state['stopReason']='Training phase deadline; finalize verified models';break
         state['phase']='final-evaluation';save()
         final_counts={}
+        pending=verified_candidate_receipts(root)
         for name,p in state['profiles'].items():
             subjects={};seen=set()
-            for which in ['initial','current','retained']:
-                model=p[which];key=hashlib.sha256(Path(model).read_bytes()).hexdigest()
+            candidates={'initial':p['initial'],'retained':p['retained'],'latest-verified':pending.get(name,{}).get('model',p['current'])}
+            for which,model in candidates.items():
+                key=hashlib.sha256(Path(model).read_bytes()).hexdigest()
                 if key in seen:continue
                 seen.add(key);subjects[name+'-'+which]=spec(p,model)
             opponents={'supalosa':{'native':'supalosa'},'main-rule':{'ref':'v0.1.16','mode':'bastion'},'pressure-rule':{'ref':'v0.1.16','mode':'pressure'},'strong-history':{'release':plan['strongReference']}}
-            final=batch(root/'final'/name,subjects,opponents,2,plan.get('finalWorkers',96),29024);state['games']+=final['completed'];final_counts.update(final['counts']);state['final']=final_counts;save()
+            final=batch(root/'final'/name,subjects,opponents,2,plan.get('finalWorkers',96),29024);state['games']=completed_games(root);final_counts.update(final['counts']);state['final']=final_counts;save()
         state.update(phase='complete',finishedAt=time.time());save()
     except BaseException as error:
         state.update(phase='stopped',error=str(error),finishedAt=time.time());save();raise

@@ -136,6 +136,32 @@ test("retyping a mining task requires an explicit member choice, without banning
   assert.equal(mask[KEEP_UNIT], true);
 });
 
+test("a temporarily absent miner does not inherit a retyped task on return", () => {
+  const o = observation(),
+    miner = unit("miner", { name: "CMIN", harvester: true });
+  o.own = [miner];
+  const p = new ProgramController(),
+    w0 = buildWorld(o, p.state, new ContactMemory()),
+    a0 = keepAction(w0);
+  a0.kinds[0] = 8;
+  a0.units[0] = 0;
+  p.apply(o, w0, a0);
+  o.own = [];
+  o.tick = 75;
+  const w = buildWorld(o, p.state, new ContactMemory()),
+    a = keepAction(w);
+  a.kinds[0] = 6;
+  a.goals[0] = 1;
+  p.apply(o, w, a);
+  o.own = [miner];
+  o.tick = 150;
+  const plan = p.plan(o);
+  assert(!plan.combat.units.includes("miner"));
+  const native = plan.additionalCombat?.find((m) => m.units.includes("miner"));
+  assert.equal(native?.objective, "preserve-native");
+  assert.deepEqual(new CommanderTactics().control(o, native!, []).intents, []);
+});
+
 test("an explicit plan does not invent power, repairs or army production", () => {
   const o = observation();
   o.own = [

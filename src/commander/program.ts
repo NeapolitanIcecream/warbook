@@ -197,6 +197,17 @@ export class ProgramController {
       if (!Number.isInteger(k) || k < 0 || k >= TASK_KINDS.length)
         throw new Error("Invalid task kind");
       if (!k) continue;
+      if (
+        this.encoding === "graph-plan-v2" &&
+        (!this.state.slots[i].active ||
+          this.state.slots[i].kind !== TASK_KINDS[k])
+      ) {
+        // Docked/transported units have no action row this step. Do not silently
+        // enroll them in a new job when they return; retain their native command.
+        const visible = new Set(w.unitRefs);
+        for (const [ref, role] of this.state.roles)
+          if (role === i && !visible.has(ref)) this.state.roles.delete(ref);
+      }
       if (k === 1) {
         this.state.slots[i].active = false;
         continue;
