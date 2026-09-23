@@ -62,7 +62,7 @@ def batch_steps(batch,model,args,train):
                 index=t-burn;r=rows[min(index,len(rows)-1)];exists=index<len(rows);active=exists and (not e.get('ppo') or r['executionSource']=='policy')
             label=training_action(r,args.method)
             worlds.append(r['world']);actions.append(label);valid.append(active);present.append(exists);returns.append(e['reward']);oldlog.append(r['logp']);adv.append(r.get('_advantage',0.))
-            weights.append(event_weight(label,getattr(args,'bc_event_weight',1)) if train and args.method=='bc' else 1.)
+            weights.append(event_weight(label,getattr(args,'bc_event_weight',1)) if train and args.method=='bc' and getattr(args,'bc_loss','legacy')=='legacy' else 1.)
     d=pack(worlds,model.vocabulary);a=pack_actions(actions,d);b=len(batch)
     valid=torch.tensor(valid,dtype=torch.bool).reshape(burn+length,b);present=torch.tensor(present,dtype=torch.bool).reshape(burn+length,b)
     ret=torch.tensor(returns,dtype=torch.float32).reshape(burn+length,b);weights=torch.tensor(weights,dtype=torch.float32).reshape(burn+length,b)
@@ -76,7 +76,7 @@ def batch_steps(batch,model,args,train):
         if t<burn:
             with torch.no_grad():p=model(dt,h,at,encoded=et)
             h=torch.where(present[t,:,None],p['hidden'],h).detach();continue
-        p=model(dt,h,at,encoded=et);h=torch.where(present[t,:,None],p['hidden'],h);active=valid[t]
+        p=model(dt,h,at,encoded=et,bc_factor_boost=getattr(args,'bc_event_weight',32.) if args.method=='bc' and getattr(args,'bc_loss','legacy')=='factor' else 0.);h=torch.where(present[t,:,None],p['hidden'],h);active=valid[t]
         if not active.any():continue
         if args.method=='bc':policy=(p['bcLoss']*weights[t])[active].mean();kl=policy.detach()*0
         else:
@@ -114,7 +114,7 @@ def golden(model,episodes,path):
 def main():
     ap=argparse.ArgumentParser();ap.add_argument('method',choices=['bc','ppo']);ap.add_argument('--episodes',required=True);ap.add_argument('--input');ap.add_argument('--out',required=True);ap.add_argument('--seed',type=int,default=47)
     ap.add_argument('--epochs',type=int);ap.add_argument('--batch',type=int,default=4);ap.add_argument('--sequence',type=int,default=16);ap.add_argument('--burn',type=int,default=8);ap.add_argument('--threads',type=int,default=1)
-    ap.add_argument('--bc-event-weight',type=float,default=1.);ap.add_argument('--max-updates',type=int);ap.add_argument('--entropy',type=float,default=.001);ap.add_argument('--checkpoints',type=int,nargs='*',default=[]);args=ap.parse_args()
+    ap.add_argument('--bc-event-weight',type=float,default=32.);ap.add_argument('--bc-loss',choices=['legacy','factor'],default='factor');ap.add_argument('--max-updates',type=int);ap.add_argument('--entropy',type=float,default=.001);ap.add_argument('--checkpoints',type=int,nargs='*',default=[]);args=ap.parse_args()
     world_size=int(os.environ.get('WORLD_SIZE','1'));rank=int(os.environ.get('RANK','0'))
     torch.set_num_threads(args.threads)
     if world_size>1:dist.init_process_group('gloo',timeout=datetime.timedelta(minutes=10))
@@ -194,7 +194,7 @@ def main():
             if rank==0:
                 base=Path(args.out);base.parent.mkdir(parents=True,exist_ok=True);checkpoint=base.with_name(base.stem+f'-after-{epoch+1}.json')
                 info={'method':args.method,'seed':args.seed,'epochs':epoch+1,'updates':updates,'encoderSha256':next(iter(hashes)),
-                    'worldSize':world_size,'sequence':args.sequence,'burnIn':args.burn,'bcEventWeight':args.bc_event_weight,'bcMemory':'continuous episode carry','objective':'terminal MC; checkpoint before final validation'}
+                    'worldSize':world_size,'sequence':args.sequence,'burnIn':args.burn,'bcEventWeight':args.bc_event_weight,'bcLoss':args.bc_loss,'bcMemory':'continuous episode carry','objective':'terminal MC; checkpoint before final validation'}
                 sha=export(model,checkpoint,info);torch.save(optimizer.state_dict(),checkpoint.with_suffix('.optimizer.pt'));golden(model,train,checkpoint.with_suffix('.golden.json'))
                 checkpoint.with_suffix('.done.json').write_text(json.dumps({'sha256':sha,'epoch':epoch+1,'updates':updates})+'\n')
             if world_size>1:dist.barrier()
@@ -219,6 +219,7 @@ def main():
       'trainerSha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),'modelCodeSha256':hashlib.sha256(Path(__file__).with_name('commander_model.py').read_bytes()).hexdigest(),
       'encoderSha256':next(iter(hashes)),'worldSize':world_size,'localBatch':args.batch,'globalBatch':args.batch*world_size,'windowCounts':window_counts,
       'padding':'Zero-loss empty ranks, no repeated training windows','bcEventWeight':args.bc_event_weight,'bcMemory':'Chronological whole episodes with detached carried hidden state',
+      'bcLoss':args.bc_loss,'bcFactorNormalization':'Per frame: mean across active domains; changed factors weighted directly; one mean KEEP negative per domain; global valid-frame DDP mean',
       'trainingEpisodes':[p for d in details for p in d['paths']],'validationEpisodes':validation,'excluded':[p for d in details for p in d['excluded']],
       'inputSha256':hashlib.sha256(Path(args.input).read_bytes()).hexdigest() if args.input else None,
       'labels':'BC uses explicit teacherAction where recorded; PPO uses executed action only',

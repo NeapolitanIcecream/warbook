@@ -103,11 +103,11 @@ class CommanderModel(nn.Module):
         x=torch.cat([d['global'],summary(e,d['entitiesMask']),summary(r,d['regionsMask']),summary(p,d['productsMask']),
                      summary(tasks,d['tasksMask']),d['queues'].flatten(1),self.names(d['queueIds']).flatten(1)],-1)
         return e,p,goals,places,tasks,torch.tanh(self.world0(x))
-    def forward(self,d,hidden,a,return_probabilities=False,encoded=None):
+    def forward(self,d,hidden,a,return_probabilities=False,encoded=None,bc_factor_boost=0.):
         e,p,g,places,tasks,x=self.encode_world(d) if encoded is None else encoded
         h=self.memory(x,hidden);b=len(h)
         zero=torch.zeros(b,dtype=h.dtype);logp=zero.double();entropy=zero;factors=zero;bc=zero;bc_weight=zero
-        probabilities={}
+        probabilities={};domains={}
         def choice(name,logits,mask,selected,valid=None,keep=None):
             nonlocal logp,entropy,factors,bc,bc_weight
             if valid is None:valid=torch.ones(selected.shape,dtype=torch.bool)
@@ -122,6 +122,16 @@ class CommanderModel(nn.Module):
             logp=logp+summed(lp*active);entropy=entropy+summed(ent*active);factors=factors+summed(active.float())
             weight=torch.where(selected!=keep,4.,1.) if keep is not None else torch.ones_like(ent)
             bc=bc+summed(-lp.float()*active*weight);bc_weight=bc_weight+summed(active*weight)
+            if bc_factor_boost:
+                domain='production' if name.startswith(('queue','amount','cash')) else 'tasks' if name in ['kind','goal','engagement'] else 'units' if name=='unit' else 'buildings' if name=='building' else 'placement'
+                keep_mask=active&(selected==keep) if keep is not None else torch.zeros_like(active)
+                changed=active&~keep_mask
+                importance=1.
+                if name=='unit':importance=torch.where(selected==17,float(bc_factor_boost),min(float(bc_factor_boost),4.))
+                elif name.startswith('place'):importance=min(float(bc_factor_boost),8.)
+                elif name.startswith('queue') or name in ['kind','building']:importance=min(float(bc_factor_boost),4.)
+                terms=(summed(-lp.float()*changed*importance),summed(-lp.float()*keep_mask),summed(changed.float()),summed(keep_mask.float()))
+                old=domains.get(domain,(zero,zero,zero,zero));domains[domain]=tuple(x+y for x,y in zip(old,terms))
             if return_probabilities:probabilities[name]=probs
             return selected
         context=torch.zeros((b,64),dtype=h.dtype)
@@ -180,8 +190,19 @@ class CommanderModel(nn.Module):
             pm=torch.cat([torch.ones((b,1),dtype=torch.bool),d['placementsMask']&(d['placementQueue']==q)],-1)
             choice(f'place{q}',pl,pm,a['placements'][:,q],keep=0)
         value=torch.sigmoid(self.value1(torch.tanh(self.value0(h)))).squeeze(-1)
+        if bc_factor_boost:
+            # Explicit per-frame objective: each domain has one aggregate KEEP
+            # negative plus each changed factor. The outer frame mean is exactly
+            # compatible with the trainer's global valid-frame DDP weighting.
+            domain_loss=zero;domain_count=zero
+            for changed_loss,keep_loss,changed_count,keep_count in domains.values():
+                count=changed_count+(keep_count>0)
+                domain_loss=domain_loss+(changed_loss+keep_loss/keep_count.clamp_min(1))/count.clamp_min(1)
+                domain_count=domain_count+(count>0)
+            bc_loss=domain_loss/domain_count.clamp_min(1)
+        else:bc_loss=bc/bc_weight.clamp_min(1)
         return {'logp':logp,'entropy':entropy/factors.clamp_min(1),'value':value,'hidden':h,
-                'bcLoss':bc/bc_weight.clamp_min(1),'factors':factors,'probabilities':probabilities}
+                'bcLoss':bc_loss,'factors':factors,'probabilities':probabilities}
 
 def export(model,path,metadata):
     import json,hashlib
