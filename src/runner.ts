@@ -83,6 +83,7 @@ const { values } = parseArgs({
     "commander-prefix": { type: "string", default: "0" },
     "commander-dagger-beta": { type: "string" },
     "tactical-model": { type: "string" },
+    "tactical-scope": { type: "string", default: "duel" },
     "launch-model": { type: "string" },
     "operation-scope": { type: "string" },
     "policy-seed": { type: "string", default: "0" },
@@ -130,6 +131,8 @@ async function main(): Promise<void> {
   let commanderNetwork: NeuralCommanderPolicy | undefined;
   let armorTactics: LearnedArmorTactics | undefined;
   if (values["tactical-model"]) {
+    if (!["duel", "ground"].includes(values["tactical-scope"]!))
+      throw new Error("Invalid armor scope");
     if (
       values["actor-release"] ||
       !["bastion", "pressure"].includes(values.mode!)
@@ -142,6 +145,7 @@ async function main(): Promise<void> {
       ),
       values["policy-seed"],
       true,
+      values["tactical-scope"] as "duel" | "ground",
     );
   }
   if (values["commander-policy"] === "model") {
@@ -334,10 +338,20 @@ async function main(): Promise<void> {
     (!values["commander-deterministic"] ||
       !values["commander-model"] ||
       prefix ||
+      daggerBeta !== undefined ||
       shadow.release.launchModelSha256 !== sha256(values["commander-model"]))
   )
     throw new Error(
       "Commander shadow requires identical weights, clock and deterministic execution",
+    );
+  if (
+    shadow &&
+    values["tactical-model"] &&
+    (shadow.release.tacticalModelSha256 !== sha256(values["tactical-model"]) ||
+      shadow.release.tacticalScope !== values["tactical-scope"])
+  )
+    throw new Error(
+      "Armor shadow requires identical weights and control scope",
     );
   const comparison = shadow ? new DecisionShadow() : undefined;
   const opponent =
@@ -402,7 +416,7 @@ async function main(): Promise<void> {
             schema: "armor-skill-v1",
             modelSha256: sha256(values["tactical-model"]),
             decisionPeriod: 15,
-            scope: "Basic armor in advance/defend contact; other roles fixed",
+            scope: values["tactical-scope"],
           },
         }
       : {}),

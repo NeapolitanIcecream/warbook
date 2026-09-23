@@ -31,12 +31,16 @@ import {
 import { FullCommander } from "../commander/controller.js";
 import { CommanderTactics } from "../commander/tactics.js";
 import { ProgramProduction } from "../control/program-production.js";
+import {
+  NeuralTacticalPolicy,
+  prepareTactical,
+  type TacticalModel,
+} from "../tactical/network.js";
+import { LearnedArmorTactics } from "../tactical/tactics.js";
 declare const __WARBOOK_POLICY__: PolicyMode;
 declare const __WARBOOK_LAUNCH_MODEL__:
-  | LaunchModel
-  | LinearLaunchModel
-  | CommanderModel
-  | null;
+  LaunchModel | LinearLaunchModel | CommanderModel | null;
+declare const __WARBOOK_TACTICAL_MODEL__: TacticalModel | null;
 
 declare global {
   var SystemJS: { import(name: string): Promise<any> };
@@ -77,9 +81,14 @@ export async function install(): Promise<void> {
   } as typeof WarbookSession);
   let launchPolicy: LaunchPolicy | undefined;
   let commanderPolicy: NeuralCommanderPolicy | undefined;
+  let armorPolicy: NeuralTacticalPolicy | undefined;
   let launchReady: Promise<void> | undefined;
   const prepareLaunch = () =>
     (launchReady ??= (async () => {
+      if (__WARBOOK_TACTICAL_MODEL__) {
+        await prepareTactical();
+        armorPolicy = new NeuralTacticalPolicy(__WARBOOK_TACTICAL_MODEL__);
+      }
       const artifact = __WARBOOK_LAUNCH_MODEL__;
       if (!artifact) return;
       if (artifact.format === "warbook-commander-model-v1") {
@@ -140,6 +149,8 @@ export async function install(): Promise<void> {
     }
   };
   BotFactory.prototype.create = function (player: any) {
+    if (__WARBOOK_TACTICAL_MODEL__ && !armorPolicy)
+      throw new Error("Armor skill was not prepared before game creation");
     if (__WARBOOK_LAUNCH_MODEL__ && !launchPolicy && !commanderPolicy)
       throw new Error("Launch model was not prepared before game creation");
     const artifact =
@@ -166,6 +177,9 @@ export async function install(): Promise<void> {
       launchPolicy && !operation
         ? new ExperimentalLaunchProvider("model", "player", launchPolicy, true)
         : undefined;
+    const armor = armorPolicy
+      ? new LearnedArmorTactics(armorPolicy, "player", true)
+      : undefined;
     const bot = new WarbookBot(
       player.name,
       player.country.name,
@@ -178,17 +192,20 @@ export async function install(): Promise<void> {
               "player",
               true,
             ),
-            tactics: new CommanderTactics(),
+            tactics: armor ?? new CommanderTactics(),
             production: new ProgramProduction(),
           }
         : launch || operation
           ? {
+              ...(armor ? { tactics: armor } : {}),
               strategy:
                 __WARBOOK_POLICY__ === "pressure"
                   ? new PressureStrategy(launch, operation)
                   : new BastionStrategy("bastion", launch, operation),
             }
-          : undefined,
+          : armor
+            ? { tactics: armor }
+            : undefined,
     );
     bot.autoTick = true;
     session.bots.push(bot);

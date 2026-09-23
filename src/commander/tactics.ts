@@ -12,6 +12,11 @@ export class CommanderTactics extends PositionTactics {
   override readonly id = "commander-fixed-tactics-v1";
   private holding = new Set<string>();
   private miningTargets = new Map<string, string>();
+  override releaseUnit(ref: string): void {
+    super.releaseUnit(ref);
+    this.holding.delete(ref);
+    this.miningTargets.delete(ref);
+  }
   override control(
     o: Observation,
     m: CombatMission,

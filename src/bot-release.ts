@@ -24,6 +24,8 @@ export interface BotRelease {
   policyVersion: string;
   observationProtocol: string;
   launchModelSha256?: string;
+  tacticalModelSha256?: string;
+  tacticalScope?: "duel";
   deterministicLaunch?: boolean;
   policySchema?: string;
   controlScope?: "launch" | "operation";

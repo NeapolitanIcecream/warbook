@@ -19,6 +19,7 @@ export async function buildBot(
   ref: string,
   mode = "combined",
   modelPath?: string,
+  tacticalModelPath?: string,
 ) {
   const launchModel = modelPath
     ? JSON.parse(readFileSync(modelPath, "utf8"))
@@ -47,8 +48,37 @@ export async function buildBot(
   )
     throw new Error("Operation artifact requires its training scope");
   const modelSha = modelPath ? fileHash(modelPath) : undefined;
-  if (launchModel && !["bastion", "pressure"].includes(mode))
+  const tacticalModel = tacticalModelPath
+    ? JSON.parse(readFileSync(tacticalModelPath, "utf8"))
+    : undefined;
+  if (tacticalModel && tacticalModel.format !== "warbook-armor-skill-v1")
+    throw new Error("Invalid armor skill artifact");
+  const bundledModel = !!(launchModel || tacticalModel);
+  if (bundledModel && !["bastion", "pressure"].includes(mode))
     throw new Error("Launch models require a supported layered mode");
+  const components: string[] = [];
+  if (commanderModel)
+    components.push(
+      "strategy:new FullCommander(mode,commanderPolicy,'frozen',true)",
+      "production:new ProgramProduction()",
+    );
+  else if (launchModel) {
+    const provider = operationModel
+      ? `new ExperimentalOperationProvider(artifact.controlScope,'model','frozen',launchPolicy,true${contactModel ? ",artifact.contactInput" : ""}${maneuverModel ? ",artifact.maneuverScope" : ""})`
+      : "new ExperimentalLaunchProvider('model','frozen',launchPolicy,true)";
+    const pressure = operationModel
+      ? `new PressureStrategy(undefined,${provider})`
+      : `new PressureStrategy(${provider})`;
+    const bastion = operationModel
+      ? `new BastionStrategy('bastion',undefined,${provider})`
+      : `new BastionStrategy('bastion',${provider})`;
+    components.push(`strategy:mode==='pressure'?${pressure}:${bastion}`);
+  }
+  if (tacticalModel)
+    components.push(
+      "tactics:new LearnedArmorTactics(armorPolicy,'frozen',true)",
+    );
+  else if (commanderModel) components.push("tactics:new CommanderTactics()");
   const git = execFileSync(
     "git",
     ["rev-parse", "--verify", `${ref}^{commit}`],
@@ -103,9 +133,19 @@ export async function buildBot(
           `
                 : ""
           }
-          export const policyVersion = POLICY_VERSION + ${JSON.stringify(commanderModel ? "-learned-commander" : launchModel ? (operationModel ? "-learned-" + launchModel.controlScope + (contactModel ? "-" + launchModel.contactInput : "") + (maneuverModel ? "-maneuver-" + launchModel.maneuverScope : "") : "-learned") : "")};
+          ${
+            tacticalModel
+              ? `
+          import {NeuralTacticalPolicy,prepareTactical} from './src/tactical/network.ts';
+          import {LearnedArmorTactics} from './src/tactical/tactics.ts';
+          await prepareTactical();
+          const armorPolicy=new NeuralTacticalPolicy(${JSON.stringify(tacticalModel)});
+          `
+              : ""
+          }
+          export const policyVersion = POLICY_VERSION + ${JSON.stringify((commanderModel ? "-learned-commander" : launchModel ? (operationModel ? "-learned-" + launchModel.controlScope + (contactModel ? "-" + launchModel.contactInput : "") + (maneuverModel ? "-maneuver-" + launchModel.maneuverScope : "") : "-learned") : "") + (tacticalModel ? "-armor" : ""))};
           export const observationProtocol = OBSERVATION_PROTOCOL;
-          export const createBot = name => new WarbookBot(name, 'Americans', mode${commanderModel ? ", {strategy:new FullCommander(mode,commanderPolicy,'frozen',true),tactics:new CommanderTactics(),production:new ProgramProduction()}" : launchModel ? (operationModel ? `, {strategy: mode === 'pressure' ? new PressureStrategy(undefined,new ExperimentalOperationProvider(artifact.controlScope,'model','frozen',launchPolicy,true${contactModel ? ",artifact.contactInput" : ""}${maneuverModel ? ",artifact.maneuverScope" : ""})) : new BastionStrategy('bastion',undefined,new ExperimentalOperationProvider(artifact.controlScope,'model','frozen',launchPolicy,true${contactModel ? ",artifact.contactInput" : ""}${maneuverModel ? ",artifact.maneuverScope" : ""}))}` : `, { strategy: mode === 'pressure' ? new PressureStrategy(new ExperimentalLaunchProvider('model','frozen',launchPolicy,true)) : new BastionStrategy('bastion',new ExperimentalLaunchProvider('model','frozen',launchPolicy,true)) }`) : ""});
+          export const createBot = name => new WarbookBot(name, 'Americans', mode${components.length ? `,{${components.join(",")}}` : ""});
         `,
         resolveDir: source,
         sourcefile: "frozen-bot-entry.ts",
@@ -113,11 +153,11 @@ export async function buildBot(
       },
       bundle: true,
       platform: "node",
-      ...(launchModel ? { mainFields: ["module", "main"] } : {}),
+      ...(bundledModel ? { mainFields: ["module", "main"] } : {}),
       format: "esm",
       target: "node22",
       external: ["@chronodivide/game-api"],
-      ...(launchModel
+      ...(bundledModel
         ? {
             banner: {
               js: "import { createRequire as createNodeRequire } from 'node:module'; const require = createNodeRequire(import.meta.url);",
@@ -131,7 +171,7 @@ export async function buildBot(
       for (const imported of output.imports)
         if (
           imported.path !== "@chronodivide/game-api" &&
-          !(launchModel && isBuiltin(imported.path))
+          !(bundledModel && isBuiltin(imported.path))
         )
           throw new Error(`Unfrozen bot dependency: ${imported.path}`);
     const code = result.outputFiles[0].contents;
@@ -148,7 +188,7 @@ export async function buildBot(
             .map((path) => [path, fileHash(resolve(source, path))]),
         )
       : undefined;
-    const controlLayers =
+    let controlLayers =
       layered &&
       [
         "factory-exit",
@@ -182,12 +222,28 @@ export async function buildBot(
             ]),
           )
         : undefined;
+    if (controlLayers && sourceHashes) {
+      if (commanderModel) {
+        controlLayers.strategy = sourceHashes["src/commander/controller.ts"];
+        controlLayers.production =
+          sourceHashes["src/control/program-production.ts"];
+        controlLayers.tactics = sourceHashes["src/commander/tactics.ts"];
+      }
+      if (tacticalModel)
+        controlLayers.tactics = sourceHashes["src/tactical/tactics.ts"];
+    }
     const release: BotRelease = {
       format: "warbook-bot-v1",
       git,
       sha256,
       mode,
       policyVersion: module.policyVersion,
+      ...(tacticalModelPath
+        ? {
+            tacticalModelSha256: fileHash(tacticalModelPath),
+            tacticalScope: "duel" as const,
+          }
+        : {}),
       ...(launchModel
         ? {
             launchModelSha256: modelSha,
@@ -237,11 +293,17 @@ if (
       ref: { type: "string", default: "HEAD" },
       mode: { type: "string", default: "combined" },
       "launch-model": { type: "string" },
+      "tactical-model": { type: "string" },
     },
   });
   console.log(
     JSON.stringify(
-      await buildBot(values.ref!, values.mode!, values["launch-model"]),
+      await buildBot(
+        values.ref!,
+        values.mode!,
+        values["launch-model"],
+        values["tactical-model"],
+      ),
     ),
   );
 }

@@ -34,6 +34,12 @@ export class PositionTactics extends LocalCombat {
   private readonly strike = new StrikeTactics();
   private readonly harvesters = new HarvesterTactics();
 
+  /** Another controller took ownership; reacquisition must issue a fresh native order. */
+  releaseUnit(ref: string): void {
+    this.roles.delete(ref);
+    this.orders.forget(ref);
+  }
+
   protected prepareMission(mission: CombatMission): void {
     const role = `${mission.id}:${mission.kind}`;
     for (const ref of mission.units)

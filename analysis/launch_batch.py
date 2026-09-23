@@ -77,6 +77,7 @@ def main():
         if s.get('commander') and s.get('prefixUntil'):cmd+=['--commander-prefix',str(s['prefixUntil'])]
         if s.get('commander') and 'daggerBeta' in s:cmd+=['--commander-dagger-beta',str(s['daggerBeta'])]
         if s.get('tacticalModel'):cmd+=['--tactical-model',s['tacticalModel']]
+        if s.get('tacticalScope'):cmd+=['--tactical-scope',s['tacticalScope']]
         if plan.get('trace','launch')=='launch':cmd+=['--trace-level','launch']
         if 'native' in p:cmd+=['--opponent',p['native']]
         elif 'release' in p:cmd+=['--opponent-release',p['release']]

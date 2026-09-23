@@ -14,6 +14,13 @@ const launchModel = modelPath
 const modelSha256 = modelPath
   ? createHash("sha256").update(readFileSync(modelPath)).digest("hex")
   : undefined;
+const tacticalPath = process.env.PLAYER_TACTICAL_MODEL;
+const tacticalModel = tacticalPath
+  ? JSON.parse(readFileSync(tacticalPath, "utf8"))
+  : null;
+const tacticalSha256 = tacticalPath
+  ? createHash("sha256").update(readFileSync(tacticalPath)).digest("hex")
+  : undefined;
 if (!POLICY_MODES.some((value) => value === mode))
   throw new Error("Unknown player policy");
 const output = await build({
@@ -29,6 +36,7 @@ const output = await build({
   define: {
     __WARBOOK_POLICY__: JSON.stringify(mode),
     __WARBOOK_LAUNCH_MODEL__: JSON.stringify(launchModel),
+    __WARBOOK_TACTICAL_MODEL__: JSON.stringify(tacticalModel),
   },
   plugins: [
     {
@@ -74,8 +82,17 @@ let release = {
           ].includes(launchModel.schema)
         ? "learned-" + launchModel.controlScope
         : "learned-launch"
-    : mode,
+    : tacticalModel
+      ? "learned-armor"
+      : mode,
   ...(launchModel ? { launchModelSha256: modelSha256, baseMode: mode } : {}),
+  ...(tacticalModel
+    ? {
+        tacticalModelSha256: tacticalSha256,
+        tacticalScope: "duel",
+        baseMode: mode,
+      }
+    : {}),
   git: execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
 };
 const manifestPath = `${directory}/release.json`;

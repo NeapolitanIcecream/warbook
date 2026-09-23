@@ -1,7 +1,6 @@
 import seedrandom from "seedrandom";
 import { distance2, type Observation, type Intent } from "../model.js";
 import { CommanderTactics } from "../commander/tactics.js";
-import { NativeOrders } from "../control/native-orders.js";
 import {
   currentEvidence,
   type TacticalController,
@@ -17,7 +16,7 @@ export class LearnedArmorTactics implements TacticalController {
   readonly id = "commander-learned-armor-v1";
   readonly records: Record<string, unknown>[] = [];
   private readonly fixed = new CommanderTactics();
-  private readonly orders = new NativeOrders();
+  private readonly orders = new Map<string, string>();
   private readonly random: () => number;
   private lastTick = -1;
   private active = new Map<string, string>();
@@ -25,6 +24,7 @@ export class LearnedArmorTactics implements TacticalController {
     private network: NeuralTacticalPolicy,
     seed = "0",
     private deterministic = true,
+    readonly scope: "duel" | "ground" = "duel",
   ) {
     this.random = seedrandom(seed);
   }
@@ -47,10 +47,26 @@ export class LearnedArmorTactics implements TacticalController {
             (u) =>
               members.has(u.ref) &&
               ["MTNK", "HTNK"].includes(u.name) &&
-              o.enemies.some((e) => !e.airborne && distance2(u, e) <= 14 ** 2),
+              o.enemies.some(
+                (e) =>
+                  !e.airborne &&
+                  distance2(u, e) <= 14 ** 2 &&
+                  (this.scope === "ground" ||
+                    ["MTNK", "HTNK"].includes(e.name)),
+              ) &&
+              (this.scope === "ground" ||
+                (m.objective !== "exposed-construction" &&
+                  !o.enemies.some(
+                    (e) => e.type === 3 && distance2(u, e) <= 10 ** 2,
+                  ))),
           )
         : [];
     const controlled = new Set(armor.map((u) => u.ref));
+    for (const ref of m.units)
+      if (controlled.has(ref) !== this.active.has(ref)) {
+        this.fixed.releaseUnit(ref);
+        this.orders.delete(ref);
+      }
     const fixed = this.fixed.control(
       o,
       { ...m, units: m.units.filter((r) => !controlled.has(r)) },
@@ -58,12 +74,12 @@ export class LearnedArmorTactics implements TacticalController {
     );
     for (const ref of m.units)
       if (!controlled.has(ref) && this.active.delete(ref))
-        this.orders.forget(ref);
+        this.orders.delete(ref);
     if (!armor.length) return fixed;
     for (const u of armor) {
       const key = `${m.id}:${m.kind}:${m.revision}`;
       if (this.active.get(u.ref) !== key) {
-        this.orders.forget(u.ref);
+        this.orders.delete(u.ref);
         this.active.set(u.ref, key);
       }
     }
@@ -89,7 +105,10 @@ export class LearnedArmorTactics implements TacticalController {
       })),
       enemies: o.enemies
         .filter(
-          (e) => !e.airborne && armor.some((u) => distance2(u, e) <= 16 ** 2),
+          (e) =>
+            !e.airborne &&
+            armor.some((u) => distance2(u, e) <= 16 ** 2) &&
+            (this.scope === "ground" || ["MTNK", "HTNK"].includes(e.name)),
         )
         .map((e) => ({
           ref: e.ref,
@@ -116,7 +135,13 @@ export class LearnedArmorTactics implements TacticalController {
           : a.kind === "stop"
             ? { kind: "stop", refs: [a.ref], task: m.id }
             : { kind: a.kind, refs: [a.ref], ...a.point, task: m.id };
-      if (this.orders.allow(armor[i], intent, o.tick)) intents.push(intent);
+      // Same execution semantics as ArenaBot.act: changed orders at every skill
+      // step are honored; unchanged running native tasks continue.
+      const key = JSON.stringify(intent);
+      if (this.orders.get(armor[i].ref) !== key || armor[i].idle) {
+        this.orders.set(armor[i].ref, key);
+        intents.push(intent);
+      }
     }
     this.records.push({
       schema: "armor-skill-v1",
