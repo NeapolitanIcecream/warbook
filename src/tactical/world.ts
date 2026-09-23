@@ -20,7 +20,8 @@ export interface TacticalObservation {
   ground?: readonly Point[];
 }
 export type TacticalAction =
-  | { kind: "keep" | "stop"; ref: string }
+  | { kind: "keep"; ref: string }
+  | { kind: "stop"; ref: string }
   | { kind: "attack"; ref: string; target: string }
   | { kind: "move" | "attackMove"; ref: string; point: Point };
 export interface TacticalWorld {

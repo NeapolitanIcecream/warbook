@@ -150,6 +150,7 @@ export interface StrategicController {
 }
 export interface TacticalController {
   readonly id: string;
+  readonly records?: readonly unknown[];
   assess(
     observation: Observation,
     request: AssessmentRequest,

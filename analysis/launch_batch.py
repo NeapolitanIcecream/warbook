@@ -36,7 +36,7 @@ def main():
     for s in [*plan['subjects'].values(),*plan['opponents'].values()]:
         if s.get('release'):
             s['releaseSource']=str(Path(s['release']).resolve());s['release']=stage_release(s['release'])
-        for field in ['model','release']:
+        for field in ['model','release','tacticalModel']:
             if s.get(field):s[field]=str(Path(s[field]).resolve());s[field+'Sha256']=digest(s[field])
     identity={'plan':plan,'git':commit};fingerprint=hashlib.sha256(json.dumps(identity,sort_keys=True).encode()).hexdigest();manifest=root/'batch.json'
     if manifest.exists():
@@ -76,6 +76,7 @@ def main():
         if s.get('deterministic'):cmd+=['--commander-deterministic' if s.get('commander') else '--launch-deterministic']
         if s.get('commander') and s.get('prefixUntil'):cmd+=['--commander-prefix',str(s['prefixUntil'])]
         if s.get('commander') and 'daggerBeta' in s:cmd+=['--commander-dagger-beta',str(s['daggerBeta'])]
+        if s.get('tacticalModel'):cmd+=['--tactical-model',s['tacticalModel']]
         if plan.get('trace','launch')=='launch':cmd+=['--trace-level','launch']
         if 'native' in p:cmd+=['--opponent',p['native']]
         elif 'release' in p:cmd+=['--opponent-release',p['release']]

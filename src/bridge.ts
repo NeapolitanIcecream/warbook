@@ -285,6 +285,7 @@ export class WarbookBot extends Bot {
           antiAir: combatCapabilities(u).antiAir,
           canThreatenVehicles: combatCapabilities(u).canThreatenVehicles,
           weaponRange: u.primaryWeapon?.maxRange,
+          weaponCooldown: u.primaryWeapon?.cooldownTicks,
           deployedWeaponRange: u.secondaryWeapon?.rules.neverUse
             ? undefined
             : u.secondaryWeapon?.maxRange,
@@ -943,9 +944,15 @@ export class WarbookBot extends Bot {
   }
   decide(observation: Observation): Intent[] {
     const result = this.commander.decide(observation);
+    for (const record of this.commander.tacticalRecords)
+      this.trace?.({
+        tick: observation.tick,
+        actor: this.name,
+        kind: "armor_decision",
+        record,
+      });
     const record = this.commander.launchRecord as
-      | { tick?: number; schema?: string }
-      | undefined;
+      { tick?: number; schema?: string } | undefined;
     if (record?.tick === observation.tick)
       this.trace?.({
         tick: observation.tick,

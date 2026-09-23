@@ -61,7 +61,9 @@ def main():
         for r in rows[:4]:
             p,_=predict(model,[r]);w=r['world'];gold.append({'world':w,'choices':r['choices'],'expected':{'logp':float(p['logp'][0]),'value':float(p['value'][0]),'probabilities':[p['probabilities'][0,i,:len(c)].tolist() for i,c in enumerate(w['candidates'])]}})
     out=Path(args.out);out.parent.mkdir(parents=True,exist_ok=True)
-    meta={'method':args.method,'seed':args.seed,'git':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'parameters':sum(p.numel() for p in model.parameters()),'trainingEpisodes':[e['path'] for e in train],'validationEpisodes':[e['path'] for e in validation],'history':history,'validation':metrics,'seconds':time.monotonic()-begin,'objective':'Local armor task A=1, B/U=0; no whole-game win claim'}
+    meta={'method':args.method,'seed':args.seed,'git':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'parameters':sum(p.numel() for p in model.parameters()),'trainingEpisodes':[e['path'] for e in train],'validationEpisodes':[e['path'] for e in validation],'history':history,'validation':metrics,'seconds':time.monotonic()-begin,'objective':'Local armor task A=1, B/U=0; no whole-game win claim',
+      'inputSha256':hashlib.sha256(Path(args.input).read_bytes()).hexdigest() if args.input else None,
+      'trainerSha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),'modelCodeSha256':hashlib.sha256(Path(__file__).with_name('tactical_model.py').read_bytes()).hexdigest(),'learningRate':optimizer.param_groups[0]['lr']}
     sha=export(model,out,{k:v for k,v in meta.items() if k not in ['trainingEpisodes','validationEpisodes','history']});torch.save(optimizer.state_dict(),out.with_suffix('.optimizer.pt'));out.with_suffix('.training.json').write_text(json.dumps(meta,indent=2)+'\n');out.with_suffix('.golden.json').write_text(json.dumps(gold)+'\n');print(json.dumps({'sha256':sha,**metrics,'seconds':meta['seconds'],'parameters':meta['parameters']}))
 
 if __name__=='__main__':main()

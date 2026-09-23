@@ -56,6 +56,8 @@ import {
 import { ProgramProduction } from "./control/program-production.js";
 import { FullCommander } from "./commander/controller.js";
 import { CommanderTactics } from "./commander/tactics.js";
+import { LearnedArmorTactics } from "./tactical/tactics.js";
+import { NeuralTacticalPolicy, prepareTactical } from "./tactical/network.js";
 import {
   NeuralCommanderPolicy,
   prepareCommander,
@@ -80,6 +82,7 @@ const { values } = parseArgs({
     "commander-deterministic": { type: "boolean", default: false },
     "commander-prefix": { type: "string", default: "0" },
     "commander-dagger-beta": { type: "string" },
+    "tactical-model": { type: "string" },
     "launch-model": { type: "string" },
     "operation-scope": { type: "string" },
     "policy-seed": { type: "string", default: "0" },
@@ -100,9 +103,12 @@ const sha256 = (file: string) =>
 const trace = (event: unknown) => {
   if (
     values["trace-level"] === "launch" &&
-    !["launch_decision", "operation_decision", "commander_decision"].includes(
-      (event as { kind: string }).kind,
-    ) &&
+    ![
+      "launch_decision",
+      "operation_decision",
+      "commander_decision",
+      "armor_decision",
+    ].includes((event as { kind: string }).kind) &&
     !(
       (event as { kind: string; tick: number }).kind === "observation" &&
       (event as { tick: number }).tick % 450 === 0
@@ -122,6 +128,22 @@ async function main(): Promise<void> {
   )
     throw new Error("Invalid commander configuration");
   let commanderNetwork: NeuralCommanderPolicy | undefined;
+  let armorTactics: LearnedArmorTactics | undefined;
+  if (values["tactical-model"]) {
+    if (
+      values["actor-release"] ||
+      !["bastion", "pressure"].includes(values.mode!)
+    )
+      throw new Error("Armor skill requires a live layered actor");
+    await prepareTactical();
+    armorTactics = new LearnedArmorTactics(
+      new NeuralTacticalPolicy(
+        JSON.parse(readFileSync(values["tactical-model"], "utf8")),
+      ),
+      values["policy-seed"],
+      true,
+    );
+  }
   if (values["commander-policy"] === "model") {
     if (!values["commander-model"]) throw new Error("Commander model required");
     await prepareCommander();
@@ -262,17 +284,20 @@ async function main(): Promise<void> {
           fullStrategy
             ? {
                 strategy: fullStrategy,
-                tactics: new CommanderTactics(),
+                tactics: armorTactics ?? new CommanderTactics(),
                 production: new ProgramProduction(),
               }
             : launch || operation
               ? {
+                  ...(armorTactics ? { tactics: armorTactics } : {}),
                   strategy:
                     values.mode === "pressure"
                       ? new PressureStrategy(launch, operation)
                       : new BastionStrategy("bastion", launch, operation),
                 }
-              : undefined,
+              : armorTactics
+                ? { tactics: armorTactics }
+                : undefined,
         ),
         release: undefined,
       };
@@ -371,6 +396,16 @@ async function main(): Promise<void> {
         }
       : {}),
     observationProtocol: OBSERVATION_PROTOCOL,
+    ...(values["tactical-model"]
+      ? {
+          tacticalExperiment: {
+            schema: "armor-skill-v1",
+            modelSha256: sha256(values["tactical-model"]),
+            decisionPeriod: 15,
+            scope: "Basic armor in advance/defend contact; other roles fixed",
+          },
+        }
+      : {}),
     ...(fullStrategy
       ? {
           commanderExperiment: {
@@ -428,6 +463,9 @@ async function main(): Promise<void> {
         "src/commander/world.ts",
         "src/commander/program.ts",
         "src/commander/network.ts",
+        "src/tactical/world.ts",
+        "src/tactical/network.ts",
+        "src/tactical/tactics.ts",
         "src/commander/teacher.ts",
         "src/commander/tactics.ts",
         "src/control/program-production.ts",

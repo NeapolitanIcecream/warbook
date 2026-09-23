@@ -40,6 +40,8 @@ export interface Unit extends Point {
   canThreatenVehicles?: boolean;
   /** Current own weapon data, used to decide whether deploying can provide fire. */
   weaponRange?: number;
+  /** Current own weapon cooldown; never exposed for enemy contacts. */
+  weaponCooldown?: number;
   deployedWeaponRange?: number;
 }
 export interface Contact extends Point {

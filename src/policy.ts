@@ -96,6 +96,9 @@ export class Commander {
   get launchRecord() {
     return this.control?.components.strategy.launchRecord;
   }
+  get tacticalRecords() {
+    return this.control?.components.tactics.records ?? [];
+  }
   get launchPoints() {
     return this.control?.components.strategy.launchPoints?.() ?? [];
   }
