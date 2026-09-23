@@ -48,6 +48,18 @@ import {
 } from "./learning/model.js";
 import { BastionStrategy } from "./control/bastion-strategy.js";
 import { PressureStrategy } from "./control/pressure-strategy.js";
+import {
+  CommanderTeacher,
+  COMMANDER_SCHEMA,
+  STRATEGY_PERIOD,
+} from "./commander/teacher.js";
+import { ProgramProduction } from "./control/program-production.js";
+import { FullCommander } from "./commander/controller.js";
+import { CommanderTactics } from "./commander/tactics.js";
+import {
+  NeuralCommanderPolicy,
+  prepareCommander,
+} from "./commander/network.js";
 
 const { values } = parseArgs({
   options: {
@@ -63,6 +75,10 @@ const { values } = parseArgs({
     swap: { type: "boolean", default: false },
     out: { type: "string" },
     "launch-policy": { type: "string" },
+    "commander-policy": { type: "string" },
+    "commander-model": { type: "string" },
+    "commander-deterministic": { type: "boolean", default: false },
+    "commander-prefix": { type: "string", default: "0" },
     "launch-model": { type: "string" },
     "operation-scope": { type: "string" },
     "policy-seed": { type: "string", default: "0" },
@@ -83,7 +99,7 @@ const sha256 = (file: string) =>
 const trace = (event: unknown) => {
   if (
     values["trace-level"] === "launch" &&
-    !["launch_decision", "operation_decision"].includes(
+    !["launch_decision", "operation_decision", "commander_decision"].includes(
       (event as { kind: string }).kind,
     ) &&
     !(
@@ -96,6 +112,34 @@ const trace = (event: unknown) => {
 };
 let game: GameInstanceApi | undefined;
 async function main(): Promise<void> {
+  if (
+    values["commander-policy"] &&
+    (!["teacher", "model"].includes(values["commander-policy"]) ||
+      values["launch-policy"] ||
+      values["actor-release"] ||
+      !["bastion", "pressure"].includes(values.mode!))
+  )
+    throw new Error("Invalid commander configuration");
+  let commanderNetwork: NeuralCommanderPolicy | undefined;
+  if (values["commander-policy"] === "model") {
+    if (!values["commander-model"]) throw new Error("Commander model required");
+    await prepareCommander();
+    commanderNetwork = new NeuralCommanderPolicy(
+      JSON.parse(readFileSync(values["commander-model"], "utf8")),
+    );
+  }
+  const prefix = Number(values["commander-prefix"]);
+  if (!Number.isInteger(prefix) || prefix < 0 || prefix % 75 !== 0)
+    throw new Error("Prefix must end on the strategy clock");
+  const fullStrategy = values["commander-policy"]
+    ? new FullCommander(
+        values.mode as "bastion" | "pressure",
+        commanderNetwork,
+        values["policy-seed"],
+        values["commander-deterministic"],
+        prefix,
+      )
+    : undefined;
   if (
     values["launch-policy"] &&
     (values["actor-release"] || !["bastion", "pressure"].includes(values.mode!))
@@ -198,21 +242,29 @@ async function main(): Promise<void> {
         bot: new WarbookBot(
           policyPlayerName(
             POLICY_VERSION,
-            launch || operation
-              ? `${values.mode}-${operation ? operationScope : "launch-v1"}-${values["launch-policy"]}${contactInput ? "-" + contactInput : ""}${maneuverScope ? "-maneuver-" + maneuverScope : ""}`
-              : values.mode!,
+            fullStrategy
+              ? `${values.mode}-commander-${values["commander-policy"]}`
+              : launch || operation
+                ? `${values.mode}-${operation ? operationScope : "launch-v1"}-${values["launch-policy"]}${contactInput ? "-" + contactInput : ""}${maneuverScope ? "-maneuver-" + maneuverScope : ""}`
+                : values.mode!,
             "A",
           ),
           "Americans",
           values.mode as PolicyMode,
-          launch || operation
+          fullStrategy
             ? {
-                strategy:
-                  values.mode === "pressure"
-                    ? new PressureStrategy(launch, operation)
-                    : new BastionStrategy("bastion", launch, operation),
+                strategy: fullStrategy,
+                tactics: new CommanderTactics(),
+                production: new ProgramProduction(),
               }
-            : undefined,
+            : launch || operation
+              ? {
+                  strategy:
+                    values.mode === "pressure"
+                      ? new PressureStrategy(launch, operation)
+                      : new BastionStrategy("bastion", launch, operation),
+                }
+              : undefined,
         ),
         release: undefined,
       };
@@ -242,6 +294,17 @@ async function main(): Promise<void> {
   )
     throw new Error(
       "A learned shadow requires the same checkpoint and deterministic action selection",
+    );
+  if (
+    fullStrategy &&
+    shadow &&
+    (!values["commander-deterministic"] ||
+      !values["commander-model"] ||
+      prefix ||
+      shadow.release.launchModelSha256 !== sha256(values["commander-model"]))
+  )
+    throw new Error(
+      "Commander shadow requires identical weights, clock and deterministic execution",
     );
   const comparison = shadow ? new DecisionShadow() : undefined;
   const opponent =
@@ -300,6 +363,23 @@ async function main(): Promise<void> {
         }
       : {}),
     observationProtocol: OBSERVATION_PROTOCOL,
+    ...(fullStrategy
+      ? {
+          commanderExperiment: {
+            schema: COMMANDER_SCHEMA,
+            strategyPeriod: STRATEGY_PERIOD,
+            policy: values["commander-policy"],
+            route: values.mode,
+            encoding: "graph-plan-v1",
+            seed: values["policy-seed"],
+            deterministic: values["commander-deterministic"],
+            prefixUntil: prefix,
+            modelSha256: values["commander-model"]
+              ? sha256(values["commander-model"])
+              : undefined,
+          },
+        }
+      : {}),
     ...(launch || operation
       ? {
           launchExperiment: {
@@ -335,6 +415,13 @@ async function main(): Promise<void> {
         "src/control/bastion-strategy.ts",
         "src/control/position-tactics.ts",
         "src/control/coordinator.ts",
+        "src/commander/controller.ts",
+        "src/commander/world.ts",
+        "src/commander/program.ts",
+        "src/commander/network.ts",
+        "src/commander/teacher.ts",
+        "src/commander/tactics.ts",
+        "src/control/program-production.ts",
         "src/analysis/shadow.ts",
         "src/raiding.ts",
         "src/regrouping.ts",

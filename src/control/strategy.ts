@@ -7,7 +7,7 @@ import {
 import {
   TaskRevision,
   type CombatMission,
-  type ProductionPlan,
+  type InventoryProductionPlan,
   type StrategicController,
   type StrategicPlan,
   type TacticalAssessment,
@@ -72,7 +72,10 @@ export class OpeningStrategy implements StrategicController {
     return this.scoutTarget;
   }
 
-  plan(o: Observation, assessment: TacticalAssessment): StrategicPlan {
+  plan(
+    o: Observation,
+    assessment: TacticalAssessment,
+  ): StrategicPlan<InventoryProductionPlan> {
     const allied = o.side === 0;
     const names = allied
       ? {
@@ -121,7 +124,7 @@ export class OpeningStrategy implements StrategicController {
       infantry: { product: names.infantry, count: 6 },
       spending: { queueStartFloor: 250, infantryAbove: 800 },
     };
-    const production: ProductionPlan = {
+    const production: InventoryProductionPlan = {
       id: "base-production",
       revision: this.productionRevision.update({
         ...economy,

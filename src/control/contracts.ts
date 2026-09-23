@@ -6,6 +6,7 @@ export interface TaskIdentity {
 }
 export interface CombatMission extends TaskIdentity {
   readonly kind:
+    | "hold"
     | "assemble"
     | "advance"
     | "defend"
@@ -34,7 +35,7 @@ export interface CombatMission extends TaskIdentity {
     readonly interrupt?: boolean;
   };
 }
-export interface ProductionPlan extends TaskIdentity {
+export interface InventoryProductionPlan extends TaskIdentity {
   readonly deploymentUnits: readonly string[];
   readonly power: { readonly product: string; readonly margin: number };
   readonly structures: readonly { product: string; count: number }[];
@@ -63,11 +64,31 @@ export interface ProductionPlan extends TaskIdentity {
     readonly infantryAbove: number;
   };
 }
-export interface StrategicPlan {
+export interface QueueProgram {
+  queue: number;
+  mode: "run" | "pause" | "cancel";
+  product?: string;
+  /** Desired committed stock; -1 means repeat until the strategy changes it. */
+  target: number;
+  /** Explicit cash floor. Zero permits the native pay-as-you-build behavior. */
+  reserve: number;
+}
+export interface ProgramProductionPlan extends TaskIdentity {
+  readonly deploymentUnits: readonly string[];
+  readonly program: {
+    /** Order is the strategy's submission priority, not an executor preference. */
+    queues: readonly QueueProgram[];
+    placements: readonly { name: string; x: number; y: number }[];
+    repair: readonly string[];
+    sell: readonly string[];
+  };
+}
+export type ProductionPlan = InventoryProductionPlan | ProgramProductionPlan;
+export interface StrategicPlan<P extends ProductionPlan = ProductionPlan> {
   readonly tick: number;
   readonly combat: CombatMission;
   readonly additionalCombat?: readonly CombatMission[];
-  readonly production: ProductionPlan;
+  readonly production: P;
   /** Compact reasons for the current operational choice, for replay diagnosis. */
   readonly decision?: Readonly<Record<string, number | string | boolean>>;
 }
@@ -117,6 +138,7 @@ export interface ControlReport {
 }
 export interface StrategicController {
   readonly id: string;
+  readonly observationScope?: "commander-v1";
   readonly launchRecord?: unknown;
   launchPoints?(): readonly Point[];
   assessmentRequest(observation: Observation): AssessmentRequest;

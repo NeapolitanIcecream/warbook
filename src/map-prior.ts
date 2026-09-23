@@ -6,7 +6,7 @@ import {
   type MapApi,
   type SpeedType,
 } from "@chronodivide/game-api";
-import { distance2, type Point } from "./model.js";
+import { distance2, type Point, type StrategicRegion } from "./model.js";
 
 export interface MapCell extends Point {
   z: number;
@@ -73,6 +73,72 @@ export class MapPrior {
   region(point: Point): number | undefined {
     const node = this.closest(point);
     return node ? this.regions.get(key(node)) : undefined;
+  }
+  /** Regional edges are contracted from the real independent terrain graph. */
+  regionalObservation(
+    map: MapApi,
+    owner: string,
+    vehicle: boolean,
+  ): { nodes: StrategicRegion[]; edges: [number, number][] } {
+    const groups = new Map<string, number>(),
+      membership = new Map<string | number, number>();
+    const points: MapCell[][] = [],
+      visible: number[] = [],
+      components: string[] = [];
+    for (const p of this.openPoints) {
+      const component = `${vehicle ? "v" : "f"}:${this.regions.get(key(p))}`;
+      const groupKey = `${Math.floor(p.x / 8)}:${Math.floor(p.y / 8)}:${p.bridge}:${component}`;
+      let index = groups.get(groupKey);
+      if (index === undefined) {
+        index = points.length;
+        groups.set(groupKey, index);
+        points.push([]);
+        visible.push(0);
+        components.push(component);
+      }
+      points[index].push(p);
+      membership.set(key(p), index);
+      const tile = map.getTile(p.x, p.y);
+      if (tile && map.isVisibleTile(tile, owner, Math.max(0, p.z - tile.z)))
+        visible[index]++;
+    }
+    const nodes = points.map((ps, i) => {
+      const center = {
+        x: Math.floor(ps[0].x / 8) * 8 + 4,
+        y: Math.floor(ps[0].y / 8) * 8 + 4,
+      };
+      const p = [...ps].sort(
+        (a, b) =>
+          distance2(a, center) - distance2(b, center) || a.x - b.x || a.y - b.y,
+      )[0];
+      return {
+        x: p.x,
+        y: p.y,
+        onBridge: p.bridge,
+        height: p.z,
+        explored: visible[i] / ps.length,
+        cells: ps.length,
+        vehicle,
+        infantry: !vehicle,
+        component: components[i],
+      };
+    });
+    const seen = new Set<string>(),
+      edges: [number, number][] = [];
+    this.graph.forEachLink((link) => {
+      const a = membership.get(link.fromId)!,
+        b = membership.get(link.toId)!;
+      if (a === b) return;
+      for (const [from, to] of [
+        [a, b],
+        [b, a],
+      ])
+        if (!seen.has(`${from}:${to}`)) {
+          seen.add(`${from}:${to}`);
+          edges.push([from, to]);
+        }
+    });
+    return { nodes, edges };
   }
   unexplored(map: MapApi, owner: string, region: number | undefined): Point[] {
     const blocks = new Map<string, Point>();

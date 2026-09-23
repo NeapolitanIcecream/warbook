@@ -39,6 +39,7 @@ import {
   type CombatMission,
   type StrategicController,
   type StrategicPlan,
+  type InventoryProductionPlan,
   type TacticalAssessment,
   type ControlReport,
 } from "./contracts.js";
@@ -114,7 +115,7 @@ export class BastionStrategy implements StrategicController {
     o: Observation,
     assessment: TacticalAssessment,
     feedback?: ControlReport,
-  ): StrategicPlan {
+  ): StrategicPlan<InventoryProductionPlan> {
     const base = this.opening.plan(o, assessment);
     const { unitType: armor, factoryType: factory } = this.assessmentRequest(o);
     const combatArmor = (u: Unit) => u.name === armor || u.name === "SREF";

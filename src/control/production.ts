@@ -24,6 +24,8 @@ export class QueueProduction implements ProductionController {
     plan: ProductionPlan,
     evidence: readonly ExecutionEvidence[],
   ): ControlResult {
+    if ("program" in plan)
+      throw new Error("Explicit production requires ProgramProduction");
     const intents: Intent[] = [];
     if (o.credits > 0 && o.tick - this.lastRepairCheck >= 30) {
       this.lastRepairCheck = o.tick;

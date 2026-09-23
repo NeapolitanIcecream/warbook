@@ -52,9 +52,25 @@ export function observedEffect(
     return "captured_building_owned";
   if (
     i.kind === "repair" &&
-    o.own.some((u) => u.ref === i.ref && u.hasWrenchRepair)
+    o.own.some(
+      (u) => u.ref === i.ref && !!u.hasWrenchRepair === (i.enabled ?? true),
+    )
   )
-    return "repair_wrench_enabled";
+    return i.enabled === false
+      ? "repair_wrench_disabled"
+      : "repair_wrench_enabled";
+  if (i.kind === "sell" && o.ownDepartures?.includes(i.ref))
+    return "sold_object_departed_cause_unassigned";
+  if (i.kind === "queueControl") {
+    const q = o.queues.find((q) => q.type === i.queue);
+    if (
+      q &&
+      ((i.action === "pause" && q.status === 2) ||
+        (i.action === "resume" && q.status === 1) ||
+        (i.action === "cancel" && q.size === 0))
+    )
+      return "queue_control_state_observed";
+  }
   if (
     i.kind === "queue" &&
     o.queues.some(

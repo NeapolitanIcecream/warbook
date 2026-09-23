@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { QueueProduction } from "../src/control/production.js";
-import type { ProductionPlan } from "../src/control/contracts.js";
+import type { InventoryProductionPlan as ProductionPlan } from "../src/control/contracts.js";
 import type { Observation, Unit } from "../src/model.js";
 import { observedEffect, rememberIntent } from "../src/effects.js";
 

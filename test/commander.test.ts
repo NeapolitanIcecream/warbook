@@ -1,0 +1,272 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import type { Observation, Unit } from "../src/model.js";
+import { ProgramProduction } from "../src/control/program-production.js";
+import { ProgramController } from "../src/commander/program.js";
+import { CommanderTactics } from "../src/commander/tactics.js";
+import {
+  buildWorld,
+  ContactMemory,
+  keepAction,
+  RESERVE,
+  UNASSIGNED,
+  KEEP_UNIT,
+} from "../src/commander/world.js";
+import type { ProgramProductionPlan } from "../src/control/contracts.js";
+
+const unit = (ref: string, extra: Partial<Unit> = {}): Unit => ({
+  ref,
+  name: "MTNK",
+  type: 7,
+  x: 20,
+  y: 20,
+  hp: 300,
+  maxHp: 300,
+  width: 1,
+  height: 1,
+  mobile: true,
+  idle: false,
+  harvester: false,
+  mcv: false,
+  yard: false,
+  refinery: false,
+  combat: true,
+  ...extra,
+});
+function observation(): Observation {
+  return {
+    tick: 0,
+    side: 0,
+    credits: 10000,
+    power: { total: 0, drain: 100, isLowPower: true },
+    home: { x: 20, y: 20 },
+    starts: [
+      { x: 20, y: 20 },
+      { x: 80, y: 80 },
+    ],
+    own: [],
+    enemies: [],
+    products: [
+      { name: "MTNK", type: 7, queue: 3, cost: 700 },
+      { name: "GAPOWR", type: 2, queue: 0, cost: 800 },
+    ],
+    queues: Array.from({ length: 6 }, (_, type) => ({
+      type,
+      status: 0,
+      size: 0,
+      items: [],
+    })),
+    buildSites: [],
+  };
+}
+const production = (): ProgramProductionPlan => ({
+  id: "production",
+  revision: 1,
+  deploymentUnits: [],
+  program: { queues: [], placements: [], repair: [], sell: [] },
+});
+
+test("an explicit plan does not invent power, repairs or army production", () => {
+  const o = observation();
+  o.own = [
+    unit("yard", {
+      type: 2,
+      name: "GACNST",
+      yard: true,
+      repairable: true,
+      hp: 10,
+    }),
+  ];
+  const p = production();
+  p.program.queues = [
+    { queue: 3, mode: "run", product: "MTNK", target: 1, reserve: 0 },
+  ];
+  const result = new ProgramProduction().control(o, p, []);
+  assert.deepEqual(
+    result.intents.map((i) => (i.kind === "queue" ? i.product.name : i.kind)),
+    ["MTNK"],
+  );
+});
+
+test("queue pause, resume, cancellation and a chosen cash floor remain explicit", () => {
+  const o = observation(),
+    p = production(),
+    controller = new ProgramProduction();
+  o.queues[3] = {
+    type: 3,
+    status: 1,
+    size: 1,
+    items: [{ name: "MTNK", quantity: 1 }],
+  };
+  p.program.queues = [{ queue: 3, mode: "pause", target: 0, reserve: 0 }];
+  assert.equal(
+    (controller.control(o, p, []).intents[0] as any).action,
+    "pause",
+  );
+  o.queues[3].status = 2;
+  p.program.queues = [
+    { queue: 3, mode: "run", product: "MTNK", target: 1, reserve: 0 },
+  ];
+  assert.equal(
+    (controller.control(o, p, []).intents[0] as any).action,
+    "resume",
+  );
+  p.program.queues = [{ queue: 3, mode: "cancel", target: 0, reserve: 0 }];
+  assert.equal(
+    (controller.control(o, p, []).intents[0] as any).action,
+    "cancel",
+  );
+  o.queues[3].status = 1;
+  o.credits = 20;
+  p.program.queues = [
+    { queue: 3, mode: "run", target: 2, product: "MTNK", reserve: 500 },
+  ];
+  assert.equal(
+    (controller.control(o, p, []).intents[0] as any).action,
+    "pause",
+  );
+});
+
+test("KEEP on an unassigned new miner preserves native harvesting", () => {
+  const o = observation();
+  o.own = [unit("miner", { name: "CMIN", harvester: true })];
+  const controller = new ProgramController(),
+    memory = new ContactMemory(),
+    w = buildWorld(o, controller.state, memory);
+  assert.equal(w.previousRoles[0], UNASSIGNED);
+  controller.apply(o, w, keepAction(w));
+  const plan = controller.plan(o),
+    tactics = new CommanderTactics();
+  assert.deepEqual(
+    [plan.combat, ...plan.additionalCombat!].flatMap(
+      (m) => tactics.control(o, m, []).intents,
+    ),
+    [],
+  );
+  const a = keepAction(w);
+  a.units[0] = RESERVE;
+  controller.apply(o, w, a);
+  const held = controller.plan(o);
+  assert.equal(
+    [held.combat, ...held.additionalCombat!]
+      .flatMap((m) => tactics.control(o, m, []).intents)
+      .filter((i) => i.kind === "stop").length,
+    1,
+  );
+});
+
+test("native harvesting is a representable task before any ore region is observed", () => {
+  const o = observation();
+  o.own = [unit("miner", { name: "CMIN", harvester: true })];
+  const controller = new ProgramController(),
+    w = buildWorld(o, controller.state, new ContactMemory()),
+    a = keepAction(w);
+  a.kinds[0] = 8;
+  a.goals[0] = 0;
+  a.units[0] = 0;
+  controller.apply(o, w, a);
+  const m = controller.plan(o).combat;
+  assert.equal(m.kind, "harvest");
+  assert.equal(m.destination, undefined);
+  assert.deepEqual(new CommanderTactics().control(o, m, []).intents, []);
+});
+
+test("the strategy can assign individuals, split forces and cancel only one group", () => {
+  const o = observation();
+  o.own = [unit("a"), unit("b"), unit("c")];
+  const c = new ProgramController(),
+    m = new ContactMemory();
+  let w = buildWorld(o, c.state, m),
+    a = keepAction(w);
+  a.kinds[0] = 3;
+  a.kinds[1] = 4;
+  a.goals[0] = w.goalObjects.findIndex((g) => g.kind === "start" && g.x === 80);
+  a.goals[1] = 1;
+  a.units = [0, 1, 0];
+  c.apply(o, w, a);
+  let p = c.plan(o);
+  assert.deepEqual(p.combat.units, ["a", "c"]);
+  assert.deepEqual(p.additionalCombat![0].units, ["b"]);
+  o.tick = 75;
+  w = buildWorld(o, c.state, m);
+  a = keepAction(w);
+  a.kinds[0] = 1;
+  a.units = [RESERVE, KEEP_UNIT, RESERVE];
+  c.apply(o, w, a);
+  p = c.plan(o);
+  assert.deepEqual(p.additionalCombat![0].units, ["b"]);
+  assert.deepEqual(p.combat.units, []);
+});
+
+test("building placement executes the chosen observed footprint, without a new ranking", () => {
+  const o = observation(),
+    p = production();
+  o.queues[0] = {
+    type: 0,
+    status: 3,
+    size: 1,
+    items: [{ name: "GAPOWR", quantity: 1 }],
+  };
+  o.buildSites = [{ name: "GAPOWR", x: 21, y: 21 }];
+  o.placementChoices = [...o.buildSites, { name: "GAPOWR", x: 30, y: 30 }];
+  p.program.placements = [o.placementChoices[1]];
+  assert.deepEqual(new ProgramProduction().control(o, p, []).intents, [
+    { kind: "place", name: "GAPOWR", x: 30, y: 30 },
+  ]);
+  o.queues[0].status = 0;
+  o.queues[0].size = 0;
+  o.queues[0].items = [];
+  assert.deepEqual(new ProgramProduction().control(o, p, []).intents, []);
+});
+
+test("world features remain finite with absent optional flags and include spatially distinct enemies", () => {
+  const o = observation();
+  o.own = [unit("a")];
+  o.enemies = [
+    {
+      ref: "e",
+      name: "HTNK",
+      type: 7,
+      x: 23,
+      y: 20,
+      hp: 400,
+      maxHp: 400,
+      observedTick: 0,
+    },
+  ];
+  const c = new ProgramController(),
+    m = new ContactMemory();
+  m.observe(o);
+  const near = buildWorld(o, c.state, m);
+  o.enemies[0] = { ...o.enemies[0], x: 70 };
+  m.observe(o);
+  const far = buildWorld(o, c.state, m);
+  assert.notDeepEqual(near.entities, far.entities);
+  assert(near.entityEdges.length > far.entityEdges.length);
+  for (const rows of [
+    near.entities,
+    near.regions,
+    near.goals,
+    near.products,
+    near.tasks,
+    near.queues,
+  ])
+    assert(rows.flat().every(Number.isFinite));
+});
+
+test("semantic goal metadata cannot overwrite a native movement command kind", () => {
+  const o = observation();
+  o.own = [unit("tank")];
+  const p = new ProgramController(),
+    w = buildWorld(o, p.state, new ContactMemory()),
+    a = keepAction(w);
+  a.kinds[0] = 5;
+  a.goals[0] = w.goalObjects.findIndex((g) => g.kind === "start" && g.x === 80);
+  a.units[0] = 0;
+  p.apply(o, w, a);
+  const mission = p.plan(o).combat;
+  assert.deepEqual(mission.destination, { x: 80, y: 80 });
+  const intents = new CommanderTactics().control(o, mission, []).intents;
+  assert(intents.some((i) => i.kind === "move"));
+  assert(intents.every((i) => i.kind !== ("start" as any)));
+});

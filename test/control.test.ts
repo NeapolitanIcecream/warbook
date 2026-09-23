@@ -153,6 +153,7 @@ test("pressure assigns distinct economic targets and preserves a home guard", ()
   );
   const refs = [plan.combat, ...plan.additionalCombat!].flatMap((m) => m.units);
   assert.equal(new Set(refs).size, refs.length);
+  assert(!("program" in plan.production));
   assert.equal(plan.production.infantry.count, 10);
   o.tick += 30;
   const victim = pressure[0].units[0];
@@ -262,7 +263,7 @@ test("an exposed nearby MCV triggers a supported two-tank strike and stays activ
   assert.equal(c.controlPlan!.combat.kind, "advance");
   assert.equal(c.controlPlan!.combat.target, "mcv");
   assert.equal(c.controlPlan!.combat.objective, "exposed-construction");
-  assert.equal(c.controlPlan!.production.vehicles.harvesters, 2);
+  assert.equal(inventory(c).vehicles.harvesters, 2);
   o.tick += 3;
   c.decide(o);
   assert.equal(c.controlPlan!.combat.kind, "advance");
@@ -517,6 +518,7 @@ test("a scout has independent ownership and does not replace a garrison infantry
   const scout = plan.additionalCombat!.find((m) => m.kind === "scout")!;
   assert.deepEqual(scout.units, ["dog"]);
   assert.equal(scout.kind, "scout");
+  assert(!("program" in plan.production));
   assert.equal(plan.production.infantry.count, 6);
   assert(intents.some((i) => i.kind === "queue" && i.product.name === "E1"));
   assert.equal(
@@ -754,10 +756,10 @@ test("the offensive cohort funds its first force before expanding the economy", 
   const c = new Commander("cohort-local"),
     o = observation();
   c.decide(o);
-  assert.equal(c.controlPlan!.production.vehicles.harvesters, 2);
+  assert.equal(inventory(c).vehicles.harvesters, 2);
   assert(
-    c
-      .controlPlan!.production.structures.filter((g) => g.product === "GAREFN")
+    inventory(c)
+      .structures.filter((g) => g.product === "GAREFN")
       .every((g) => g.count === 1),
   );
   o.own = o.own.filter((u) => u.name !== "MTNK");
@@ -767,7 +769,7 @@ test("the offensive cohort funds its first force before expanding the economy", 
   o.tick += 3;
   c.decide(o);
   assert.equal(c.controlPlan!.combat.kind, "advance");
-  assert.equal(c.controlPlan!.production.vehicles.harvesters, 4);
+  assert.equal(inventory(c).vehicles.harvesters, 4);
 });
 
 test("extra combat tasks keep separate ownership and receive only their own feedback", () => {
@@ -2290,3 +2292,9 @@ test("an available shot is not abandoned to chase the squad focus outside range"
     "a rear gun still joins when it has no shot available",
   );
 });
+
+function inventory(c: Commander) {
+  const plan = c.controlPlan!.production;
+  assert(!("program" in plan));
+  return plan;
+}

@@ -32,6 +32,8 @@ export interface Unit extends Point {
   buildStatus?: number;
   repairable?: boolean;
   hasWrenchRepair?: boolean;
+  sellable?: boolean;
+  engineer?: boolean;
   deployed?: boolean;
   crusher?: boolean;
   antiAir?: boolean;
@@ -62,6 +64,22 @@ export interface Product {
   cost: number;
   queue: number;
   radar?: boolean;
+  prerequisites?: readonly string[];
+  prerequisiteOverride?: readonly string[];
+  buildTimeMultiplier?: number;
+  power?: number;
+  grants?: string;
+  available?: boolean;
+  prerequisiteGroups?: readonly (readonly string[])[];
+}
+export interface StrategicRegion extends Point {
+  height: number;
+  explored: number;
+  cells: number;
+  vehicle: boolean;
+  infantry: boolean;
+  /** Equality keys used for graph relations, never numeric actor features. */
+  component: string;
 }
 export interface Queue {
   type: number;
@@ -119,7 +137,19 @@ export interface Observation {
     x: number;
     y: number;
   }[];
+  capturableBuildings?: readonly {
+    ref: string;
+    name: string;
+    x: number;
+    y: number;
+  }[];
   products: Product[];
+  /** Public rules catalogue, including products whose prerequisites are unmet. */
+  catalogue?: readonly Product[];
+  regions?: readonly StrategicRegion[];
+  regionEdges?: readonly (readonly [number, number])[];
+  /** All sampled, fully explored, engine-legal footprints; no strategy ranking. */
+  placementChoices?: readonly { name: string; x: number; y: number }[];
   queues: Queue[];
   /** Placement checks are restricted to completely explored footprints around our own base. */
   buildSites: { name: string; x: number; y: number }[];
@@ -143,8 +173,32 @@ export type Intent = (
       onBridge?: boolean;
     }
   | { kind: "gather"; refs: string[]; x: number; y: number; onBridge?: boolean }
-  | { kind: "repair"; ref: string }
+  | { kind: "repair"; ref: string; enabled?: boolean }
+  | { kind: "sell"; ref: string }
+  | {
+      kind: "queueControl";
+      queue: number;
+      action: "pause" | "resume" | "cancel";
+    }
 ) & { task?: string };
+
+export const INTENT_KINDS: ReadonlySet<string> = new Set([
+  "deploy",
+  "stop",
+  "scatter",
+  "queue",
+  "place",
+  "attack",
+  "crush",
+  "capture",
+  "dock",
+  "attackMove",
+  "move",
+  "gather",
+  "repair",
+  "sell",
+  "queueControl",
+]);
 
 export const distance2 = (a: Point, b: Point): number =>
   (a.x - b.x) ** 2 + (a.y - b.y) ** 2;

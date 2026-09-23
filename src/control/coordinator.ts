@@ -1,4 +1,4 @@
-import type { Intent, Observation } from "../model.js";
+import { INTENT_KINDS, type Intent, type Observation } from "../model.js";
 import { OpeningStrategy } from "./strategy.js";
 import { LocalCombat } from "./tactics.js";
 import { QueueProduction } from "./production.js";
@@ -135,6 +135,8 @@ export class ControlCoordinator {
       )
         throw new Error("Stale task result");
       for (const intent of result.intents) {
+        if (!INTENT_KINDS.has(intent.kind))
+          throw new Error("Unknown intent kind");
         if (result.origin.controller === "tactics" && !("refs" in intent))
           throw new Error("Tactics cannot spend production resources");
         if (
@@ -149,10 +151,12 @@ export class ControlCoordinator {
               throw new Error("Intent violates task ownership");
             assigned.add(ref);
           }
-        if (intent.kind === "queue") {
-          if (queues.has(intent.product.queue))
+        if (intent.kind === "queue" || intent.kind === "queueControl") {
+          const queue =
+            intent.kind === "queue" ? intent.product.queue : intent.queue;
+          if (queues.has(queue))
             throw new Error("Conflicting production queue");
-          queues.add(intent.product.queue);
+          queues.add(queue);
         }
         this.origins.set(intent, result.origin);
         intents.push(intent);

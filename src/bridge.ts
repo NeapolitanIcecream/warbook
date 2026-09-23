@@ -29,10 +29,13 @@ import {
 } from "./effects.js";
 import {
   distance2,
+  INTENT_KINDS,
   type Observation,
   type Intent,
   type Unit,
   type Point,
+  type Product,
+  type StrategicRegion,
 } from "./model.js";
 
 export const OBSERVATION_PROTOCOL = "api-shroud-v1-pregame-map-prior";
@@ -76,6 +79,10 @@ export class WarbookBot extends Bot {
   private lastDefenseRouteTick = -150;
   private defenseRequestIds = "";
   private lastFortSiteTick = -30;
+  private catalogue?: Product[];
+  private strategicRegions: StrategicRegion[] = [];
+  private strategicEdges: [number, number][] = [];
+  private placementChoices: NonNullable<Observation["placementChoices"]> = [];
   public trace?: (event: Trace) => void;
   public autoTick = false;
   public observation?: Observation;
@@ -113,6 +120,40 @@ export class WarbookBot extends Bot {
       ).speedType!,
       true,
     );
+    if (this.components?.strategy?.observationScope === "commander-v1") {
+      const groups = game.rules.general.prereqCategories;
+      this.catalogue = [
+        ...game.rules.buildingRules.values(),
+        ...game.rules.infantryRules.values(),
+        ...game.rules.vehicleRules.values(),
+        ...game.rules.aircraftRules.values(),
+      ]
+        .filter((r) => r.techLevel >= 0)
+        .map((r) => ({
+          name: r.name,
+          type: r.type,
+          cost: r.cost,
+          queue: this.player.production.getQueueTypeForObject(r),
+          radar: r.radar,
+          prerequisites: r.prerequisite,
+          prerequisiteOverride: r.prerequisiteOverride,
+          prerequisiteGroups: r.prerequisite.map((p) => {
+            const category = [
+              "POWER",
+              "FACTORY",
+              "BARRACKS",
+              "RADAR",
+              "TECH",
+              "PROC",
+            ].indexOf(p.toUpperCase());
+            return category >= 0 ? (groups.get(category) ?? [p]) : [p];
+          }),
+          buildTimeMultiplier: r.buildTimeMultiplier,
+          power: r.power,
+          ...(r.freeUnit ? { grants: r.freeUnit } : {}),
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+    }
   }
   override onGameTick(game: GameApi): void {
     if (
@@ -148,6 +189,8 @@ export class WarbookBot extends Bot {
     this.currentRefs.clear();
     const data = this.player.getPlayerData();
     const tick = this.game.getCurrentTick();
+    const fullStrategy =
+      this.components?.strategy?.observationScope === "commander-v1";
     if (tick - this.lastScoutScan >= 150) {
       const ownHome = { x: data.startLocation.x, y: data.startLocation.y };
       const mainRefs = new Set(this.commander.controlPlan?.combat.units ?? []);
@@ -230,6 +273,12 @@ export class WarbookBot extends Bot {
           buildStatus: u.buildStatus,
           repairable: u.rules.repairable,
           hasWrenchRepair: u.hasWrenchRepair,
+          ...(this.components?.strategy?.observationScope === "commander-v1"
+            ? {
+                sellable: u.type === ObjectType.Building && !u.rules.unsellable,
+                engineer: u.rules.engineer,
+              }
+            : {}),
           deployed: u.stance === 3,
           crusher: u.rules.crusher,
           antiAir: combatCapabilities(u).antiAir,
@@ -417,6 +466,16 @@ export class WarbookBot extends Bot {
       x: u.tile.rx,
       y: u.tile.ry,
     }));
+    const capturableBuildings = fullStrategy
+      ? this.sorted(
+          this.player.getVisibleUnits("hostile", (r) => r.capturable),
+        ).map((u) => ({
+          ref: this.ref(u),
+          name: u.name,
+          x: u.tile.rx,
+          y: u.tile.ry,
+        }))
+      : undefined;
     const towards = this.commander.controlPlan?.additionalCombat?.find(
       (m) => m.approach,
     )?.approach;
@@ -576,6 +635,7 @@ export class WarbookBot extends Bot {
         })),
       }));
     const buildSites: Observation["buildSites"] = [];
+    if (fullStrategy && tick % 75 === 0) this.placementChoices = [];
     for (const q of queues.filter(
       (q) => q.status === QueueStatus.Ready && (q.type === 0 || q.type === 1),
     )) {
@@ -600,11 +660,12 @@ export class WarbookBot extends Bot {
         .slice()
         .sort((a, b) => distance2(a, home) - distance2(b, home))[0];
       const productionPlan = this.commander.controlPlan?.production;
-      const plannedAnchor = productionPlan?.defenses?.some(
-        (g) => g.product === name,
-      )
-        ? productionPlan.defenseAnchor
-        : undefined;
+      const plannedAnchor =
+        productionPlan &&
+        !("program" in productionPlan) &&
+        productionPlan.defenses?.some((g) => g.product === name)
+          ? productionPlan.defenseAnchor
+          : undefined;
       const anchor = this.game.rules.getBuilding(name).isBaseDefense
         ? (plannedAnchor ?? enemy ?? home)
         : home;
@@ -630,6 +691,24 @@ export class WarbookBot extends Bot {
         const tile = this.game.map.getTile(p.x, p.y);
         return !!tile && this.player.canPlaceBuilding(name, tile);
       };
+      if (fullStrategy && tick % 75 === 0) {
+        const choices: { name: string; x: number; y: number }[] = [];
+        for (const p of candidates.values()) {
+          let explored = true;
+          for (let x = p.x; x < p.x + foundation.width && explored; x++)
+            for (let y = p.y; y < p.y + foundation.height; y++) {
+              const tile = this.game.map.getTile(x, y);
+              if (!tile || !this.game.map.isVisibleTile(tile, this.name)) {
+                explored = false;
+                break;
+              }
+            }
+          const tile = this.game.map.getTile(p.x, p.y);
+          if (explored && tile && this.player.canPlaceBuilding(name, tile))
+            choices.push({ name, ...p });
+        }
+        this.placementChoices = [...this.placementChoices, ...choices];
+      }
       if (buildingRules.isBaseDefense && buildingRules.primary) {
         const foot = this.game.rules.getObject(
           data.country!.side === 0 ? "E1" : "E2",
@@ -727,6 +806,7 @@ export class WarbookBot extends Bot {
       enemies,
       routes: this.routes,
       techBuildings,
+      ...(capturableBuildings ? { capturableBuildings } : {}),
       vacatedContacts,
       oreFields: this.oreFields,
       products,
@@ -742,6 +822,36 @@ export class WarbookBot extends Bot {
       stagingRoute: this.stagingRoute,
       flankApproach: this.flankApproach,
     };
+    if (fullStrategy && tick % 75 === 0) {
+      const vehicle = this.mapPrior!.regionalObservation(
+        this.game.map,
+        this.name,
+        true,
+      );
+      const foot = this.footPrior!.regionalObservation(
+        this.game.map,
+        this.name,
+        false,
+      );
+      this.strategicRegions = [...vehicle.nodes, ...foot.nodes];
+      this.strategicEdges = [
+        ...vehicle.edges,
+        ...foot.edges.map(([a, b]): [number, number] => [
+          a + vehicle.nodes.length,
+          b + vehicle.nodes.length,
+        ]),
+      ];
+    }
+    if (fullStrategy) {
+      observation.regions = this.strategicRegions;
+      observation.regionEdges = this.strategicEdges;
+      const available = new Set(products.map((p) => p.name));
+      observation.catalogue = this.catalogue!.map((p) => ({
+        ...p,
+        available: available.has(p.name),
+      }));
+      observation.placementChoices = this.placementChoices;
+    }
     if (this.components?.strategy && tick % 75 === 0) {
       const points: Point[] = [
         ...own.filter((u) => u.type === 7),
@@ -825,15 +935,18 @@ export class WarbookBot extends Bot {
   decide(observation: Observation): Intent[] {
     const result = this.commander.decide(observation);
     const record = this.commander.launchRecord as
-      { tick?: number; schema?: string } | undefined;
+      | { tick?: number; schema?: string }
+      | undefined;
     if (record?.tick === observation.tick)
       this.trace?.({
         tick: observation.tick,
         actor: this.name,
         kind:
-          record.schema && isOperationSchema(record.schema)
-            ? "operation_decision"
-            : "launch_decision",
+          record.schema === "commander-v1"
+            ? "commander_decision"
+            : record.schema && isOperationSchema(record.schema)
+              ? "operation_decision"
+              : "launch_decision",
         record,
       });
     return result;
@@ -878,6 +991,8 @@ export class WarbookBot extends Bot {
     const assigned = new Set<string>();
     const changedQueues = new Set<number>();
     for (const intent of intents) {
+      if (!INTENT_KINDS.has(intent.kind))
+        throw new Error("Unknown intent kind");
       this.commander.assertCurrentIntent(intent, o.tick);
       if (
         "refs" in intent &&
@@ -895,14 +1010,18 @@ export class WarbookBot extends Bot {
         throw new Error("Target is no longer visible");
       if (
         intent.kind === "capture" &&
-        !o.techBuildings?.some((b) => b.ref === intent.target)
+        !(o.capturableBuildings ?? o.techBuildings)?.some(
+          (b) => b.ref === intent.target,
+        )
       )
         throw new Error("Capture target is no longer visible");
       if ("x" in intent && !this.game.map.getTile(intent.x, intent.y)) continue;
-      if (intent.kind === "queue") {
-        if (changedQueues.has(intent.product.queue))
+      if (intent.kind === "queue" || intent.kind === "queueControl") {
+        const queue =
+          intent.kind === "queue" ? intent.product.queue : intent.queue;
+        if (changedQueues.has(queue))
           throw new Error("Conflicting queue intent");
-        changedQueues.add(intent.product.queue);
+        changedQueues.add(queue);
       }
       if (
         intent.kind === "dock" &&
@@ -935,10 +1054,34 @@ export class WarbookBot extends Bot {
             this.player.actions.placeBuilding(intent.name, intent.x, intent.y);
             break;
           case "repair":
-            if (owned.has(intent.ref))
+            if (
+              owned.has(intent.ref) &&
+              !!o.own.find((u) => u.ref === intent.ref)?.hasWrenchRepair !==
+                (intent.enabled ?? true)
+            )
               this.player.actions.toggleRepairWrench(
                 this.currentRefs.get(intent.ref)!,
               );
+            break;
+          case "sell":
+            if (o.own.some((u) => u.ref === intent.ref && u.sellable))
+              this.player.actions.sellObject(this.currentRefs.get(intent.ref)!);
+            break;
+          case "queueControl":
+            if (intent.action === "pause")
+              this.player.actions.pauseProduction(intent.queue);
+            else if (intent.action === "resume")
+              this.player.actions.resumeProduction(intent.queue);
+            else
+              for (const item of this.player.production.getQueueData(
+                intent.queue,
+              ).items)
+                this.player.actions.unqueueFromProduction(
+                  intent.queue,
+                  item.rules.name,
+                  item.rules.type,
+                  item.quantity,
+                );
             break;
           case "capture":
           case "dock":
