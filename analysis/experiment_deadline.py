@@ -150,7 +150,9 @@ def main():
                 cwd=cwd, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
             state['finalizerPid'] = child.pid
             save()
-            while child.poll() is None and time.time() < evaluation_end:
+            # Its own deadline first closes batches and persists partial results.
+            # Keep this short grace inside the external resource deadline.
+            while child.poll() is None and time.time() < min(evaluation_end + 30, release - 30):
                 time.sleep(2)
             state['finalizerExit'] = child.poll()
         else:
