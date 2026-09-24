@@ -3,12 +3,17 @@ import "@tensorflow/tfjs-backend-cpu";
 import type { CommanderPolicy, CommanderPrediction } from "./controller.js";
 import {
   goalMask,
+  KEEP_UNIT,
   TASK_SLOTS,
   TASK_KINDS,
-  type CommanderAction,
   type CommanderWorld,
 } from "./world.js";
-import { commanderRoleMask, type CommanderEncoding } from "./action-mask.js";
+import {
+  actionEdits,
+  commanderRoleMask,
+  type CommanderEncoding,
+  type EncodedCommanderAction as CommanderAction,
+} from "./action-mask.js";
 
 export interface CommanderModel {
   format: "warbook-commander-model-v1";
@@ -39,7 +44,9 @@ export class NeuralCommanderPolicy implements CommanderPolicy {
     if (
       artifact.format !== "warbook-commander-model-v1" ||
       artifact.schema !== "commander-v1" ||
-      !["graph-plan-v1", "graph-plan-v2"].includes(artifact.encoding) ||
+      !["graph-plan-v1", "graph-plan-v2", "graph-plan-v3"].includes(
+        artifact.encoding,
+      ) ||
       artifact.hidden !== 128
     )
       throw new Error("Unsupported commander artifact");
@@ -262,6 +269,27 @@ export class NeuralCommanderPolicy implements CommanderPolicy {
         buildings: [],
         placements: [],
       };
+      const gated = this.encoding === "graph-plan-v3";
+      const editLogits = gated ? linear(h, "editGate") : undefined;
+      const forcedEdits = forced
+        ? (forced.edits ?? actionEdits(forced))
+        : undefined;
+      if (gated) a.edits = [];
+      const edit = (i: number, required = false, available = true) => {
+        if (!gated) return true;
+        const selected = choose(
+          `edit${i}`,
+          cat([
+            tf.zeros([1, 1]) as tf.Tensor2D,
+            tf.slice(editLogits!, [0, i], [1, 1]) as tf.Tensor2D,
+          ]),
+          [[!required, available]],
+          forcedEdits ? [forcedEdits[i]] : undefined,
+        )[0];
+        a.edits!.push(selected);
+        return selected === 1;
+      };
+      const editProduction = edit(0);
       let context = tf.zeros([1, 64]) as tf.Tensor2D;
       for (let q = 0; q < 6; q++) {
         const query = dense(
@@ -275,7 +303,15 @@ export class NeuralCommanderPolicy implements CommanderPolicy {
         const selected = choose(
           `queue${q}`,
           logits,
-          [[true, true, true, true, ...w.productQueues.map((i) => i === q)]],
+          [
+            [
+              true,
+              editProduction,
+              editProduction,
+              editProduction,
+              ...w.productQueues.map((i) => editProduction && i === q),
+            ],
+          ],
           forced ? [forced.queues[q]] : undefined,
         )[0];
         a.queues.push(selected);
@@ -322,13 +358,16 @@ export class NeuralCommanderPolicy implements CommanderPolicy {
         cat([tile(h, TASK_SLOTS), tasks, slots, tile(context, TASK_SLOTS)]),
         "taskQuery",
       );
+      const editTasks = edit(1);
       const km = w.previousKinds.map((old) =>
         TASK_KINDS.map((_, k) =>
-          k === 1
-            ? old >= 2
-            : k === 7
-              ? w.goalObjects.some((g) => g.kind === "tech")
-              : true,
+          k !== 0 && !editTasks
+            ? false
+            : k === 1
+              ? old >= 2
+              : k === 7
+                ? w.goalObjects.some((g) => g.kind === "tech")
+                : true,
         ),
       );
       a.kinds = choose("kind", linear(tq, "kind"), km, forced?.kinds);
@@ -372,11 +411,19 @@ export class NeuralCommanderPolicy implements CommanderPolicy {
         [taskKeys, this.tensors["roleSpecialKeys"]],
         0,
       ) as tf.Tensor2D;
+      const roleMasks = w.unitRefs.map((_, i) =>
+        commanderRoleMask(w, i, a.kinds, this.encoding),
+      );
+      const editUnits = edit(
+        2,
+        roleMasks.some((mask) => !mask[KEEP_UNIT]),
+        w.unitRefs.length > 0,
+      );
       a.units = choose(
         "unit",
         tf.div(tf.matMul(uq, roleKeys, false, true), 8) as tf.Tensor2D,
-        w.unitRefs.map((_, i) =>
-          commanderRoleMask(w, i, a.kinds, this.encoding),
+        roleMasks.map((mask) =>
+          mask.map((allowed, j) => allowed && (editUnits || j === KEEP_UNIT)),
         ),
         forced?.units,
       );
@@ -384,12 +431,19 @@ export class NeuralCommanderPolicy implements CommanderPolicy {
         cat([gather(e, w.buildingIndices), tile(h, w.buildingRefs.length)]),
         "building0",
       );
+      const editBuildings = edit(3, false, w.buildingRefs.length > 0);
       a.buildings = choose(
         "building",
         linear(bq, "building1"),
-        w.buildingCapabilities.map((c) => [true, c.repair, c.repair, c.sell]),
+        w.buildingCapabilities.map((c) => [
+          true,
+          editBuildings && c.repair,
+          editBuildings && c.repair,
+          editBuildings && c.sell,
+        ]),
         forced?.buildings,
       );
+      const editPlacements = edit(4, false, w.placementObjects.length > 0);
       for (let q = 0; q < 2; q++) {
         const pq = dense(
           cat([h, row(queues, q), row(queueNames, q)]),
@@ -405,7 +459,14 @@ export class NeuralCommanderPolicy implements CommanderPolicy {
           choose(
             `place${q}`,
             logits,
-            [[true, ...w.placementObjects.map((p) => p.queue === q)]],
+            [
+              [
+                true,
+                ...w.placementObjects.map(
+                  (p) => editPlacements && p.queue === q,
+                ),
+              ],
+            ],
             forced ? [forced.placements[q]] : undefined,
           )[0],
         );

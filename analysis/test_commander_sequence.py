@@ -28,4 +28,18 @@ class SequenceTests(unittest.TestCase):
         self.assertEqual(action['units'],[18,3,19])
         self.assertIs(canonical_action(action,world,'graph-plan-v1'),action)
 
+    def test_v3_bc_edits_include_membership_confirmation_when_a_task_changes_kind(self):
+        world={'previousRoles':[2],'previousKinds':[1,1,8]+[1]*13}
+        action={'queues':[0]*6,'kinds':[0,0,6]+[0]*13,'units':[18],'buildings':[],'placements':[0,0]}
+        label=canonical_action(action,world,'graph-plan-v3')
+        self.assertEqual(label['units'],[2])
+        self.assertEqual(label['edits'],[0,1,1,0,0])
+        self.assertNotIn('edits',action)
+
+    def test_ppo_preserves_open_review_gates_even_when_the_resulting_plan_keeps_everything(self):
+        executed={'queues':[0]*6,'kinds':[0]*16,'units':[18],'buildings':[],'placements':[0,0],'edits':[1,1,1,0,0]}
+        row={'action':executed,'teacherAction':{**executed,'edits':[0]*5}}
+        self.assertIs(training_action(row,'ppo'),executed)
+        self.assertEqual(training_action(row,'ppo')['edits'],[1,1,1,0,0])
+
 if __name__=='__main__':unittest.main()

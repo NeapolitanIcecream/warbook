@@ -21,7 +21,7 @@ def read_episode(path):
             e=json.loads(line)
             if e.get('actor')==actor and e.get('kind')=='commander_decision':rows.append(e['record'])
     if not rows:return None
-    if any(r.get('encoding') not in ['graph-plan-v1','graph-plan-v2'] or r['schema']!='commander-v1' for r in rows):raise ValueError('Unsupported commander encoding')
+    if any(r.get('encoding') not in ['graph-plan-v1','graph-plan-v2','graph-plan-v3'] or r['schema']!='commander-v1' for r in rows):raise ValueError('Unsupported commander encoding')
     if any(b['tick']-a['tick']!=75 for a,b in zip(rows,rows[1:])):raise ValueError('Missing strategy step')
     if not 0<=result['tick']-rows[-1]['tick']<=75:raise ValueError('Invalid terminal boundary')
     return {'path':str(path),'rows':rows,'reward':float(outcome=='W'),'outcome':outcome,
@@ -116,7 +116,7 @@ def main():
     ap=argparse.ArgumentParser();ap.add_argument('method',choices=['bc','ppo']);ap.add_argument('--episodes',required=True);ap.add_argument('--input');ap.add_argument('--out',required=True);ap.add_argument('--seed',type=int,default=47)
     ap.add_argument('--epochs',type=int);ap.add_argument('--batch',type=int,default=4);ap.add_argument('--sequence',type=int,default=16);ap.add_argument('--burn',type=int,default=8);ap.add_argument('--threads',type=int,default=1)
     ap.add_argument('--bc-event-weight',type=float,default=32.);ap.add_argument('--bc-loss',choices=['legacy','factor'],default='factor');ap.add_argument('--max-updates',type=int);ap.add_argument('--entropy',type=float,default=.001);ap.add_argument('--checkpoints',type=int,nargs='*',default=[])
-    ap.add_argument('--action-encoding',choices=['graph-plan-v1','graph-plan-v2']);ap.add_argument('--validation-fraction',type=float,default=.2);args=ap.parse_args()
+    ap.add_argument('--action-encoding',choices=['graph-plan-v1','graph-plan-v2','graph-plan-v3']);ap.add_argument('--validation-fraction',type=float,default=.2);args=ap.parse_args()
     if not 0<=args.validation_fraction<1:raise ValueError('Invalid validation fraction')
     world_size=int(os.environ.get('WORLD_SIZE','1'));rank=int(os.environ.get('RANK','0'))
     torch.set_num_threads(args.threads)
@@ -147,11 +147,12 @@ def main():
         vocabulary=sorted({n for names in all_objects(list(local_names),world_size) for n in names});model=CommanderModel(vocabulary)
     if args.action_encoding:
         if args.method=='ppo' and args.action_encoding!=model.encoding:raise ValueError('PPO cannot change behavior encoding')
-        model.encoding=args.action_encoding
+        model.change_encoding(args.action_encoding)
     if args.method=='ppo':
         expected=hashlib.sha256(Path(args.input).read_bytes()).hexdigest()
         if any(e['modelSha']!=expected for e in train):raise ValueError('Mixed behavior checkpoints')
         if any(r['encoding']!=model.encoding for e in train for r in e['rows']):raise ValueError('PPO behavior encoding mismatch')
+        if model.encoding=='graph-plan-v3' and any('edits' not in r['action'] for e in train for r in e['rows'] if r['executionSource']=='policy'):raise ValueError('PPO needs the recorded edit decisions; do not infer latent choices')
         values=np.asarray([e['reward']-r['value'] for e in train for r in e['rows'] if r['executionSource']=='policy'])
         moments=torch.tensor([values.sum(),(values**2).sum(),len(values)],dtype=torch.float64)
         if world_size>1:dist.all_reduce(moments)
@@ -227,7 +228,7 @@ def main():
       'encoderSha256':next(iter(hashes)),'worldSize':world_size,'localBatch':args.batch,'globalBatch':args.batch*world_size,'windowCounts':window_counts,
       'padding':'Zero-loss empty ranks, no repeated training windows','bcEventWeight':args.bc_event_weight,'bcMemory':'Chronological whole episodes with detached carried hidden state',
       'bcLoss':args.bc_loss,'bcFactorNormalization':'Per frame: mean across active domains; changed factors weighted directly; one mean KEEP negative per domain; global valid-frame DDP mean',
-      'encoding':model.encoding,'validationFraction':args.validation_fraction,'labelAdapter':'v2 confirms retained members on task retyping and canonicalizes redundant same-role assignments',
+      'encoding':model.encoding,'validationFraction':args.validation_fraction,'labelAdapter':'v2 confirms retyped members; v3 BC labels edit decisions from demonstrated plan changes; PPO retains recorded choices',
       'trainingEpisodes':[p for d in details for p in d['paths']],'validationEpisodes':validation,'excluded':[p for d in details for p in d['excluded']],
       'inputSha256':hashlib.sha256(Path(args.input).read_bytes()).hexdigest() if args.input else None,
       'labels':'BC uses explicit teacherAction where recorded; PPO uses executed action only',

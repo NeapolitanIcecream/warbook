@@ -5,7 +5,10 @@ import { ProgramProduction } from "../src/control/program-production.js";
 import { shouldScanPlacement } from "../src/commander/placement-clock.js";
 import { ProgramController } from "../src/commander/program.js";
 import { CommanderTactics } from "../src/commander/tactics.js";
-import { commanderRoleMask } from "../src/commander/action-mask.js";
+import {
+  actionEdits,
+  commanderRoleMask,
+} from "../src/commander/action-mask.js";
 import {
   FullCommander,
   type CommanderPolicy,
@@ -98,6 +101,46 @@ test("a fixed home destination and native harvesting keep distinct previous goal
   p.apply(o, w, keepAction(w));
   assert.deepEqual(p.plan(o).combat.destination, o.home);
   assert.equal(p.plan(o).additionalCombat![0].destination, undefined);
+});
+
+test("edit gates preserve plan authority and cannot hide a changed production request", () => {
+  const o = observation(),
+    p = new ProgramController("graph-plan-v3");
+  const w = buildWorld(o, p.state, new ContactMemory()),
+    a = keepAction(w);
+  assert.deepEqual(actionEdits(a), [0, 0, 0, 0, 0]);
+  a.queues[3] = 4;
+  assert.deepEqual(actionEdits(a), [1, 0, 0, 0, 0]);
+  assert.throws(
+    () => p.apply(o, w, { ...a, edits: [0, 0, 0, 0, 0] }),
+    /inactive edit domain/,
+  );
+  assert.deepEqual(
+    commanderRoleMask(
+      {
+        ...w,
+        unitCapabilities: [
+          { miner: true, engineer: false, deploy: false, building: false },
+        ],
+        previousRoles: [19],
+      },
+      0,
+      Array(16).fill(0),
+      "graph-plan-v3",
+    ),
+    commanderRoleMask(
+      {
+        ...w,
+        unitCapabilities: [
+          { miner: true, engineer: false, deploy: false, building: false },
+        ],
+        previousRoles: [19],
+      },
+      0,
+      Array(16).fill(0),
+      "graph-plan-v2",
+    ),
+  );
 });
 
 test("DAgger labels learner states without silently applying the expert action", () => {

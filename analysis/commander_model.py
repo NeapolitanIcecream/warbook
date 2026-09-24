@@ -7,6 +7,7 @@ import math
 import numpy as np
 import torch
 from torch import nn
+from commander_sequence import action_edits
 
 SLOTS=16
 HIDDEN=128
@@ -49,7 +50,7 @@ def pack(worlds,vocabulary):
     return out
 
 def pack_actions(actions,data):
-    out={}
+    out={'edits':torch.tensor([a.get('edits',action_edits(a)) for a in actions],dtype=torch.long)}
     for name in ['queues','amounts','cash','kinds','goals','engagement','units','buildings','placements']:
         n=data['unitIndex'].shape[1] if name=='units' else data['buildingIndex'].shape[1] if name=='buildings' else len(actions[0][name])
         x=np.zeros((len(actions),n),np.int64)
@@ -92,6 +93,15 @@ class CommanderModel(nn.Module):
         self.building0=nn.Linear(192,64);self.building1=nn.Linear(64,4)
         self.placeQuery=nn.Linear(160,64);self.placeKeep=nn.Linear(64,1)
         self.value0=nn.Linear(HIDDEN,64);self.value1=nn.Linear(64,1)
+        self.editGate=None
+        self.change_encoding(encoding)
+    def change_encoding(self,encoding):
+        if encoding not in ['graph-plan-v1','graph-plan-v2','graph-plan-v3']:raise ValueError('Unsupported encoding')
+        self.encoding=encoding
+        if encoding=='graph-plan-v3' and self.editGate is None:
+            self.editGate=nn.Linear(HIDDEN,5)
+            nn.init.zeros_(self.editGate.weight);nn.init.constant_(self.editGate.bias,math.log(19.))
+        elif encoding!='graph-plan-v3':self.editGate=None
     def encode_world(self,d):
         e=torch.tanh(self.entity0(torch.cat([d['entities'],self.names(d['entityIds'])],-1)))
         e=torch.tanh(self.entity1(torch.cat([e,neighbor_mean(e,d['entityEdges'])],-1)))
@@ -123,17 +133,26 @@ class CommanderModel(nn.Module):
             weight=torch.where(selected!=keep,4.,1.) if keep is not None else torch.ones_like(ent)
             bc=bc+summed(-lp.float()*active*weight);bc_weight=bc_weight+summed(active*weight)
             if bc_factor_boost:
-                domain='production' if name.startswith(('queue','amount','cash')) else 'tasks' if name in ['kind','goal','engagement'] else 'units' if name=='unit' else 'buildings' if name=='building' else 'placement'
+                domain=['production','tasks','units','buildings','placement'][int(name[4:])] if name.startswith('edit') else 'production' if name.startswith(('queue','amount','cash')) else 'tasks' if name in ['kind','goal','engagement'] else 'units' if name=='unit' else 'buildings' if name=='building' else 'placement'
                 keep_mask=active&(selected==keep) if keep is not None else torch.zeros_like(active)
                 changed=active&~keep_mask
                 importance=1.
                 if name=='unit':importance=torch.where(selected==17,float(bc_factor_boost),min(float(bc_factor_boost),4.))
                 elif name.startswith('place'):importance=min(float(bc_factor_boost),8.)
                 elif name.startswith('queue') or name in ['kind','building']:importance=min(float(bc_factor_boost),4.)
+                elif name.startswith('edit'):importance=min(float(bc_factor_boost),4.)
                 terms=(summed(-lp.float()*changed*importance),summed(-lp.float()*keep_mask),summed(changed.float()),summed(keep_mask.float()))
                 old=domains.get(domain,(zero,zero,zero,zero));domains[domain]=tuple(x+y for x,y in zip(old,terms))
             if return_probabilities:probabilities[name]=probs
             return selected
+        gate_logits=self.editGate(h) if self.editGate is not None else None
+        def edit(index,required=None,available=None):
+            if gate_logits is None:return torch.ones(b,dtype=torch.bool)
+            if required is None:required=torch.zeros(b,dtype=torch.bool)
+            if available is None:available=torch.ones(b,dtype=torch.bool)
+            logits=torch.stack([zero,gate_logits[:,index]],-1)
+            return choice(f'edit{index}',logits,torch.stack([~required,available],-1),a['edits'][:,index],keep=0).bool()
+        edit_production=edit(0)
         context=torch.zeros((b,64),dtype=h.dtype)
         queue_queries=[]
         for q in range(6):
@@ -141,6 +160,7 @@ class CommanderModel(nn.Module):
             queue_queries.append(query)
             logits=torch.cat([self.queueSpecial(query),torch.einsum('bd,bnd->bn',query,p)/8],-1)
             mask=torch.cat([torch.ones((b,4),dtype=torch.bool),d['productsMask']&(d['productQueue']==q)],-1)
+            mask&=edit_production[:,None]|(torch.arange(mask.shape[-1])[None,:]==0)
             selected=choice(f'queue{q}',logits,mask,a['queues'][:,q],keep=0)
             product=gather_rows(p,(selected-4).clamp_min(0)[:,None]).squeeze(1)
             special=self.queueSpecialKeys[selected.clamp_max(3)]
@@ -154,8 +174,10 @@ class CommanderModel(nn.Module):
             context=torch.tanh(self.queueContext(torch.cat([context,key,coded],-1)))
         slot=self.slots(torch.arange(SLOTS))[None].expand(b,-1,-1)
         tq=torch.tanh(self.taskQuery(torch.cat([h[:,None].expand(-1,SLOTS,-1),tasks,slot,context[:,None].expand(-1,SLOTS,-1)],-1)))
+        edit_tasks=edit(1)
         km=torch.ones((b,SLOTS,11),dtype=torch.bool);km[:,:,1]=d['previousKind']>=2
         km[:,:,7]=(d['goalKind']==6).any(1)[:,None]
+        km&=edit_tasks[:,None,None]|(torch.arange(11)[None,None,:]==0)
         choice('kind',self.kind(tq),km,a['kinds'],keep=0)
         kind=a['kinds'];ke=self.kindEmbedding(torch.where(kind==0,d['previousKind'],kind))
         gq=torch.tanh(self.goalQuery(torch.cat([tq,ke],-1)))
@@ -180,21 +202,27 @@ class CommanderModel(nn.Module):
         previous=d['previousRole'];previous_allowed=allowed.gather(-1,previous.clamp_max(SLOTS-1).unsqueeze(-1)).squeeze(-1)
         special=torch.stack([torch.ones_like(previous,dtype=torch.bool),d['unitCap'][:,:,2],(previous>=SLOTS)|previous_allowed,torch.ones_like(previous,dtype=torch.bool)],-1)
         um=torch.cat([allowed,special],-1)
-        if self.encoding=='graph-plan-v2':
+        if self.encoding!='graph-plan-v1':
             before=d['previousKind'].gather(1,previous.clamp_max(SLOTS-1))
             after=actual_kind.gather(1,previous.clamp_max(SLOTS-1))
             changed=(previous<SLOTS)&(before!=after)
             um[:,:,18]&=~changed
             duplicate=(previous!=17)&um[:,:,18]
             um=um&~(torch.nn.functional.one_hot(previous,20).bool()&duplicate[:,:,None])
+        edit_units=edit(2,required=((~um[:,:,18])&d['unitIndexMask']).any(1),available=d['unitIndexMask'].any(1))
+        um&=edit_units[:,None,None]|(torch.arange(20)[None,None,:]==18)
         choice('unit',ul,um,a['units'],valid=d['unitIndexMask'],keep=18)
         building_e=gather_rows(e,d['buildingIndex']);bq=torch.tanh(self.building0(torch.cat([building_e,h[:,None].expand(-1,building_e.shape[1],-1)],-1)))
         bm=torch.stack([torch.ones_like(d['buildingCap'][:,:,0]),d['buildingCap'][:,:,0],d['buildingCap'][:,:,0],d['buildingCap'][:,:,1]],-1)
+        edit_buildings=edit(3,available=d['buildingIndexMask'].any(1))
+        bm&=edit_buildings[:,None,None]|(torch.arange(4)[None,None,:]==0)
         choice('building',self.building1(bq),bm,a['buildings'],valid=d['buildingIndexMask'],keep=0)
+        edit_placements=edit(4,available=d['placementsMask'].any(1))
         for q in range(2):
             pq=torch.tanh(self.placeQuery(torch.cat([h,d['queues'][:,q],self.names(d['queueIds'][:,q])],-1)))
             pl=torch.cat([self.placeKeep(pq),torch.einsum('bd,bnd->bn',pq,places)/8],-1)
             pm=torch.cat([torch.ones((b,1),dtype=torch.bool),d['placementsMask']&(d['placementQueue']==q)],-1)
+            pm&=edit_placements[:,None]|(torch.arange(pm.shape[-1])[None,:]==0)
             choice(f'place{q}',pl,pm,a['placements'][:,q],keep=0)
         value=torch.sigmoid(self.value1(torch.tanh(self.value0(h)))).squeeze(-1)
         if bc_factor_boost:

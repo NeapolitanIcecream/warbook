@@ -18,12 +18,16 @@ import {
   goalMask,
   initialProgram,
   keepAction,
-  type CommanderAction,
   type CommanderWorld,
   type Goal,
   type ProgramState,
 } from "./world.js";
-import { commanderRoleMask, type CommanderEncoding } from "./action-mask.js";
+import {
+  actionEdits,
+  commanderRoleMask,
+  type CommanderEncoding,
+  type EncodedCommanderAction as CommanderAction,
+} from "./action-mask.js";
 
 const sameGoal = (a?: Goal, b?: Goal) =>
   !!a === !!b &&
@@ -53,7 +57,7 @@ export class ProgramController {
     w: CommanderWorld,
     desired: StrategicPlan<ProgramProductionPlan>,
   ): CommanderAction {
-    const a = keepAction(w);
+    const a: CommanderAction = keepAction(w);
     this.projectionDistances = [];
     const missions = [desired.combat, ...(desired.additionalCombat ?? [])];
     if (missions.length > TASK_SLOTS)
@@ -182,9 +186,17 @@ export class ProgramController {
         throw new Error("Teacher placement outside observed legal choices");
       a.placements[w.placementObjects[i].queue] = i + 1;
     }
+    if (this.encoding === "graph-plan-v3") a.edits = actionEdits(a);
     return a;
   }
   apply(o: Observation, w: CommanderWorld, a: CommanderAction) {
+    if (
+      a.edits &&
+      (a.edits.length !== 5 ||
+        a.edits.some((x) => x !== 0 && x !== 1) ||
+        actionEdits(a).some((changed, i) => changed && !a.edits![i]))
+    )
+      throw new Error("An inactive edit domain cannot change the plan");
     if (
       a.kinds.length !== TASK_SLOTS ||
       a.units.length !== w.unitRefs.length ||
@@ -198,7 +210,7 @@ export class ProgramController {
         throw new Error("Invalid task kind");
       if (!k) continue;
       if (
-        this.encoding === "graph-plan-v2" &&
+        this.encoding !== "graph-plan-v1" &&
         (!this.state.slots[i].active ||
           this.state.slots[i].kind !== TASK_KINDS[k])
       ) {

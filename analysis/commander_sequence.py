@@ -32,6 +32,9 @@ def training_action(record,method):
     # DAgger queries the expert without pretending it executed that action.
     return record.get('teacherAction',record['action']) if method=='bc' else record['action']
 
+def action_edits(action):
+    return [int(any(x!=keep for x in action[name])) for name,keep in [('queues',0),('kinds',0),('units',18),('buildings',0),('placements',0)]]
+
 def canonical_action(action,world,encoding):
     if encoding=='graph-plan-v1':return action
     result={**action,'units':list(action['units'])}
@@ -40,4 +43,5 @@ def canonical_action(action,world,encoding):
         changed=old<16 and action['kinds'][old] not in [0,world['previousKinds'][old]]
         if selected==18 and changed:result['units'][i]=old
         elif selected==old and old!=17 and not changed:result['units'][i]=18
+    if encoding=='graph-plan-v3':result['edits']=action_edits(result)
     return result

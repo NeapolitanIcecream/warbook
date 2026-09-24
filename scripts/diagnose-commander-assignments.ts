@@ -38,7 +38,7 @@ await prepareCommander();
 const model = new NeuralCommanderPolicy(JSON.parse(artifactText), true);
 
 function canonical(a: CommanderAction, w: CommanderWorld): CommanderAction {
-  if (model.encoding !== "graph-plan-v2") return a;
+  if (model.encoding === "graph-plan-v1") return a;
   return {
     ...a,
     units: a.units.map((selected, i) => {
@@ -150,7 +150,11 @@ try {
         continue;
       const record = JSON.parse(line).record as CommanderRecord;
       if (
-        record.encoding !== model.encoding ||
+        (record.encoding !== model.encoding &&
+          !(
+            model.encoding === "graph-plan-v3" &&
+            record.encoding === "graph-plan-v2"
+          )) ||
         record.tick !== previousTick + 75 ||
         !record.teacherAction
       )

@@ -13,14 +13,16 @@ import {
   COMMANDER_SCHEMA,
 } from "./teacher.js";
 import { ProgramController } from "./program.js";
-import type { CommanderEncoding } from "./action-mask.js";
+import type {
+  CommanderEncoding,
+  EncodedCommanderAction as CommanderAction,
+} from "./action-mask.js";
 import {
   buildWorld,
   ContactMemory,
   DEPLOY,
   RESERVE,
   type CommanderWorld,
-  type CommanderAction,
 } from "./world.js";
 
 export interface CommanderPrediction {
