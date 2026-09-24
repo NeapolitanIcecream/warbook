@@ -1,6 +1,8 @@
-import unittest,tempfile,json,hashlib
+import unittest,tempfile,json,hashlib,datetime,sys
 from pathlib import Path
-from commander_night import next_learning_state,verified_candidate_receipts,completed_games
+from unittest.mock import patch
+import commander_night
+from commander_night import next_learning_state,verified_candidate_receipts,completed_games,active_profiles,peer_model,quarantine_profile
 
 class NightSelectionTests(unittest.TestCase):
     def test_incumbent_qualifying_does_not_graduate_a_failed_candidate(self):
@@ -20,5 +22,58 @@ class NightSelectionTests(unittest.TestCase):
             self.assertEqual(completed_games(root),4)
             model.write_text('changed')
             with self.assertRaises(ValueError):verified_candidate_receipts(root)
+
+    def test_quarantined_route_is_not_sampled_and_exposes_only_its_retained_peer(self):
+        state={'profiles':{'broken':{'current':'unretained','retained':'verified'},'healthy':{'current':'learning','retained':'anchor'}}}
+        quarantine_profile(state,'broken',0,'non-finite observation')
+        self.assertEqual(list(active_profiles(state['profiles'])),['healthy'])
+        self.assertEqual(peer_model(state['profiles']['broken']),'verified')
+        self.assertEqual(peer_model(state['profiles']['healthy']),'learning')
+
+    def test_driver_continues_healthy_rounds_and_final_evaluation_after_a_peer_fails(self):
+        # Exercise the actual scheduler; subprocesses stand in for games/training.
+        with tempfile.TemporaryDirectory() as tmp:
+            root=(Path(tmp)/'run').resolve();plan_path=Path(tmp)/'plan.json';calls=[]
+            end=(datetime.datetime.now(datetime.timezone.utc)+datetime.timedelta(hours=1)).isoformat()
+            plan={'trainingCutoff':end,'hardDeadline':end,'maps':['map'],'rounds':1,'maxCycles':2,
+                  'strongReference':'reference','anchors':{'main':[],'pressure':[]},
+                  'profiles':[{'name':route,'route':route,'arm':'test','encoding':'graph-plan-v2','seed':1,'input':'old'} for route in ['pressure','main']]}
+            plan_path.write_text(json.dumps(plan))
+            class Process:
+                def __init__(self,cmd,stdout,**kwargs):
+                    self.pid=123;self.code=0
+                    if 'scripts/build-bot.ts' in cmd:
+                        stdout.write(json.dumps({'path':'frozen-release'})+'\n')
+                    elif 'analysis/commander_migrate.py' in cmd:
+                        out=Path(cmd[cmd.index('--out')+1]);out.write_text('initial-'+out.parent.name)
+                    elif 'analysis/commander_train.py' in cmd:
+                        out=Path(cmd[cmd.index('--out')+1]);out.write_text(str(out))
+                    elif 'analysis/launch_batch.py' in cmd:
+                        p=Path(cmd[cmd.index('analysis/launch_batch.py')+1]);spec=json.loads(p.read_text())
+                        out=Path(cmd[cmd.index('--out')+1]);out.mkdir()
+                        phase=str(p.relative_to(root));calls.append(phase)
+                        n=len(spec['maps'])*len(spec['opponents'])*spec['rounds']
+                        counts={s:{'W':0,'L':n,'U':0,'E':0} for s in spec['subjects']}
+                        failing='/pressure/check/' in '/'+phase or phase.startswith('final/pressure/')
+                        if failing:
+                            subject=next(iter(counts));counts[subject]['L']-=1;counts[subject]['E']=1;self.code=1
+                        summary={'complete':True,'completed':n*len(counts),'counts':counts}
+                        (out/'summary.json').write_text(json.dumps(summary))
+                        (out/'learner-episodes.json').write_text('[]')
+                def wait(self,timeout=None):return self.code
+            with patch.object(sys,'argv',['commander_night.py',str(plan_path),'--out',str(root)]), \
+                 patch.object(commander_night.subprocess,'Popen',Process), \
+                 patch.object(commander_night.subprocess,'check_output',return_value='fixed-source\n'), \
+                 patch.object(commander_night,'require_batch_space',return_value={}):
+                code=commander_night.main()
+            state=json.loads((root/'state.json').read_text())
+            self.assertEqual(code,1)
+            self.assertEqual(state['phase'],'complete_with_failures')
+            self.assertEqual(len(state['failures']),1,state['failures'])
+            self.assertEqual(len(state['finalFailures']),1)
+            self.assertEqual([x['name'] for x in state['history']],['main','main'])
+            self.assertTrue(any(x.startswith('main-') for x in state['final']))
+            self.assertIn('cycle-01/main/sample/plan.json',calls)
+            self.assertNotIn('cycle-01/pressure/sample/plan.json',calls)
 
 if __name__=='__main__':unittest.main()

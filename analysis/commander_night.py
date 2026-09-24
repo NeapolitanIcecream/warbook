@@ -26,6 +26,17 @@ def next_learning_state(stage,incumbent,candidate,old_wins,new_wins,threshold):
     current=(candidate if new_wins>=old_wins else incumbent) if ready else candidate
     return current,retained,'ppo' if ready else 'bc'
 
+def active_profiles(profiles):
+    return {name:p for name,p in profiles.items() if not p.get('quarantined')}
+
+def peer_model(profile):
+    return profile['retained'] if profile.get('quarantined') else profile['current']
+
+def quarantine_profile(state,name,cycle,error):
+    failure={'name':name,'cycle':cycle,'error':str(error)}
+    state.setdefault('failures',[]).append(failure)
+    state['profiles'][name]['quarantined']=failure
+
 def main():
     ap=argparse.ArgumentParser();ap.add_argument('plan');ap.add_argument('--out',required=True);args=ap.parse_args()
     plan=json.loads(Path(args.plan).read_text());root=Path(args.out).resolve();root.mkdir(parents=True,exist_ok=True)
@@ -91,17 +102,19 @@ def main():
             for name,p in ex.map(initialize,plan['profiles']):state['profiles'][name]=p;save()
         for cycle in range(plan.get('maxCycles',40)):
             if time.time()>=cutoff or state['games']>=plan.get('maxGames',20000):break
+            profiles=active_profiles(state['profiles'])
+            if not profiles:state['stopReason']='All profiles quarantined';save();break
             # Bound combined concurrent journal space, not each child in isolation.
-            simultaneous=len(state['profiles'])*len(plan['maps'])*4*max(plan.get('rounds',4),2)
+            simultaneous=len(profiles)*len(plan['maps'])*4*max(plan.get('rounds',4),2)
             try:require_batch_space(root,simultaneous,'launch',192)
             except RuntimeError as error:state['stopReason']=str(error);save();break
             state.update(phase='sampling-update',cycle=cycle);save()
-            profiles=state['profiles'];releases={}
-            for name,p in profiles.items():
-                d=root/f'cycle-{cycle:02d}'/name;d.mkdir(parents=True,exist_ok=True);releases[name]=freeze(p['current'],p['route'],d)
+            releases={}
+            for name,p in state['profiles'].items():
+                d=root/f'cycle-{cycle:02d}'/name;d.mkdir(parents=True,exist_ok=True);releases[name]=freeze(peer_model(p),p['route'],d)
             def step(name):
                 p=profiles[name];d=root/f'cycle-{cycle:02d}'/name
-                peer=next(n for n,q in profiles.items() if q['arm']==p['arm'] and q['route']!=p['route'])
+                peer=next(n for n,q in state['profiles'].items() if q['arm']==p['arm'] and q['route']!=p['route'])
                 opponents={'supalosa':{'native':'supalosa'},'opposite-rule':{'release':rules['pressure' if p['route']=='main' else 'main']},'current-peer':{'release':releases[peer]},'strong-history':{'release':plan['strongReference']}}
                 learning=p['stage']=='ppo';sampling=batch(d/'sample',{'learner':spec(p,p['current'],not learning)},opponents,plan.get('rounds',4),plan.get('workersPerProfile',16),10000+cycle*37+p['seed'])
                 new=json.loads((d/'sample/games/learner-episodes.json').read_text())
@@ -118,16 +131,15 @@ def main():
                 row={'cycle':cycle,'name':name,'method':'ppo' if learning else 'dagger-bc','sampling':sampling['counts'],'check':check['counts'],'candidate':candidate,'retained':kept,'games':sampling['completed']+check['completed']}
                 atomic(d/'profile-complete.json',{'profile':updated,'result':row})
                 return name,updated,row
-            boundary=False;failures=[]
+            boundary=False
             with concurrent.futures.ThreadPoolExecutor(max_workers=len(profiles)) as ex:
                 futures={ex.submit(step,name):name for name in profiles}
                 for future in concurrent.futures.as_completed(futures):
                     try:
-                        name,p,row=future.result();profiles[name]=p;state['history'].append(row)
+                        name,p,row=future.result();state['profiles'][name]=p;state['history'].append(row)
                     except TrainingBoundary:boundary=True
-                    except Exception as error:failures.append({'name':futures[future],'error':str(error)})
+                    except Exception as error:quarantine_profile(state,futures[future],cycle,error)
                     state['games']=completed_games(root);state['pending']=verified_candidate_receipts(root);save()
-            if failures:state['failures']=failures;save();raise RuntimeError('A profile failed; verified candidates are preserved')
             state['phase']='cycle-complete';save()
             if boundary:state['stopReason']='Training phase deadline; finalize verified models';break
         state['phase']='final-evaluation';save()
@@ -141,9 +153,16 @@ def main():
                 if key in seen:continue
                 seen.add(key);subjects[name+'-'+which]=spec(p,model)
             opponents={'supalosa':{'native':'supalosa'},'main-rule':{'release':rules['main']},'pressure-rule':{'release':rules['pressure']},'strong-history':{'release':plan['strongReference']}}
-            final=batch(root/'final'/name,subjects,opponents,2,plan.get('finalWorkers',96),29024);state['games']=completed_games(root);final_counts.update(final['counts']);state['final']=final_counts;save()
-        state.update(phase='complete',finishedAt=time.time());save()
+            try:
+                final=batch(root/'final'/name,subjects,opponents,2,plan.get('finalWorkers',96),29024)
+                final_counts.update(final['counts'])
+            except Exception as error:
+                state.setdefault('finalFailures',[]).append({'name':name,'error':str(error)})
+            state['games']=completed_games(root);state['final']=final_counts;save()
+        failed=bool(state.get('failures') or state.get('finalFailures'))
+        state.update(phase='complete_with_failures' if failed else 'complete',finishedAt=time.time());save()
+        return 1 if failed else 0
     except BaseException as error:
         state.update(phase='stopped',error=str(error),finishedAt=time.time());save();raise
 
-if __name__=='__main__':main()
+if __name__=='__main__':sys.exit(main())

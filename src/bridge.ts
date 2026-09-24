@@ -20,7 +20,7 @@ import {
 } from "./defense-placement.js";
 import { MapPrior } from "./map-prior.js";
 import { LocalGroundMap } from "./local-ground-map.js";
-import { combatCapabilities } from "./unit-capabilities.js";
+import { combatCapabilities, combatWeaponRange } from "./unit-capabilities.js";
 import { Commander, type PolicyMode } from "./policy.js";
 import type { ControlComponents } from "./control/contracts.js";
 import {
@@ -284,11 +284,9 @@ export class WarbookBot extends Bot {
           crusher: u.rules.crusher,
           antiAir: combatCapabilities(u).antiAir,
           canThreatenVehicles: combatCapabilities(u).canThreatenVehicles,
-          weaponRange: u.primaryWeapon?.maxRange,
+          weaponRange: combatWeaponRange(u.primaryWeapon),
           weaponCooldown: u.primaryWeapon?.cooldownTicks,
-          deployedWeaponRange: u.secondaryWeapon?.rules.neverUse
-            ? undefined
-            : u.secondaryWeapon?.maxRange,
+          deployedWeaponRange: combatWeaponRange(u.secondaryWeapon),
         };
       },
     );

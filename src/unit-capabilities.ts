@@ -1,9 +1,20 @@
 import type { UnitData, WeaponData } from "@chronodivide/game-api";
 
-/** Static weapon capability of an owned or currently visible unit. NeverUse scanners do not fire. */
+function combatWeapon(weapon?: WeaponData): weapon is WeaponData {
+  // Spy MakeupKit has an infinite targeting range, but only applies disguise.
+  return (
+    !!weapon && !weapon.rules.neverUse && !weapon.warheadRules.makesDisguise
+  );
+}
+
+export function combatWeaponRange(weapon?: WeaponData): number | undefined {
+  return combatWeapon(weapon) ? weapon.maxRange : undefined;
+}
+
+/** Static combat capability of an owned or currently visible unit. */
 export function combatCapabilities(unit: UnitData) {
   const weapons = [unit.primaryWeapon, unit.secondaryWeapon].filter(
-    (w): w is WeaponData => !!w && !w.rules.neverUse,
+    combatWeapon,
   );
   const ground = weapons.filter((w) => w.projectileRules.isAntiGround);
   // Pinned ArmorType: Light/Medium/Heavy = 3/4/5; Wood/Steel/Concrete = 6/7/8.

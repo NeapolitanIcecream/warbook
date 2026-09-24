@@ -1,7 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import type { UnitData } from "@chronodivide/game-api";
-import { combatCapabilities } from "../src/unit-capabilities.js";
+import type { UnitData, WeaponData } from "@chronodivide/game-api";
+import {
+  combatCapabilities,
+  combatWeaponRange,
+} from "../src/unit-capabilities.js";
 
 test("a dog's virtual scanner does not become a ranged anti-armor weapon", () => {
   const unit = {
@@ -45,4 +48,35 @@ test("an unarmed engineer remains a building threat", () => {
   assert.equal(result.canThreatenBuildings, true);
   assert.equal(result.canThreatenVehicles, false);
   assert.equal(result.weaponRange, 0);
+});
+
+test("a spy's infinite disguise range is not a combat range or a vehicle threat", () => {
+  const spy = {
+    rules: { agent: true, infiltrate: true },
+    primaryWeapon: {
+      rules: { name: "MakeupKit", neverUse: false },
+      maxRange: Infinity,
+      projectileRules: { isAntiGround: true },
+      warheadRules: {
+        makesDisguise: true,
+        verses: new Map([
+          [3, 1],
+          [6, 1],
+        ]),
+      },
+    },
+  } as unknown as UnitData;
+  assert.equal(combatWeaponRange(spy.primaryWeapon), undefined);
+  assert.deepEqual(combatCapabilities(spy), {
+    weaponRange: 0,
+    antiAir: false,
+    canThreatenBuildings: true,
+    canThreatenVehicles: false,
+  });
+  const firingWeapon = {
+    ...spy.primaryWeapon!,
+    maxRange: 6,
+    warheadRules: { ...spy.primaryWeapon!.warheadRules, makesDisguise: false },
+  } as unknown as WeaponData;
+  assert.equal(combatWeaponRange(firingWeapon), 6);
 });
