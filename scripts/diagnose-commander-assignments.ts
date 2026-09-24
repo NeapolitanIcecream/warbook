@@ -12,6 +12,7 @@ import {
 import { type CommanderRecord } from "../src/commander/controller.js";
 import {
   actionEdits,
+  commanderRoleMask,
   type EncodedCommanderAction,
 } from "../src/commander/action-mask.js";
 import {
@@ -64,15 +65,22 @@ function job(
     return {
       kind: ["reserve", "deploy", "keep", "native"][role - 16],
       goal: null,
+      engagement: null,
     };
   const kind = a.kinds[role] || w.previousKinds[role];
-  if (kind < 2) return { kind: "reserve", goal: null };
+  if (kind < 2) return { kind: "reserve", goal: null, engagement: null };
   const goal =
     kind === 10
       ? undefined
       : w.goalObjects[a.kinds[role] ? a.goals[role] : w.previousGoals[role]];
   return {
     kind: TASK_KINDS[kind],
+    engagement:
+      kind === 10
+        ? 0
+        : a.kinds[role]
+          ? a.engagement[role]
+          : w.tasks[role][20] + 2 * w.tasks[role][21] + 4 * w.tasks[role][24],
     goal: goal
       ? [
           goal.x,
@@ -122,6 +130,30 @@ const counter = () => ({
 });
 const increment = (c: Record<string, number>, key: string) =>
   (c[key] = (c[key] ?? 0) + 1);
+const conditionCounter = () => ({
+  units: 0,
+  correct: 0,
+  kindCorrect: 0,
+  kindAbsent: 0,
+  semanticJobAbsent: 0,
+  memberWrongWithJobAvailable: 0,
+});
+const conditions = () =>
+  Object.fromEntries(
+    [
+      "teacher-production_teacher-tasks",
+      "teacher-production_model-tasks",
+      "model-production_teacher-tasks",
+      "model-production_model-tasks",
+    ].map((name) => [
+      name,
+      {
+        all: conditionCounter(),
+        miners: conditionCounter(),
+        tanks: conditionCounter(),
+      },
+    ]),
+  );
 const episodes: any[] = [];
 const examples: unknown[] = [];
 const exampleCounts = { miner: 0, tank: 0 };
@@ -151,6 +183,7 @@ try {
       frames = 0,
       previousTick = -75;
     const groups = { all: counter(), miners: counter(), tanks: counter() };
+    const upstreamConditions = conditions();
     for await (const line of lines) {
       if (
         !line.includes('"kind":"commander_decision"') ||
@@ -172,13 +205,13 @@ try {
       const w = record.world;
       const own = model.predict(w, hidden, () => 0.5, true);
       if (frames++ % stride === 0) {
-        const teacher = canonical(record.teacherAction, w);
+        const teacher = reviewMembers(canonical(record.teacherAction, w), w);
         const guided = model.predict(
           w,
           hidden,
           () => 0.5,
           true,
-          reviewMembers(teacher, w),
+          reviewMembers({ ...teacher, units: [] }, w),
         );
         const ownHead =
           model.encoding === "graph-plan-v3"
@@ -190,6 +223,62 @@ try {
                 reviewMembers(own.action, w),
               )
             : own;
+        // Production also reaches task queries. Cross it separately from task content.
+        const teacherProductionModelTasks: EncodedCommanderAction = {
+          ...own.action,
+          queues: teacher.queues,
+          amounts: teacher.amounts,
+          cash: teacher.cash,
+          kinds: [],
+          goals: [],
+          engagement: [],
+          units: [],
+          ...(own.action.edits
+            ? {
+                edits: [
+                  teacher.edits![0],
+                  own.action.edits[1],
+                  1,
+                  ...own.action.edits.slice(3),
+                ],
+              }
+            : {}),
+        };
+        const modelProductionTeacherTasks: EncodedCommanderAction = {
+          ...teacher,
+          queues: own.action.queues,
+          amounts: own.action.amounts,
+          cash: own.action.cash,
+          units: [],
+          ...(teacher.edits
+            ? {
+                edits: [
+                  own.action.edits![0],
+                  teacher.edits[1],
+                  1,
+                  ...teacher.edits.slice(3),
+                ],
+              }
+            : {}),
+        };
+        const crossed = {
+          "teacher-production_teacher-tasks": guided,
+          "teacher-production_model-tasks": model.predict(
+            w,
+            hidden,
+            () => 0.5,
+            true,
+            reviewMembers(teacherProductionModelTasks, w),
+          ),
+          "model-production_teacher-tasks": model.predict(
+            w,
+            hidden,
+            () => 0.5,
+            true,
+            reviewMembers(modelProductionTeacherTasks, w),
+          ),
+          "model-production_model-tasks": ownHead,
+        };
         for (let i = 0; i < w.unitRefs.length; i++) {
           const desired = job(w, teacher, i),
             key = JSON.stringify(desired);
@@ -216,14 +305,65 @@ try {
           );
           if (w.unitCapabilities[i].miner) categories.push(groups.miners);
           if (tank) categories.push(groups.tanks);
-          const kindAvailable = ownProbs.some(
-            (p, j) => p > 0 && job(w, own.action, i, j).kind === desired.kind,
+          const legal = commanderRoleMask(
+            w,
+            i,
+            own.action.kinds,
+            model.encoding,
           );
+          const kindAvailable = legal.some(
+            (allowed, j) =>
+              allowed && job(w, own.action, i, j).kind === desired.kind,
+          );
+          const jobAvailable = legal.some(
+            (allowed, j) =>
+              allowed && JSON.stringify(job(w, own.action, i, j)) === key,
+          );
+          for (const [name, prediction] of Object.entries(crossed)) {
+            const mask = commanderRoleMask(
+              w,
+              i,
+              prediction.action.kinds,
+              model.encoding,
+            );
+            const available = mask.some(
+              (allowed, j) =>
+                allowed &&
+                JSON.stringify(job(w, prediction.action, i, j)) === key,
+            );
+            const typeAvailable = mask.some(
+              (allowed, j) =>
+                allowed &&
+                job(w, prediction.action, i, j).kind === desired.kind,
+            );
+            const selected = job(
+              w,
+              prediction.action,
+              i,
+              argmax(prediction.probabilities!.unit[i]),
+            );
+            const correct = JSON.stringify(selected) === key;
+            const c = upstreamConditions[name];
+            for (const category of [
+              c.all,
+              ...(w.unitCapabilities[i].miner ? [c.miners] : []),
+              ...(tank ? [c.tanks] : []),
+            ]) {
+              category.units++;
+              category.correct += Number(correct);
+              category.kindCorrect += Number(selected.kind === desired.kind);
+              category.kindAbsent += Number(!typeAvailable);
+              category.semanticJobAbsent += Number(typeAvailable && !available);
+              category.memberWrongWithJobAvailable += Number(
+                available && !correct,
+              );
+            }
+          }
           for (const g of categories) {
             g.units++;
             g.teacherContextCorrect += Number(teacherCorrect);
             g.modelContextCorrect += Number(ownCorrect);
-            g.desiredJobAvailable += Number(ownMass > 0);
+            g.desiredJobAvailable += Number(jobAvailable);
             g.teacherCorrectModelWrong += Number(teacherCorrect && !ownCorrect);
             g.teacherContextKindCorrect += Number(
               givenTeacher.kind === desired.kind,
@@ -263,7 +403,7 @@ try {
       }
       hidden = own.hidden;
     }
-    episodes.push({ directory, frames, groups });
+    episodes.push({ directory, frames, groups, upstreamConditions });
     console.log(
       JSON.stringify({
         episode: episodes.length,
@@ -286,7 +426,7 @@ writeFileSync(
         .digest("hex"),
       stride,
       scope:
-        "Same recorded legal worlds and continuous checkpoint memory. Member-head diagnostics force membership review open in BOTH teacher and model upstream contexts; actual policy scores are separate. Exact job, kind-only, and same-kind goals within 8 tiles are separate development diagnostics, not closed-loop strength or unseen evaluation.",
+        "Same recorded legal worlds and continuous checkpoint memory. Four crossed production/task conditions; task generation uses the selected production context. Member review is open for head diagnostics; actual policy scores are separate. Availability uses legal masks, not nonzero floating probabilities. Exact job includes native identity and engagement flags; nearby/kind scores are looser diagnostics, not training equivalence or closed-loop strength.",
       episodes,
       examples,
     },
