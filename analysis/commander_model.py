@@ -23,7 +23,7 @@ def pack(worlds,vocabulary):
         for i,w in enumerate(worlds):
             a=np.asarray(w[field],dtype=np.float32).reshape(-1,size);x[i,:len(a)]=a;mask[i,:len(a)]=True
         out[field]=torch.from_numpy(x);out[field+'Mask']=torch.from_numpy(mask)
-    out['global']=torch.tensor([w['global'] for w in worlds],dtype=torch.float32)
+    out['global']=torch.from_numpy(np.asarray([w['global'] for w in worlds],dtype=np.float32))
     for field,source,rows in [('entityIds','entityNames','entities'),('productIds','productNames','products'),('queueIds','queueNames','queues'),('goalIds','goalNames','goals')]:
         data=np.zeros(out[rows].shape[:2],np.int64)
         for i,w in enumerate(worlds):data[i,:len(w[source])]=[ids.get(n,0) for n in w[source]]

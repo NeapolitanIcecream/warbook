@@ -5,12 +5,25 @@ import numpy as np
 import torch
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel
-from commander_model import CommanderModel,pack,pack_actions,export,HIDDEN
+from commander_model import CommanderModel,pack,pack_actions,export,HIDDEN,FIELDS
 from experiment_storage import open_text
 from launch_outcome import classify
 from commander_sequence import stream_batches,unique_batches,event_weight,training_action,canonical_action
 
-def read_episode(path):
+def compact_world(world):
+    # pack() already converts these fields to float32. Keep that exact numeric
+    # representation instead of millions of boxed Python numbers between updates.
+    for field,width in FIELDS.items():
+        world[field]=np.asarray(world[field],dtype=np.float32).reshape(-1,width)
+    world['global']=np.asarray(world['global'],dtype=np.float32)
+    for field in ['entityEdges','regionEdges','productEdges']:
+        world[field]=np.asarray(world[field],dtype=np.int32).reshape(-1,2)
+    return world
+
+def plain_world(world):
+    return {key:value.tolist() if isinstance(value,np.ndarray) else value for key,value in world.items()}
+
+def read_episode(path,compact=True):
     path=Path(path);manifest=json.loads((path/'manifest.json').read_text());result=json.loads((path/'result.json').read_text())
     outcome,reason,eligible=classify(result,manifest)
     if not eligible:return None
@@ -19,7 +32,10 @@ def read_episode(path):
     with open_text(path/'decisions.ndjson') as f:
         for line in f:
             e=json.loads(line)
-            if e.get('actor')==actor and e.get('kind')=='commander_decision':rows.append(e['record'])
+            if e.get('actor')==actor and e.get('kind')=='commander_decision':
+                row=e['record']
+                if compact:compact_world(row['world'])
+                rows.append(row)
     if not rows:return None
     if any(r.get('encoding') not in ['graph-plan-v1','graph-plan-v2','graph-plan-v3'] or r['schema']!='commander-v1' for r in rows):raise ValueError('Unsupported commander encoding')
     if any(b['tick']-a['tick']!=75 for a,b in zip(rows,rows[1:])):raise ValueError('Missing strategy step')
@@ -109,7 +125,7 @@ def golden(model,episodes,path):
         for r in selected:
             w=r['world'];action=canonical_action(r['action'],w,model.encoding);d=pack([w],model.vocabulary);a=pack_actions([action],d);before=h[0].tolist();p=model(d,h,a,True)
             probs={k:(v[0,:len(w['unitRefs'])].tolist() if k=='unit' else v[0,:len(w['buildingRefs'])].tolist() if k=='building' else v[0].tolist() if v.ndim==3 else v[:,:len(w['placementObjects'])+1].tolist() if k.startswith('place') else v.tolist()) for k,v in p['probabilities'].items()}
-            samples.append({'world':w,'action':action,'hidden':before,'expected':{'logp':p['logp'].item(),'value':p['value'].item(),'hidden':p['hidden'][0].tolist(),'probabilities':probs}});h=p['hidden']
+            samples.append({'world':plain_world(w),'action':action,'hidden':before,'expected':{'logp':p['logp'].item(),'value':p['value'].item(),'hidden':p['hidden'][0].tolist(),'probabilities':probs}});h=p['hidden']
     path.write_text(json.dumps(samples)+'\n')
 
 def main():
@@ -241,7 +257,7 @@ def main():
       'encoderSha256':next(iter(hashes)),'worldSize':world_size,'localBatch':args.batch,'globalBatch':args.batch*world_size,'windowCounts':window_counts,
       'padding':'Zero-loss empty ranks, no repeated training windows','bcEventWeight':args.bc_event_weight,'bcMemory':'Chronological whole episodes with detached carried hidden state',
       'bcLoss':args.bc_loss,'bcFactorNormalization':'Per frame: mean across active domains; changed factors weighted directly; one mean KEEP negative per domain; global valid-frame DDP mean',
-      'encoding':model.encoding,'temperature':model.temperature,'learningRate':learning_rate,'validationFraction':args.validation_fraction,'labelAdapter':'v2 confirms retyped members; v3 BC labels edit decisions from demonstrated plan changes; PPO retains recorded choices',
+      'encoding':model.encoding,'temperature':model.temperature,'learningRate':learning_rate,'episodeMemory':'float32 feature blocks and int32 edges; identical pack tensors','validationFraction':args.validation_fraction,'labelAdapter':'v2 confirms retyped members; v3 BC labels edit decisions from demonstrated plan changes; PPO retains recorded choices',
       'trainingEpisodes':[p for d in details for p in d['paths']],'validationEpisodes':validation,'excluded':[p for d in details for p in d['excluded']],
       'inputSha256':hashlib.sha256(Path(args.input).read_bytes()).hexdigest() if args.input else None,
       'labels':'BC uses explicit teacherAction where recorded; PPO uses executed action only',
