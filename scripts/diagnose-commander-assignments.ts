@@ -16,6 +16,10 @@ import {
 } from "../src/commander/network.js";
 import { type CommanderRecord } from "../src/commander/controller.js";
 import {
+  actionEdits,
+  type EncodedCommanderAction,
+} from "../src/commander/action-mask.js";
+import {
   type CommanderAction,
   type CommanderWorld,
   TASK_KINDS,
@@ -112,6 +116,9 @@ const counter = () => ({
   desiredKindAvailable: 0,
   teacherContextNearby: 0,
   modelContextNearby: 0,
+  policyContextCorrect: 0,
+  policyContextKindCorrect: 0,
+  policyContextNearby: 0,
   teacherMass: 0,
   modelMass: 0,
   labels: {} as Record<string, number>,
@@ -123,6 +130,15 @@ const increment = (c: Record<string, number>, key: string) =>
 const episodes: any[] = [];
 const examples: unknown[] = [];
 const exampleCounts = { miner: 0, tank: 0 };
+const reviewMembers = (
+  a: EncodedCommanderAction,
+  w: CommanderWorld,
+): EncodedCommanderAction => {
+  if (model.encoding !== "graph-plan-v3") return a;
+  const edits = [...(a.edits ?? actionEdits(a))];
+  edits[2] = Number(w.unitRefs.length > 0);
+  return { ...a, edits };
+};
 try {
   for (const directory of JSON.parse(
     readFileSync(values.episodes, "utf8"),
@@ -164,14 +180,31 @@ try {
       const own = model.predict(w, hidden, () => 0.5, true);
       if (frames++ % stride === 0) {
         const teacher = canonical(record.teacherAction, w);
-        const guided = model.predict(w, hidden, () => 0.5, true, teacher);
+        const guided = model.predict(
+          w,
+          hidden,
+          () => 0.5,
+          true,
+          reviewMembers(teacher, w),
+        );
+        const ownHead =
+          model.encoding === "graph-plan-v3"
+            ? model.predict(
+                w,
+                hidden,
+                () => 0.5,
+                true,
+                reviewMembers(own.action, w),
+              )
+            : own;
         for (let i = 0; i < w.unitRefs.length; i++) {
           const desired = job(w, teacher, i),
             key = JSON.stringify(desired);
           const teacherProbs = guided.probabilities!.unit[i],
-            ownProbs = own.probabilities!.unit[i];
+            ownProbs = ownHead.probabilities!.unit[i];
           const givenTeacher = job(w, teacher, i, argmax(teacherProbs)),
-            givenOwn = job(w, own.action, i);
+            givenOwn = job(w, own.action, i, argmax(ownProbs));
+          const policy = job(w, own.action, i);
           const teacherCorrect = JSON.stringify(givenTeacher) === key,
             ownCorrect = JSON.stringify(givenOwn) === key;
           const teacherMass = teacherProbs.reduce(
@@ -206,6 +239,9 @@ try {
             g.desiredKindAvailable += Number(kindAvailable);
             g.teacherContextNearby += Number(nearby(givenTeacher, desired));
             g.modelContextNearby += Number(nearby(givenOwn, desired));
+            g.policyContextCorrect += Number(JSON.stringify(policy) === key);
+            g.policyContextKindCorrect += Number(policy.kind === desired.kind);
+            g.policyContextNearby += Number(nearby(policy, desired));
             g.teacherMass += teacherMass;
             g.modelMass += ownMass;
             increment(g.labels, desired.kind);
@@ -226,6 +262,7 @@ try {
               desired,
               givenTeacher,
               givenOwn,
+              policy,
               teacherMass,
               ownMass,
             });
@@ -256,7 +293,7 @@ writeFileSync(
         .digest("hex"),
       stride,
       scope:
-        "Same recorded legal worlds, continuous memory recomputed with the tested checkpoint; teacher-conditioned versus free upstream plan. Exact job, kind-only, and same-kind destinations within 8 tiles are separate diagnostics, not closed-loop strength or unseen evaluation.",
+        "Same recorded legal worlds and continuous checkpoint memory. Member-head diagnostics force membership review open in BOTH teacher and model upstream contexts; actual policy scores are separate. Exact job, kind-only, and same-kind goals within 8 tiles are separate development diagnostics, not closed-loop strength or unseen evaluation.",
       episodes,
       examples,
     },

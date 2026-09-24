@@ -143,6 +143,30 @@ test("edit gates preserve plan authority and cannot hide a changed production re
   );
 });
 
+test("a v3 policy cannot omit the latent review decisions from its record", () => {
+  const o = observation();
+  o.own = [unit("mcv", { name: "AMCV", mcv: true, combat: false })];
+  const policy: CommanderPolicy = {
+    hiddenSize: 128,
+    encoding: "graph-plan-v3",
+    predict(w, hidden) {
+      return {
+        action: keepAction(w),
+        hidden: [...hidden],
+        logp: 0,
+        value: 0,
+        entropy: 0,
+      };
+    },
+  };
+  const learner = new FullCommander("bastion", policy);
+  assert.throws(
+    () =>
+      learner.plan(o, { army: [], observedArmor: 0, armorOutsideFactories: 0 }),
+    /five review decisions/,
+  );
+});
+
 test("DAgger labels learner states without silently applying the expert action", () => {
   const o = observation();
   o.own = [unit("mcv", { name: "AMCV", mcv: true, combat: false })];

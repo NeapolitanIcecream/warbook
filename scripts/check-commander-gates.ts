@@ -45,6 +45,12 @@ try {
     const q = model.predict(w, sample.hidden, random, true, reviewed);
     assert.deepEqual(q.hidden, p.hidden);
     assert.notEqual(q.logp, p.logp); // Same external plan, different recorded latent choices.
+    if (w.unitRefs.length)
+      assert(
+        q.probabilities!.unit.some(
+          (row) => row.filter((p) => p > 0).length > 1,
+        ),
+      );
     for (let n = 0; n < 10; n++) {
       const sampledAction = model.predict(
         w,

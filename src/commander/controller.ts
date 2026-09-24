@@ -152,6 +152,13 @@ export class FullCommander implements StrategicController {
           this.random,
           this.deterministic,
         );
+        if (
+          this.encoding === "graph-plan-v3" &&
+          (!p.action.edits ||
+            p.action.edits.length !== 5 ||
+            p.action.edits.some((x) => x !== 0 && x !== 1))
+        )
+          throw new Error("A v3 policy must record its five review decisions");
         action = p.action;
         logp = p.logp;
         value = p.value;
