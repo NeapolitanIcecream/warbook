@@ -1,0 +1,2 @@
+# Stream journals on the CPU training runtime; Node 26 uses its built-in zstd reader.
+zstandard==0.25.0

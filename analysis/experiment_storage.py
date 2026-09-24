@@ -6,19 +6,44 @@ replays, manifests and outcomes stay in place. Old frozen readers can use restor
 import argparse
 import concurrent.futures
 import gzip
+import io
 import hashlib
 import json
 import os
 import shutil
 import time
+from functools import partial
 from pathlib import Path
 
 
-def open_text(path):
+def compressed_path(path, codec):
+    if codec not in ('gzip', 'zstd'):
+        raise ValueError(f'Unsupported journal codec: {codec}')
+    return Path(str(path)+('.gz' if codec == 'gzip' else '.zst'))
+
+
+def open_archive(path, codec):
+    if codec == 'gzip':
+        return gzip.open(path, 'rb')
+    if codec == 'zstd':
+        import zstandard
+        return zstandard.open(path, 'rb')
+    raise ValueError(f'Unsupported journal codec: {codec}')
+
+
+def open_binary(path):
     path = Path(path)
     if path.exists():
-        return path.open(encoding='utf-8')
-    return gzip.open(str(path)+'.gz', 'rt', encoding='utf-8')
+        return path.open('rb')
+    for codec in ('zstd', 'gzip'):
+        packed = compressed_path(path, codec)
+        if packed.exists():
+            return open_archive(packed, codec)
+    raise FileNotFoundError(path)
+
+
+def open_text(path):
+    return io.TextIOWrapper(open_binary(path), encoding='utf-8')
 
 
 def digest(stream):
@@ -39,48 +64,65 @@ def atomic_json(path, value):
     tmp.replace(path)
 
 
-def compact_file(path):
+def compact_file(path, codec='zstd', level=None):
     path = Path(path)
-    packed = Path(str(path)+'.gz')
+    packed = compressed_path(path, codec)
+    level = level if level is not None else (6 if codec == 'zstd' else 3)
     metadata = Path(str(path)+'.archive.json')
-    if not path.exists():
-        if packed.exists() and metadata.exists():
-            return json.loads(metadata.read_text())
+    previous = json.loads(metadata.read_text()) if metadata.exists() else None
+    old_packed = compressed_path(path, previous['codec']) if previous else None
+    if not path.exists() and previous and packed.exists() and previous['codec'] == codec and previous['level'] == level:
+        return previous
+    source = path if path.exists() else old_packed
+    if source is None or not source.exists():
         raise FileNotFoundError(path)
-    before = path.stat()
+    before = source.stat()
     tmp = Path(str(packed)+'.tmp')
     sha = hashlib.sha256()
-    with path.open('rb') as src, tmp.open('wb') as target:
-        with gzip.GzipFile(filename='', fileobj=target, mode='wb', compresslevel=3, mtime=0) as dst:
+    size = 0
+    with open_binary(path) as src, tmp.open('wb') as target:
+        if codec == 'gzip':
+            encoder = gzip.GzipFile(filename='', fileobj=target, mode='wb', compresslevel=level, mtime=0)
+        else:
+            import zstandard
+            encoder = zstandard.ZstdCompressor(level=level).stream_writer(target, closefd=False)
+        with encoder as dst:
             for chunk in iter(lambda: src.read(1024*1024), b''):
                 sha.update(chunk)
+                size += len(chunk)
                 dst.write(chunk)
         target.flush()
         os.fsync(target.fileno())
-    with gzip.open(tmp, 'rb') as check:
-        actual, size = digest(check)
-    after = path.stat()
-    if (actual, size) != (sha.hexdigest(), before.st_size) or (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
+    with open_archive(tmp, codec) as check:
+        actual, checked_size = digest(check)
+    after = source.stat()
+    if (actual, checked_size) != (sha.hexdigest(), size) or (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
         raise ValueError(f'Journal changed or compressed verification failed: {path}')
+    if previous and (actual, size) != (previous['sha256'], previous['originalBytes']):
+        raise ValueError(f'Journal no longer matches its archived evidence: {path}')
     record = dict(sha256=actual, originalBytes=size, compressedBytes=tmp.stat().st_size,
-                  codec='gzip', level=3)
+                  codec=codec, level=level)
     tmp.replace(packed)
     atomic_json(metadata, record)
-    path.unlink()  # Verified lossless representation is durable before removing plaintext.
+    # Verified lossless representation and receipt are durable before removing duplicates.
+    if path.exists():
+        path.unlink()
+    if old_packed and old_packed != packed and old_packed.exists():
+        old_packed.unlink()
     return record
 
 
 def restore_file(path):
     path = Path(path)
-    packed = Path(str(path)+'.gz')
     record = json.loads(Path(str(path)+'.archive.json').read_text())
+    packed = compressed_path(path, record['codec'])
     if path.exists():
         with path.open('rb') as stream:
             if digest(stream) != (record['sha256'], record['originalBytes']):
                 raise ValueError(f'Existing plaintext does not match archive: {path}')
         return record
     tmp = Path(str(path)+'.restore.tmp')
-    with gzip.open(packed, 'rb') as src, tmp.open('wb') as dst:
+    with open_archive(packed, record['codec']) as src, tmp.open('wb') as dst:
         shutil.copyfileobj(src, dst)
         dst.flush()
         os.fsync(dst.fileno())
@@ -110,15 +152,15 @@ def completed_journals(root):
             if not (directory/'batch-row.json').exists():
                 raise ValueError(f'Missing individual completion marker: {directory}')
             path = directory/'decisions.ndjson'
-            if path.exists() or Path(str(path)+'.gz').exists():
+            if path.exists() or any(compressed_path(path, c).exists() for c in ('gzip', 'zstd')):
                 found.add(path)
     return sorted(found)
 
 
-def compact_completed(root, workers=4, restore=False):
+def compact_completed(root, workers=4, restore=False, codec='zstd', level=None):
     started = time.monotonic()
     files = completed_journals(root)
-    operation = restore_file if restore else compact_file
+    operation = restore_file if restore else partial(compact_file, codec=codec, level=level)
     if restore:
         files = [p for p in files if Path(str(p)+'.archive.json').exists()]
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
@@ -150,7 +192,9 @@ if __name__ == '__main__':
     ap.add_argument('operation', choices=['compact', 'restore'])
     ap.add_argument('root', type=Path)
     ap.add_argument('--workers', type=int, default=4)
+    ap.add_argument('--codec', choices=['gzip', 'zstd'], default='zstd')
+    ap.add_argument('--level', type=int)
     args = ap.parse_args()
     if not 1 <= args.workers <= 32:
         ap.error('Use 1..32 storage workers')
-    print(json.dumps(compact_completed(args.root, args.workers, args.operation == 'restore')))
+    print(json.dumps(compact_completed(args.root, args.workers, args.operation == 'restore', args.codec, args.level)))

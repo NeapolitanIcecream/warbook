@@ -1,11 +1,6 @@
-import {
-  createReadStream,
-  existsSync,
-  readFileSync,
-  writeFileSync,
-} from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
-import { createGunzip } from "node:zlib";
+import { readJournal } from "../src/journal-reader.js";
 import { createInterface } from "node:readline";
 import { parseArgs } from "node:util";
 import { resolve } from "node:path";
@@ -150,9 +145,7 @@ try {
       (p: any) => p.role === "subject",
     ).name;
     const path = resolve(directory, "decisions.ndjson");
-    const source = existsSync(path)
-      ? createReadStream(path)
-      : createReadStream(path + ".gz").pipe(createGunzip());
+    const source = readJournal(path);
     const lines = createInterface({ input: source, crlfDelay: Infinity });
     let hidden = Array(model.hiddenSize).fill(0),
       frames = 0,

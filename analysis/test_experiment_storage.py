@@ -27,11 +27,37 @@ class StorageTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp)/'decisions.ndjson'
             path.write_text('original\n')
-            compact_file(path)
+            compact_file(path, codec='gzip')
             Path(str(path)+'.gz').write_bytes(gzip.compress(b'changed\n'))
             with self.assertRaises(ValueError):
                 restore_file(path)
             self.assertFalse(path.exists())
+
+    def test_legacy_gzip_transcodes_without_changing_evidence(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp)/'decisions.ndjson'
+            original = ('{"tick":75,"action":"保持"}\n'*100).encode()
+            path.write_bytes(original)
+            old = compact_file(path, codec='gzip')
+            new = compact_file(path)
+            self.assertEqual((old['sha256'], old['originalBytes']), (new['sha256'], new['originalBytes']))
+            self.assertEqual(new['codec'], 'zstd')
+            self.assertFalse(Path(str(path)+'.gz').exists())
+            with open_text(path) as stream:
+                self.assertEqual(stream.read().encode(), original)
+            restore_file(path)
+            self.assertEqual(path.read_bytes(), original)
+
+    def test_corrupt_legacy_archive_is_not_replaced_by_transcode(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp)/'decisions.ndjson'
+            path.write_text('original\n')
+            record = compact_file(path, codec='gzip')
+            Path(str(path)+'.gz').write_bytes(gzip.compress(b'changed\n'))
+            with self.assertRaises(ValueError):
+                compact_file(path)
+            self.assertFalse(Path(str(path)+'.zst').exists())
+            self.assertEqual(json.loads(Path(str(path)+'.archive.json').read_text()), record)
 
     def test_only_completed_batch_members_are_compacted(self):
         with tempfile.TemporaryDirectory() as tmp:

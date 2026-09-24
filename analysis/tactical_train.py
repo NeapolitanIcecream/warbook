@@ -1,5 +1,6 @@
 """BC/PPO for local armor tasks. Local returns never masquerade as whole-game wins."""
-import argparse,json,random,time,hashlib,subprocess,gzip
+import argparse,json,random,time,hashlib,subprocess
+from experiment_storage import open_text
 from pathlib import Path
 import numpy as np
 import torch
@@ -8,7 +9,7 @@ from tactical_model import TacticalModel,pack,load,export
 def read_episode(path):
     path=Path(path);result=json.loads((path/'result.json').read_text())
     if result['protocol']!='api-shroud-local-arena-v1' or result['stop'] not in ['task-elimination','task-boundary','time-limit']:raise ValueError('Invalid arena task')
-    f=path/'decisions.ndjson';stream=f.open() if f.exists() else gzip.open(str(f)+'.gz','rt')
+    stream=open_text(path/'decisions.ndjson')
     with stream:rows=[r['record'] for line in stream if (r:=json.loads(line))['side']==0 and r.get('record',{}).get('schema')=='armor-skill-v1']
     return {'path':str(path),'rows':rows,'reward':float(result['outcome']=='A'),'modelSha':result.get('actorModelSha256')}
 

@@ -8,14 +8,8 @@ import {
   ZoneType,
   type UnitData,
 } from "@chronodivide/game-api";
-import {
-  createReadStream,
-  readFileSync,
-  writeFileSync,
-  statSync,
-  existsSync,
-} from "node:fs";
-import { createGunzip } from "node:zlib";
+import { readFileSync, writeFileSync, statSync, existsSync } from "node:fs";
+import { readJournal, journalPath } from "../src/journal-reader.js";
 import { createInterface } from "node:readline";
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
@@ -105,11 +99,10 @@ async function main() {
   let launchChoices = 0;
   let lastTick = -1;
   const rawTrace = `${directory}/decisions.ndjson`;
-  const compressed = !existsSync(rawTrace);
-  const tracePath = compressed ? rawTrace + ".gz" : rawTrace;
-  const traceStream = createReadStream(tracePath);
+  const tracePath = journalPath(rawTrace);
+  const compressed = tracePath !== rawTrace;
   for await (const line of createInterface({
-    input: compressed ? traceStream.pipe(createGunzip()) : traceStream,
+    input: readJournal(rawTrace),
     crlfDelay: Infinity,
   })) {
     const event = JSON.parse(line);
