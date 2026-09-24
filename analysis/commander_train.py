@@ -41,7 +41,7 @@ def read_episode(path,compact=True):
     if any(b['tick']-a['tick']!=75 for a,b in zip(rows,rows[1:])):raise ValueError('Missing strategy step')
     if not 0<=result['tick']-rows[-1]['tick']<=75:raise ValueError('Invalid terminal boundary')
     return {'path':str(path),'rows':rows,'reward':float(outcome=='W'),'outcome':outcome,
-      'modelSha':manifest.get('commanderExperiment',{}).get('modelSha256'),'source':manifest['git'],
+      'modelSha':manifest.get('commanderExperiment',{}).get('modelSha256'),'deterministic':manifest.get('commanderExperiment',{}).get('deterministic',False),'source':manifest['git'],
       'encoderSha':manifest.get('sourceHashes',{}).get('src/commander/world.ts')}
 
 def load_model(artifact):
@@ -155,7 +155,7 @@ def main():
         if e is None or args.method=='ppo' and not any(r['executionSource']=='policy' for r in e['rows']):excluded.append(path)
         else:train.append(e)
     if not train:raise ValueError('Each rank needs a valid whole episode')
-    details=all_objects({'paths':[e['path'] for e in train],'excluded':excluded,'hashes':list({e['encoderSha'] for e in train})},world_size)
+    details=all_objects({'paths':[e['path'] for e in train],'excluded':excluded,'hashes':list({e['encoderSha'] for e in train}),'greedy':any(e['deterministic'] for e in train)},world_size)
     hashes={h for d in details for h in d['hashes']}
     if len(hashes)!=1 or None in hashes:raise ValueError('Mixed/unrecorded encoder source')
     torch.manual_seed(args.seed);np.random.seed(args.seed);random.seed(args.seed+rank)
@@ -170,6 +170,7 @@ def main():
         model.change_encoding(args.action_encoding)
     if args.bc_temperature is not None:model.change_temperature(args.bc_temperature)
     if args.method=='ppo':
+        if any(d['greedy'] for d in details):raise ValueError('Greedy behavior is not the recorded stochastic PPO distribution')
         expected=hashlib.sha256(Path(args.input).read_bytes()).hexdigest()
         if any(e['modelSha']!=expected for e in train):raise ValueError('Mixed behavior checkpoints')
         if any(r['encoding']!=model.encoding for e in train for r in e['rows']):raise ValueError('PPO behavior encoding mismatch')
@@ -186,7 +187,11 @@ def main():
     if world_size>1:objective=DistributedDataParallel(objective,broadcast_buffers=False)
     learning_rate=args.learning_rate if args.learning_rate is not None else 3e-4 if args.method=='bc' else 1e-4
     optimizer=torch.optim.Adam(model.parameters(),lr=learning_rate)
-    if args.method=='ppo' and Path(args.input).with_suffix('.optimizer.pt').exists():optimizer.load_state_dict(torch.load(Path(args.input).with_suffix('.optimizer.pt'),weights_only=True,map_location='cpu'))
+    optimizer_source=Path(args.input).with_suffix('.optimizer.pt') if args.method=='ppo' else None
+    optimizer_sha=None
+    if optimizer_source is not None and optimizer_source.exists():
+        optimizer_sha=hashlib.sha256(optimizer_source.read_bytes()).hexdigest()
+        optimizer.load_state_dict(torch.load(optimizer_source,weights_only=True,map_location='cpu'))
     # Restoring Adam moments must not silently restore the BC learning rate for PPO.
     for group in optimizer.param_groups:group['lr']=learning_rate
     samples=windows(train,args.sequence,args.burn)
@@ -257,7 +262,7 @@ def main():
       'encoderSha256':next(iter(hashes)),'worldSize':world_size,'localBatch':args.batch,'globalBatch':args.batch*world_size,'windowCounts':window_counts,
       'padding':'Zero-loss empty ranks, no repeated training windows','bcEventWeight':args.bc_event_weight,'bcMemory':'Chronological whole episodes with detached carried hidden state',
       'bcLoss':args.bc_loss,'bcFactorNormalization':'Per frame: mean across active domains; changed factors weighted directly; one mean KEEP negative per domain; global valid-frame DDP mean',
-      'encoding':model.encoding,'temperature':model.temperature,'learningRate':learning_rate,'episodeMemory':'float32 feature blocks and int32 edges; identical pack tensors','validationFraction':args.validation_fraction,'labelAdapter':'v2 confirms retyped members; v3 BC labels edit decisions from demonstrated plan changes; PPO retains recorded choices',
+      'encoding':model.encoding,'temperature':model.temperature,'learningRate':learning_rate,'optimizerStart':'restored' if optimizer_sha else 'cold','inputOptimizerSha256':optimizer_sha,'episodeMemory':'float32 feature blocks and int32 edges; identical pack tensors','validationFraction':args.validation_fraction,'labelAdapter':'v2 confirms retyped members; v3 BC labels edit decisions from demonstrated plan changes; PPO retains recorded choices',
       'trainingEpisodes':[p for d in details for p in d['paths']],'validationEpisodes':validation,'excluded':[p for d in details for p in d['excluded']],
       'inputSha256':hashlib.sha256(Path(args.input).read_bytes()).hexdigest() if args.input else None,
       'labels':'BC uses explicit teacherAction where recorded; PPO uses executed action only',

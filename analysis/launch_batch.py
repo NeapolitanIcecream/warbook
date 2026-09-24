@@ -68,6 +68,7 @@ def main():
         completed=directory/'batch-row.json'
         if completed.exists():return json.loads(completed.read_text())
         directory=fresh_attempt(directory)
+        atomic(directory/'attempt-started.json',{'map':map_name,'opponent':opponent,'repeat':repeat,'subject':subject,'at':time.time()})
         seconds=plan.get('seconds',300)
         cmd=[node,'--env-file-if-exists=.env','--import','./src/engine-diagnostics.mjs','--import','tsx','src/runner.ts','--units','0','--map',map_name,'--mode',s.get('mode','bastion'),'--out',str(directory),'--seconds',str(seconds)]
         if 'ref' in s:cmd+=['--actor-release',releases[(s['ref'],s.get('mode','bastion'))]]
