@@ -9,6 +9,7 @@ import { createGunzip } from "node:zlib";
 import { createInterface } from "node:readline";
 import { parseArgs } from "node:util";
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   NeuralCommanderPolicy,
   prepareCommander,
@@ -87,12 +88,30 @@ function job(
 
 const argmax = (xs: number[]) =>
   xs.reduce((best, v, i) => (v > xs[best] ? i : best), 0);
+function nearby(a: ReturnType<typeof job>, b: ReturnType<typeof job>) {
+  return (
+    a.kind === b.kind &&
+    (!a.goal || !b.goal
+      ? a.goal === b.goal
+      : a.goal[2] === b.goal[2] &&
+        a.goal[4] === b.goal[4] &&
+        Math.hypot(
+          Number(a.goal[0]) - Number(b.goal[0]),
+          Number(a.goal[1]) - Number(b.goal[1]),
+        ) <= 8)
+  );
+}
 const counter = () => ({
   units: 0,
   teacherContextCorrect: 0,
   modelContextCorrect: 0,
   desiredJobAvailable: 0,
   teacherCorrectModelWrong: 0,
+  teacherContextKindCorrect: 0,
+  modelContextKindCorrect: 0,
+  desiredKindAvailable: 0,
+  teacherContextNearby: 0,
+  modelContextNearby: 0,
   teacherMass: 0,
   modelMass: 0,
   labels: {} as Record<string, number>,
@@ -103,6 +122,7 @@ const increment = (c: Record<string, number>, key: string) =>
   (c[key] = (c[key] ?? 0) + 1);
 const episodes: any[] = [];
 const examples: unknown[] = [];
+const exampleCounts = { miner: 0, tank: 0 };
 try {
   for (const directory of JSON.parse(
     readFileSync(values.episodes, "utf8"),
@@ -161,27 +181,41 @@ try {
             0,
           );
           const categories = [groups.all];
+          const tank = ["MTNK", "HTNK"].includes(
+            w.entityNames[w.unitIndices[i]],
+          );
           if (w.unitCapabilities[i].miner) categories.push(groups.miners);
-          if (["MTNK", "HTNK"].includes(w.entityNames[w.unitIndices[i]]))
-            categories.push(groups.tanks);
+          if (tank) categories.push(groups.tanks);
+          const kindAvailable = ownProbs.some(
+            (p, j) => p > 0 && job(w, own.action, i, j).kind === desired.kind,
+          );
           for (const g of categories) {
             g.units++;
             g.teacherContextCorrect += Number(teacherCorrect);
             g.modelContextCorrect += Number(ownCorrect);
             g.desiredJobAvailable += Number(ownMass > 0);
             g.teacherCorrectModelWrong += Number(teacherCorrect && !ownCorrect);
+            g.teacherContextKindCorrect += Number(
+              givenTeacher.kind === desired.kind,
+            );
+            g.modelContextKindCorrect += Number(givenOwn.kind === desired.kind);
+            g.desiredKindAvailable += Number(kindAvailable);
+            g.teacherContextNearby += Number(nearby(givenTeacher, desired));
+            g.modelContextNearby += Number(nearby(givenOwn, desired));
             g.teacherMass += teacherMass;
             g.modelMass += ownMass;
             increment(g.labels, desired.kind);
             increment(g.teacherPredictions, givenTeacher.kind);
             increment(g.modelPredictions, givenOwn.kind);
           }
-          if (
-            w.unitCapabilities[i].miner &&
-            !ownCorrect &&
-            examples.length < 30
-          )
+          const category = w.unitCapabilities[i].miner
+            ? "miner"
+            : tank
+              ? "tank"
+              : undefined;
+          if (category && !ownCorrect && exampleCounts[category]++ < 15)
             examples.push({
+              category,
               directory,
               tick: record.tick,
               ref: w.unitRefs[i],
@@ -213,9 +247,12 @@ writeFileSync(
     {
       model: resolve(values.model),
       modelSha256: createHash("sha256").update(artifactText).digest("hex"),
+      scriptSha256: createHash("sha256")
+        .update(readFileSync(fileURLToPath(import.meta.url)))
+        .digest("hex"),
       stride,
       scope:
-        "Same recorded legal worlds, continuous memory recomputed with the tested checkpoint; teacher-conditioned versus free upstream plan. Development/off-policy diagnosis, not closed-loop strength or unseen evaluation.",
+        "Same recorded legal worlds, continuous memory recomputed with the tested checkpoint; teacher-conditioned versus free upstream plan. Exact job, kind-only, and same-kind destinations within 8 tiles are separate diagnostics, not closed-loop strength or unseen evaluation.",
       episodes,
       examples,
     },
