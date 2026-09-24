@@ -347,7 +347,11 @@ export function buildWorld(
     Math.max(
       0,
       goalObjects.findIndex(
-        (g) => s.goal && pkey(g) === pkey(s.goal) && g.ref === s.goal.ref,
+        (g) =>
+          s.goal &&
+          pkey(g) === pkey(s.goal) &&
+          g.ref === s.goal.ref &&
+          (g.kind === "native") === (s.goal.kind === "native"),
       ),
     ),
   );

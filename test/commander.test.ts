@@ -72,6 +72,34 @@ const production = (): ProgramProductionPlan => ({
   program: { queues: [], placements: [], repair: [], sell: [] },
 });
 
+test("a fixed home destination and native harvesting keep distinct previous goal references", () => {
+  const o = observation(),
+    p = new ProgramController();
+  p.state.slots[0] = {
+    active: true,
+    kind: "defend",
+    goal: { ...o.home, kind: "start" },
+    allowCrush: false,
+    interrupt: false,
+    since: 0,
+  };
+  p.state.slots[1] = {
+    active: true,
+    kind: "harvest",
+    goal: { ...o.home, kind: "native" },
+    allowCrush: false,
+    interrupt: false,
+    since: 0,
+  };
+  const w = buildWorld(o, p.state, new ContactMemory());
+  assert.notEqual(w.previousGoals[0], w.previousGoals[1]);
+  assert.equal(w.goalObjects[w.previousGoals[0]].kind, "start");
+  assert.equal(w.goalObjects[w.previousGoals[1]].kind, "native");
+  p.apply(o, w, keepAction(w));
+  assert.deepEqual(p.plan(o).combat.destination, o.home);
+  assert.equal(p.plan(o).additionalCombat![0].destination, undefined);
+});
+
 test("DAgger labels learner states without silently applying the expert action", () => {
   const o = observation();
   o.own = [unit("mcv", { name: "AMCV", mcv: true, combat: false })];
