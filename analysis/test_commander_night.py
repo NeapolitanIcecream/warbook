@@ -5,6 +5,43 @@ import commander_night
 from commander_night import next_learning_state,verified_candidate_receipts,completed_games,active_profiles,peer_model,quarantine_profile,comparison_score,choose_peer,policy_spec,segment_decision,cycle_game_reserve,final_game_reserve
 
 class NightSelectionTests(unittest.TestCase):
+    def test_operator_finalization_recovers_completed_workers_without_training(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            parent=Path(tmp);old=parent/'old';old.mkdir();out=parent/'final';calls=[]
+            initial=old/'initial.json';initial.write_text('initial')
+            directory=old/'cycle-00/main';directory.mkdir(parents=True)
+            candidate=directory/'candidate.json';candidate.write_text('candidate')
+            profile={'name':'main','route':'main','seed':47,'initial':str(initial),'current':str(initial),
+                     'retained':str(initial),'segmentReference':str(initial)}
+            state={'phase':'stopped','source':'frozen','startedAt':1,'profiles':{'main':profile},'history':[],'games':0}
+            (old/'state.json').write_text(json.dumps(state))
+            updated={**profile,'current':str(candidate),'retained':str(candidate)}
+            (directory/'profile-complete.json').write_text(json.dumps({'profile':updated,'result':{'cycle':0,'name':'main'}}))
+            (directory/'candidate-verified.json').write_text(json.dumps({'name':'main','cycle':0,'model':str(candidate),'sha256':hashlib.sha256(candidate.read_bytes()).hexdigest()}))
+            for i in range(3):
+                attempt=directory/str(i);attempt.mkdir();(attempt/'attempt-started.json').write_text('{}')
+            end=(datetime.datetime.now(datetime.timezone.utc)+datetime.timedelta(hours=1)).isoformat()
+            plan={'trainingCutoff':end,'hardDeadline':end,'maps':['map'],'profiles':[profile],
+                  'strongReference':'reference','finalRounds':1,'maxCycles':40}
+            (old/'plan.json').write_text(json.dumps(plan));plan_file=parent/'plan.json';plan_file.write_text(json.dumps(plan))
+            class Process:
+                def __init__(self,cmd,stdout,**kwargs):
+                    calls.append(cmd);self.pid=123
+                    if 'scripts/build-bot.ts' in cmd:stdout.write(json.dumps({'path':'release'})+'\n')
+                    elif 'analysis/launch_batch.py' in cmd:
+                        p=json.loads(Path(cmd[cmd.index('analysis/launch_batch.py')+1]).read_text());target=Path(cmd[cmd.index('--out')+1]);target.mkdir()
+                        n=len(p['opponents']);counts={name:{'W':1,'L':n-1,'U':0,'E':0} for name in p['subjects']}
+                        (target/'summary.json').write_text(json.dumps({'complete':True,'completed':n*len(counts),'counts':counts}))
+                    else:raise AssertionError('Finalization tried to initialize or train')
+                def wait(self,timeout=None):return 0
+            with patch.object(sys,'argv',['night',str(plan_file),'--out',str(out),'--finalize-from',str(old)]),patch.object(commander_night.subprocess,'Popen',Process),patch.object(commander_night.subprocess,'check_output',return_value='frozen'):
+                self.assertEqual(commander_night.main(),0)
+            result=json.loads((out/'state.json').read_text())
+            self.assertEqual(result['phase'],'complete');self.assertEqual(result['games'],11)
+            self.assertEqual(set(result['final']),{'main-initial','main-retained'})
+            self.assertEqual(result['profiles']['main']['current'],str(candidate))
+            self.assertEqual(json.loads((old/'state.json').read_text()),state)
+
     def run_fault_case(self,fault):
         with tempfile.TemporaryDirectory() as tmp:
             root=(Path(tmp)/'run').resolve();plan_path=Path(tmp)/'plan.json'

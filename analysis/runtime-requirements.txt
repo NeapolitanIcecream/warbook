@@ -1,0 +1,2 @@
+# Scoped shutdown of experiment workers, including detached process sessions.
+psutil==7.2.2

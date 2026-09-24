@@ -23,6 +23,30 @@ def completed_games(root):
     receipts=list(Path(root).rglob('batch-attempted.json'));covered={p.parent for p in receipts}
     return sum(json.loads(p.read_text())['started'] for p in receipts)+sum(json.loads(p.read_text())['completed'] for p in Path(root).rglob('batch-complete.json') if p.parent not in covered)
 
+def finalization_snapshot(root):
+    """Recover only durable selections/verified exports after an operator stop."""
+    root=Path(root).resolve();state=json.loads((root/'state.json').read_text())
+    state['continuationOf']={'root':str(root),'phase':state['phase'],'startedAt':state['startedAt']}
+    # Workers can finish and write receipts while the interrupted main thread
+    # waits for their shutdown without collecting their futures.
+    known={(row['cycle'],row['name']) for row in state['history']}
+    for path in sorted(root.glob('cycle-*/*/profile-complete.json')):
+        receipt=json.loads(path.read_text());row=receipt['result'];key=(row['cycle'],row['name'])
+        if key not in known:
+            state['profiles'][row['name']]=receipt['profile'];state['history'].append(row);known.add(key)
+    for profile in state['profiles'].values():
+        for label in ['initial','current','retained','segmentReference']:
+            model=Path(profile[label]).resolve()
+            if not model.is_relative_to(root) or not model.is_file():raise ValueError('Invalid finalization model')
+    pending=verified_candidate_receipts(root)
+    # Direct markers also cover batches killed before the parent wrote a receipt.
+    attempts=len(list(root.rglob('attempt-started.json')))
+    state.update(phase='final-evaluation',games=max(completed_games(root),attempts),pending=pending)
+    for field in ['finishedAt','error','evaluationDeadline','final','cross','finalPassesCompleted','finalFailures']:
+        state.pop(field,None)
+    state['stopReason']='Operator shortened resource budget; evaluate durable models'
+    return state
+
 def next_learning_state(stage,incumbent,candidate,old_wins,new_wins,threshold):
     ready=stage=='ppo' or max(old_wins,new_wins)>=threshold
     retained=candidate if new_wins>old_wins else incumbent
@@ -76,13 +100,22 @@ def segment_decision(profile,models,counts,minimum_gain,patience,cycle):
     return result,{'referenceWins':reference,'candidateWins':counts[winner]['W'],'gainRequired':minimum_gain,'improved':improved,'stopped':bool(result.get('learningStopped'))}
 
 def main():
-    ap=argparse.ArgumentParser();ap.add_argument('plan');ap.add_argument('--out',required=True);args=ap.parse_args()
+    ap=argparse.ArgumentParser();ap.add_argument('plan');ap.add_argument('--out',required=True)
+    ap.add_argument('--finalize-from',help='Stopped experiment; evaluate its durable models in a fresh directory')
+    args=ap.parse_args()
     plan=json.loads(Path(args.plan).read_text());root=Path(args.out).resolve();root.mkdir(parents=True,exist_ok=True)
     if (root/'state.json').exists():raise ValueError('Use a fresh night directory; never append interrupted runs')
     node=os.environ.get('WARBOOK_NODE','node');python=sys.executable
     cutoff=datetime.datetime.fromisoformat(plan['trainingCutoff']).timestamp();end=datetime.datetime.fromisoformat(plan['hardDeadline']).timestamp()
     phase_end=datetime.datetime.fromisoformat(plan.get('trainingPhaseDeadline',plan['trainingCutoff'])).timestamp()
     state={'phase':'initializing','profiles':{},'history':[],'games':0,'source':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'startedAt':time.time()}
+    if args.finalize_from:
+        original=json.loads((Path(args.finalize_from)/'plan.json').read_text())
+        for field in ['maps','profiles','strongReference','finalRounds','crossFinal','crossFinalRounds']:
+            if plan.get(field)!=original.get(field):raise ValueError('Finalization must preserve the original comparison protocol')
+        state=finalization_snapshot(args.finalize_from)
+        if state['source']!=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip():raise ValueError('Finalize from the original frozen working directory')
+    prior_games=state['games']
     atomic(root/'plan.json',plan)
     def save():atomic(root/'state.json',state)
     def command(cmd,log):
@@ -170,7 +203,7 @@ def main():
             log=root/(route+'-rule-freeze.log');command([node,'--import','tsx','scripts/build-bot.ts','--ref','v0.1.16','--mode',mode],log)
             rules[route]=json.loads(log.read_text().splitlines()[-1])['path']
         with concurrent.futures.ThreadPoolExecutor(max_workers=len(plan['profiles'])) as ex:
-            futures={ex.submit(initialize,item):item['name'] for item in plan['profiles']}
+            futures={ex.submit(initialize,item):item['name'] for item in ([] if args.finalize_from else plan['profiles'])}
             for future in concurrent.futures.as_completed(futures):
                 try:
                     name,p=future.result();state['profiles'][name]=p
@@ -178,7 +211,7 @@ def main():
                 save()
         # Preserve configured order for peer rotation, logs and final matrices.
         state['profiles']={item['name']:state['profiles'][item['name']] for item in plan['profiles'] if item['name'] in state['profiles']}
-        for cycle in range(plan.get('maxCycles',40)):
+        for cycle in range(0 if args.finalize_from else plan.get('maxCycles',40)):
             if time.time()>=cutoff or state['games']>=plan.get('maxGames',20000):break
             profiles=active_profiles(state['profiles'])
             if not profiles:state['stopReason']='No active learning profiles';save();break
@@ -292,7 +325,7 @@ def main():
                 if boundary:state['stopReason']='Training boundary during segment review';break
         state['phase']='final-evaluation';save()
         final_counts={};matrices={}
-        pending=verified_candidate_receipts(root)
+        pending=verified_candidate_receipts(args.finalize_from or root)
         for name,p in state['profiles'].items():
             subjects={};seen=set()
             candidates={'initial':p['initial'],'retained':p['retained'],'latest-verified':pending.get(name,{}).get('model',p['current']),'confirmed':p.get('segmentReference',p['initial'])}
@@ -319,7 +352,7 @@ def main():
                     try:
                         name,final=future.result();accumulate(final_counts,final['counts'])
                     except Exception as error:state.setdefault('finalFailures',[]).append({'name':futures[future],'pass':repetition,'error':str(error)})
-                    state['games']=completed_games(root);state['final']=final_counts;save()
+                    state['games']=prior_games+completed_games(root);state['final']=final_counts;save()
             state['finalPassesCompleted']=repetition+1;save()
         if state.get('finalPassesCompleted',0)<plan.get('finalRounds',2):state.setdefault('finalFailures',[]).append({'phase':'fixed-pool','error':'Time boundary before all balanced passes completed'})
         if plan.get('crossFinal'):
@@ -341,7 +374,7 @@ def main():
                         name,cross=future.result()
                         if cross:state.setdefault('cross',{})[name]=cross['counts']
                     except Exception as error:state.setdefault('finalFailures',[]).append({'name':futures[future],'phase':'cross-evaluation','error':str(error)})
-                    state['games']=completed_games(root);save()
+                    state['games']=prior_games+completed_games(root);save()
         failed=bool(state.get('initializationFailures') or state.get('failures') or state.get('finalFailures'))
         state.update(phase='complete_with_failures' if failed else 'complete',finishedAt=time.time());save()
         return 1 if failed else 0
