@@ -151,13 +151,14 @@ def main():
                     if not sampling['complete'] or any(v['E'] for v in sampling['counts'].values()):raise ValueError('Invalid shared initial sampling')
                     atomic(d/'sampling-reused.json',{'episodes':reused,'summary':p['initialSummary'],'uses':len(new),'newGames':0})
                 else:
-                    sampling=batch(d/'sample',{'learner':spec(p,p['current'],not learning)},opponents,p.get('rounds',plan.get('rounds',4)),plan.get('workersPerProfile',16),10000+cycle*37+p['seed'])
+                    sampling=batch(d/'sample',{'learner':spec({**p,'seed':p['seed']+1009*cycle},p['current'],not learning)},opponents,p.get('rounds',plan.get('rounds',4)),plan.get('workersPerProfile',16),10000+cycle*37+p['seed'])
                     new=json.loads((d/'sample/games/learner-episodes.json').read_text())
                 recent=[*p['recent'],new][-2:]
                 episodes=new if learning else [*plan['anchors'][p['route']],*[x for chunk in recent for x in chunk]]
                 candidate=train(p,episodes,p['current'],d/'candidate.json','ppo' if learning else 'bc',p.get('updates',plan.get('updates',400)))
                 atomic(d/'candidate-verified.json',{'name':name,'cycle':cycle,'model':candidate,'sha256':hashlib.sha256(Path(candidate).read_bytes()).hexdigest(),'encoding':p['encoding'],'verifiedAt':time.time(),'source':state['source']})
-                check=batch(d/'check',{'incumbent':spec(p,p['retained']),'candidate':spec(p,candidate)},opponents,plan.get('checkRounds',1),plan.get('workersPerProfile',16),20000+cycle*37+p['seed'])
+                check_profile={**p,'seed':p['seed']+2003*cycle}
+                check=batch(d/'check',{'incumbent':spec(check_profile,p['retained']),'candidate':spec(check_profile,candidate)},opponents,plan.get('checkRounds',1),plan.get('workersPerProfile',16),20000+cycle*37+p['seed'])
                 old=check['counts']['incumbent']['W'];won=check['counts']['candidate']['W']
                 # Bootstrap can make useful partial progress before first wins; RL
                 # keeps the directly compared incumbent when its update regresses.
