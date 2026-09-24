@@ -75,8 +75,9 @@ def summary(x,mask):
     return torch.cat([mean,maximum],-1)
 
 class CommanderModel(nn.Module):
-    def __init__(self,vocabulary,encoding='graph-plan-v2'):
+    def __init__(self,vocabulary,encoding='graph-plan-v2',temperature=1.):
         super().__init__();self.vocabulary=vocabulary;self.encoding=encoding
+        self.change_temperature(temperature)
         self.names=nn.Embedding(len(vocabulary)+1,16)
         self.entity0=nn.Linear(80,64);self.entity1=nn.Linear(128,64)
         self.region0=nn.Linear(16,32);self.region1=nn.Linear(64,32)
@@ -102,6 +103,9 @@ class CommanderModel(nn.Module):
             self.editGate=nn.Linear(HIDDEN,5)
             nn.init.zeros_(self.editGate.weight);nn.init.constant_(self.editGate.bias,math.log(19.))
         elif encoding!='graph-plan-v3':self.editGate=None
+    def change_temperature(self,temperature):
+        if not isinstance(temperature,(int,float)) or isinstance(temperature,bool) or not math.isfinite(temperature) or temperature<=0:raise ValueError('Invalid temperature')
+        self.temperature=float(temperature)
     def encode_world(self,d):
         e=torch.tanh(self.entity0(torch.cat([d['entities'],self.names(d['entityIds'])],-1)))
         e=torch.tanh(self.entity1(torch.cat([e,neighbor_mean(e,d['entityEdges'])],-1)))
@@ -121,11 +125,13 @@ class CommanderModel(nn.Module):
         def choice(name,logits,mask,selected,valid=None,keep=None):
             nonlocal logp,entropy,factors,bc,bc_weight
             if valid is None:valid=torch.ones(selected.shape,dtype=torch.bool)
-            probs=logits.masked_fill(~mask,-1e9).double().softmax(-1)
+            masked=logits.double().masked_fill(~mask,-torch.inf)
+            logs=((masked-masked.max(-1,keepdim=True).values)/self.temperature).log_softmax(-1);probs=logs.exp()
             selected_valid=mask.gather(-1,selected.unsqueeze(-1)).squeeze(-1)
             if not selected_valid[valid].all():raise ValueError('Recorded action outside mask: '+name)
-            lp=probs.double().clamp_min(1e-30).log().gather(-1,selected.unsqueeze(-1)).squeeze(-1)
-            ent=-(probs*probs.clamp_min(1e-30).log()).sum(-1)
+            lp=logs.gather(-1,selected.unsqueeze(-1)).squeeze(-1)
+            lp=torch.where(valid,lp,torch.zeros_like(lp))
+            ent=-(probs*torch.where(probs>0,logs,torch.zeros_like(logs))).sum(-1)
             active=valid & (mask.sum(-1)>1)
             dims=tuple(range(1,selected.ndim))
             def summed(x):return x.sum(dims) if dims else x
@@ -241,7 +247,7 @@ class CommanderModel(nn.Module):
 
 def export(model,path,metadata):
     import json,hashlib
-    artifact={'format':'warbook-commander-model-v1','schema':'commander-v1','encoding':model.encoding,'hidden':HIDDEN,
+    artifact={'format':'warbook-commander-model-v1','schema':'commander-v1','encoding':model.encoding,'temperature':model.temperature,'hidden':HIDDEN,
       'vocabulary':model.vocabulary,'tensors':{name:{'shape':list(t.shape),'values':t.detach().cpu().reshape(-1).tolist()} for name,t in model.state_dict().items()},'training':metadata}
     path.write_text(json.dumps(artifact,separators=(',',':'))+'\n')
     return hashlib.sha256(path.read_bytes()).hexdigest()

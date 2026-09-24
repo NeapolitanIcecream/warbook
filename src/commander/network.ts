@@ -20,6 +20,7 @@ export interface CommanderModel {
   schema: "commander-v1";
   encoding: CommanderEncoding;
   hidden: number;
+  temperature?: number;
   vocabulary: string[];
   tensors: Record<string, { shape: number[]; values: number[] }>;
   training?: Record<string, unknown>;
@@ -33,6 +34,11 @@ export async function prepareCommander() {
 export class NeuralCommanderPolicy implements CommanderPolicy {
   get encoding() {
     return this.artifact.encoding;
+  }
+  get temperature() {
+    return this.artifact.temperature === undefined
+      ? 1
+      : this.artifact.temperature;
   }
   readonly hiddenSize: number;
   private tensors: Record<string, tf.Tensor> = {};
@@ -50,6 +56,8 @@ export class NeuralCommanderPolicy implements CommanderPolicy {
       artifact.hidden !== 128
     )
       throw new Error("Unsupported commander artifact");
+    if (!Number.isFinite(this.temperature) || this.temperature <= 0)
+      throw new Error("Invalid commander temperature");
     this.hiddenSize = artifact.hidden;
     this.names = new Map(artifact.vocabulary.map((n, i) => [n, i + 1]));
     for (const [name, value] of Object.entries(artifact.tensors)) {
@@ -225,7 +233,7 @@ export class NeuralCommanderPolicy implements CommanderPolicy {
           const values = Array.from(raw.slice(i * width, (i + 1) * width));
           const maximum = Math.max(...values.filter((_, j) => mask[j]));
           const exp = values.map((v, j) =>
-              mask[j] ? Math.exp(v - maximum) : 0,
+              mask[j] ? Math.exp((v - maximum) / this.temperature) : 0,
             ),
             total = exp.reduce((a, b) => a + b, 0),
             probs = exp.map((v) => v / total);
@@ -246,8 +254,18 @@ export class NeuralCommanderPolicy implements CommanderPolicy {
           }
           if (!mask[selected]) throw new Error(`Invalid forced ${name} action`);
           if (mask.filter(Boolean).length > 1) {
-            logp += Math.log(Math.max(1e-30, probs[selected]));
-            entropy -= probs.reduce((n, v) => n + (v ? v * Math.log(v) : 0), 0);
+            const logNormalizer = Math.log(total);
+            logp +=
+              (values[selected] - maximum) / this.temperature - logNormalizer;
+            entropy -= probs.reduce(
+              (n, v, j) =>
+                n +
+                (v
+                  ? v *
+                    ((values[j] - maximum) / this.temperature - logNormalizer)
+                  : 0),
+              0,
+            );
             factors++;
           }
           choices.push(selected);

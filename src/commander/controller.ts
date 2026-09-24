@@ -36,6 +36,7 @@ export interface CommanderPrediction {
 export interface CommanderPolicy {
   readonly hiddenSize: number;
   readonly encoding?: CommanderEncoding;
+  readonly temperature?: number;
   predict(
     world: CommanderWorld,
     hidden: readonly number[],
@@ -47,6 +48,7 @@ export interface CommanderPolicy {
 export interface CommanderRecord {
   schema: typeof COMMANDER_SCHEMA;
   encoding: CommanderEncoding;
+  temperature: number;
   tick: number;
   world: CommanderWorld;
   action: CommanderAction;
@@ -169,6 +171,7 @@ export class FullCommander implements StrategicController {
       this.record = {
         schema: COMMANDER_SCHEMA,
         encoding: this.encoding,
+        temperature: this.policy?.temperature ?? 1,
         tick: o.tick,
         world,
         action,

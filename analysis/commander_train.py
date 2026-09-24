@@ -29,7 +29,7 @@ def read_episode(path):
       'encoderSha':manifest.get('sourceHashes',{}).get('src/commander/world.ts')}
 
 def load_model(artifact):
-    model=CommanderModel(artifact['vocabulary'],artifact['encoding'])
+    model=CommanderModel(artifact['vocabulary'],artifact['encoding'],artifact.get('temperature',1.))
     model.load_state_dict({name:torch.tensor(x['values'],dtype=torch.float32).reshape(x['shape']) for name,x in artifact['tensors'].items()})
     return model
 
@@ -152,6 +152,7 @@ def main():
         expected=hashlib.sha256(Path(args.input).read_bytes()).hexdigest()
         if any(e['modelSha']!=expected for e in train):raise ValueError('Mixed behavior checkpoints')
         if any(r['encoding']!=model.encoding for e in train for r in e['rows']):raise ValueError('PPO behavior encoding mismatch')
+        if any(r.get('temperature',1.)!=model.temperature for e in train for r in e['rows'] if r['executionSource']=='policy'):raise ValueError('PPO behavior temperature mismatch')
         if model.encoding=='graph-plan-v3' and any('edits' not in r['action'] for e in train for r in e['rows'] if r['executionSource']=='policy'):raise ValueError('PPO needs the recorded edit decisions; do not infer latent choices')
         values=np.asarray([e['reward']-r['value'] for e in train for r in e['rows'] if r['executionSource']=='policy'])
         moments=torch.tensor([values.sum(),(values**2).sum(),len(values)],dtype=torch.float64)
@@ -228,7 +229,7 @@ def main():
       'encoderSha256':next(iter(hashes)),'worldSize':world_size,'localBatch':args.batch,'globalBatch':args.batch*world_size,'windowCounts':window_counts,
       'padding':'Zero-loss empty ranks, no repeated training windows','bcEventWeight':args.bc_event_weight,'bcMemory':'Chronological whole episodes with detached carried hidden state',
       'bcLoss':args.bc_loss,'bcFactorNormalization':'Per frame: mean across active domains; changed factors weighted directly; one mean KEEP negative per domain; global valid-frame DDP mean',
-      'encoding':model.encoding,'validationFraction':args.validation_fraction,'labelAdapter':'v2 confirms retyped members; v3 BC labels edit decisions from demonstrated plan changes; PPO retains recorded choices',
+      'encoding':model.encoding,'temperature':model.temperature,'validationFraction':args.validation_fraction,'labelAdapter':'v2 confirms retyped members; v3 BC labels edit decisions from demonstrated plan changes; PPO retains recorded choices',
       'trainingEpisodes':[p for d in details for p in d['paths']],'validationEpisodes':validation,'excluded':[p for d in details for p in d['excluded']],
       'inputSha256':hashlib.sha256(Path(args.input).read_bytes()).hexdigest() if args.input else None,
       'labels':'BC uses explicit teacherAction where recorded; PPO uses executed action only',
