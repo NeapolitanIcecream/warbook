@@ -12,11 +12,17 @@ const model = new NeuralCommanderPolicy(
 const cases = JSON.parse(readFileSync(process.argv[3], "utf8"));
 let maximum = 0,
   compared = 0;
+const maximumByComponent: Record<string, number> = {};
 function compare(a: unknown, b: unknown, path: string) {
   if (typeof a === "number" && typeof b === "number") {
     const d = Math.abs(a - b);
     if (!Number.isFinite(d)) throw new Error("Nonfinite " + path);
     maximum = Math.max(maximum, d);
+    const component = path.split("/")[1];
+    maximumByComponent[component] = Math.max(
+      maximumByComponent[component] ?? 0,
+      d,
+    );
     compared++;
     return;
   }
@@ -46,12 +52,21 @@ try {
 } finally {
   model.dispose();
 }
-const withinTolerance = maximum < 1e-4;
+// Joint logp sums many choices. Check its effect on the likelihood ratio;
+// probabilities, recurrent state and value retain their original absolute limit.
+const likelihoodRatioError = Math.expm1(maximumByComponent.logp ?? 0);
+const withinTolerance =
+  likelihoodRatioError < 1e-3 &&
+  Object.entries(maximumByComponent).every(
+    ([key, value]) => key === "logp" || value < 1e-4,
+  );
 console.log(
   JSON.stringify({
     cases: cases.length,
     compared,
     maxAbsoluteError: maximum,
+    maximumByComponent,
+    likelihoodRatioError,
     withinTolerance,
   }),
 );
