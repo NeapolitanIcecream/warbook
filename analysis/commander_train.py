@@ -117,8 +117,11 @@ def main():
     ap.add_argument('--epochs',type=int);ap.add_argument('--batch',type=int,default=4);ap.add_argument('--sequence',type=int,default=16);ap.add_argument('--burn',type=int,default=8);ap.add_argument('--threads',type=int,default=1)
     ap.add_argument('--bc-event-weight',type=float,default=32.);ap.add_argument('--bc-loss',choices=['legacy','factor'],default='factor');ap.add_argument('--max-updates',type=int);ap.add_argument('--entropy',type=float,default=.001);ap.add_argument('--checkpoints',type=int,nargs='*',default=[])
     ap.add_argument('--update-checkpoints',type=int,nargs='*',default=[])
+    ap.add_argument('--learning-rate',type=float);ap.add_argument('--bc-temperature',type=float)
     ap.add_argument('--action-encoding',choices=['graph-plan-v1','graph-plan-v2','graph-plan-v3']);ap.add_argument('--validation-fraction',type=float,default=.2);args=ap.parse_args()
     if not 0<=args.validation_fraction<1:raise ValueError('Invalid validation fraction')
+    if args.learning_rate is not None and (not math.isfinite(args.learning_rate) or args.learning_rate<=0):raise ValueError('Invalid learning rate')
+    if args.bc_temperature is not None and args.method!='bc':raise ValueError('PPO must retain the recorded behavior temperature')
     world_size=int(os.environ.get('WORLD_SIZE','1'));rank=int(os.environ.get('RANK','0'))
     torch.set_num_threads(args.threads)
     if world_size>1:dist.init_process_group('gloo',timeout=datetime.timedelta(minutes=10))
@@ -149,6 +152,7 @@ def main():
     if args.action_encoding:
         if args.method=='ppo' and args.action_encoding!=model.encoding:raise ValueError('PPO cannot change behavior encoding')
         model.change_encoding(args.action_encoding)
+    if args.bc_temperature is not None:model.change_temperature(args.bc_temperature)
     if args.method=='ppo':
         expected=hashlib.sha256(Path(args.input).read_bytes()).hexdigest()
         if any(e['modelSha']!=expected for e in train):raise ValueError('Mixed behavior checkpoints')
@@ -164,10 +168,11 @@ def main():
             for r in e['rows']:r['_advantage']=(e['reward']-r['value']-mean)/std
     objective=SequenceObjective(model,args)
     if world_size>1:objective=DistributedDataParallel(objective,broadcast_buffers=False)
-    optimizer=torch.optim.Adam(model.parameters(),lr=3e-4 if args.method=='bc' else 1e-4)
+    learning_rate=args.learning_rate if args.learning_rate is not None else 3e-4 if args.method=='bc' else 1e-4
+    optimizer=torch.optim.Adam(model.parameters(),lr=learning_rate)
     if args.method=='ppo' and Path(args.input).with_suffix('.optimizer.pt').exists():optimizer.load_state_dict(torch.load(Path(args.input).with_suffix('.optimizer.pt'),weights_only=True,map_location='cpu'))
     # Restoring Adam moments must not silently restore the BC learning rate for PPO.
-    for group in optimizer.param_groups:group['lr']=3e-4 if args.method=='bc' else 1e-4
+    for group in optimizer.param_groups:group['lr']=learning_rate
     samples=windows(train,args.sequence,args.burn)
     window_counts=all_objects(len(samples),world_size)
     history=[];updates=0;epochs=args.epochs or (12 if args.method=='bc' else 3)
@@ -178,7 +183,7 @@ def main():
                 'inputSha256':hashlib.sha256(Path(args.input).read_bytes()).hexdigest() if args.input else None,
                 'git':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),
                 'worldSize':world_size,'sequence':args.sequence,'burnIn':args.burn,'bcEventWeight':args.bc_event_weight,'bcLoss':args.bc_loss,
-                'encoding':model.encoding,'temperature':model.temperature,'bcMemory':'continuous episode carry','objective':'terminal MC; checkpoint before final validation'}
+                'encoding':model.encoding,'temperature':model.temperature,'learningRate':learning_rate,'bcMemory':'continuous episode carry','objective':'terminal MC; checkpoint before final validation'}
             sha=export(model,target,info);torch.save(optimizer.state_dict(),target.with_suffix('.optimizer.pt'));golden(model,train,target.with_suffix('.golden.json'))
             target.with_suffix('.done.json').write_text(json.dumps({'sha256':sha,'epoch':epoch+1,'updates':updates})+'\n')
         if world_size>1:dist.barrier()
@@ -236,7 +241,7 @@ def main():
       'encoderSha256':next(iter(hashes)),'worldSize':world_size,'localBatch':args.batch,'globalBatch':args.batch*world_size,'windowCounts':window_counts,
       'padding':'Zero-loss empty ranks, no repeated training windows','bcEventWeight':args.bc_event_weight,'bcMemory':'Chronological whole episodes with detached carried hidden state',
       'bcLoss':args.bc_loss,'bcFactorNormalization':'Per frame: mean across active domains; changed factors weighted directly; one mean KEEP negative per domain; global valid-frame DDP mean',
-      'encoding':model.encoding,'temperature':model.temperature,'validationFraction':args.validation_fraction,'labelAdapter':'v2 confirms retyped members; v3 BC labels edit decisions from demonstrated plan changes; PPO retains recorded choices',
+      'encoding':model.encoding,'temperature':model.temperature,'learningRate':learning_rate,'validationFraction':args.validation_fraction,'labelAdapter':'v2 confirms retyped members; v3 BC labels edit decisions from demonstrated plan changes; PPO retains recorded choices',
       'trainingEpisodes':[p for d in details for p in d['paths']],'validationEpisodes':validation,'excluded':[p for d in details for p in d['excluded']],
       'inputSha256':hashlib.sha256(Path(args.input).read_bytes()).hexdigest() if args.input else None,
       'labels':'BC uses explicit teacherAction where recorded; PPO uses executed action only',

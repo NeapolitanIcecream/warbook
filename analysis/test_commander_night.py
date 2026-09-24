@@ -2,9 +2,19 @@ import unittest,tempfile,json,hashlib,datetime,sys
 from pathlib import Path
 from unittest.mock import patch
 import commander_night
-from commander_night import next_learning_state,verified_candidate_receipts,completed_games,active_profiles,peer_model,quarantine_profile
+from commander_night import next_learning_state,verified_candidate_receipts,completed_games,active_profiles,peer_model,quarantine_profile,comparison_score,choose_peer
 
 class NightSelectionTests(unittest.TestCase):
+    def test_weak_peer_wins_do_not_outvote_control_wins(self):
+        rows=[{'subject':'peer-specialist','opponent':'current-peer','outcome':'W'} for _ in range(4)]
+        rows+=[{'subject':'control-winner','opponent':'strong-history','outcome':'W'}]
+        self.assertGreater(comparison_score({'rows':rows},'control-winner'),comparison_score({'rows':rows},'peer-specialist'))
+
+    def test_main_alternates_both_learning_opponents_in_its_group(self):
+        profiles={'main':{'route':'main','peerGroup':'47'},'short':{'route':'pressure','peerGroup':'47'},'small':{'route':'pressure','peerGroup':'47'},'other':{'route':'pressure','peerGroup':'83'}}
+        self.assertEqual({choose_peer(profiles,'main',0),choose_peer(profiles,'main',1)},{'short','small'})
+        self.assertEqual(choose_peer(profiles,'short',0),'main')
+
     def test_incumbent_qualifying_does_not_graduate_a_failed_candidate(self):
         self.assertEqual(next_learning_state('bc','good','bad',4,0,4),('good','good','ppo'))
     def test_bootstrap_tie_continues_the_new_learner_and_keeps_its_baseline(self):
