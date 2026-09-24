@@ -116,6 +116,7 @@ def main():
     ap=argparse.ArgumentParser();ap.add_argument('method',choices=['bc','ppo']);ap.add_argument('--episodes',required=True);ap.add_argument('--input');ap.add_argument('--out',required=True);ap.add_argument('--seed',type=int,default=47)
     ap.add_argument('--epochs',type=int);ap.add_argument('--batch',type=int,default=4);ap.add_argument('--sequence',type=int,default=16);ap.add_argument('--burn',type=int,default=8);ap.add_argument('--threads',type=int,default=1)
     ap.add_argument('--bc-event-weight',type=float,default=32.);ap.add_argument('--bc-loss',choices=['legacy','factor'],default='factor');ap.add_argument('--max-updates',type=int);ap.add_argument('--entropy',type=float,default=.001);ap.add_argument('--checkpoints',type=int,nargs='*',default=[])
+    ap.add_argument('--update-checkpoints',type=int,nargs='*',default=[])
     ap.add_argument('--action-encoding',choices=['graph-plan-v1','graph-plan-v2','graph-plan-v3']);ap.add_argument('--validation-fraction',type=float,default=.2);args=ap.parse_args()
     if not 0<=args.validation_fraction<1:raise ValueError('Invalid validation fraction')
     world_size=int(os.environ.get('WORLD_SIZE','1'));rank=int(os.environ.get('RANK','0'))
@@ -170,6 +171,17 @@ def main():
     samples=windows(train,args.sequence,args.burn)
     window_counts=all_objects(len(samples),world_size)
     history=[];updates=0;epochs=args.epochs or (12 if args.method=='bc' else 3)
+    def checkpoint(suffix,epoch):
+        if rank==0:
+            base=Path(args.out);base.parent.mkdir(parents=True,exist_ok=True);target=base.with_name(base.stem+suffix+'.json')
+            info={'method':args.method,'seed':args.seed,'epochs':epoch+1,'updates':updates,'encoderSha256':next(iter(hashes)),
+                'inputSha256':hashlib.sha256(Path(args.input).read_bytes()).hexdigest() if args.input else None,
+                'git':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),
+                'worldSize':world_size,'sequence':args.sequence,'burnIn':args.burn,'bcEventWeight':args.bc_event_weight,'bcLoss':args.bc_loss,
+                'encoding':model.encoding,'temperature':model.temperature,'bcMemory':'continuous episode carry','objective':'terminal MC; checkpoint before final validation'}
+            sha=export(model,target,info);torch.save(optimizer.state_dict(),target.with_suffix('.optimizer.pt'));golden(model,train,target.with_suffix('.golden.json'))
+            target.with_suffix('.done.json').write_text(json.dumps({'sha256':sha,'epoch':epoch+1,'updates':updates})+'\n')
+        if world_size>1:dist.barrier()
     for epoch in range(epochs):
         losses=[];kls=[];count=0;epoch_start=time.monotonic();carry={}
         if args.method=='bc':
@@ -194,19 +206,14 @@ def main():
             nnorm=torch.nn.utils.clip_grad_norm_(model.parameters(),.5)
             if not torch.isfinite(nnorm):raise ValueError('Nonfinite gradient')
             optimizer.step();updates+=1;losses.append(float(loss.detach())*frames);kls.append(kl*frames);count+=frames
+            if updates in args.update_checkpoints:checkpoint(f'-update-{updates}',epoch)
             if args.max_updates and updates>=args.max_updates:break
         metrics=torch.tensor([sum(losses),sum(kls),count],dtype=torch.float64)
         if world_size>1:dist.all_reduce(metrics)
         row={'epoch':epoch,'loss':float(metrics[0]/metrics[2]),'approxKL':float(metrics[1]/metrics[2]),'frames':int(metrics[2]),'seconds':time.monotonic()-epoch_start,'updates':updates};history.append(row)
         if rank==0:print(json.dumps(row),flush=True)
         if epoch+1 in args.checkpoints:
-            if rank==0:
-                base=Path(args.out);base.parent.mkdir(parents=True,exist_ok=True);checkpoint=base.with_name(base.stem+f'-after-{epoch+1}.json')
-                info={'method':args.method,'seed':args.seed,'epochs':epoch+1,'updates':updates,'encoderSha256':next(iter(hashes)),
-                    'worldSize':world_size,'sequence':args.sequence,'burnIn':args.burn,'bcEventWeight':args.bc_event_weight,'bcLoss':args.bc_loss,'bcMemory':'continuous episode carry','objective':'terminal MC; checkpoint before final validation'}
-                sha=export(model,checkpoint,info);torch.save(optimizer.state_dict(),checkpoint.with_suffix('.optimizer.pt'));golden(model,train,checkpoint.with_suffix('.golden.json'))
-                checkpoint.with_suffix('.done.json').write_text(json.dumps({'sha256':sha,'epoch':epoch+1,'updates':updates})+'\n')
-            if world_size>1:dist.barrier()
+            checkpoint(f'-after-{epoch+1}',epoch)
         if args.max_updates and updates>=args.max_updates or args.method=='ppo' and row['approxKL']>.02:break
     if world_size>1:dist.barrier();dist.destroy_process_group()
     if rank!=0:return
