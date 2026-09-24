@@ -173,18 +173,24 @@ def compact_completed(root, workers=4, restore=False, codec='zstd', level=None):
     return report
 
 
-def require_batch_space(root, remaining_games, trace='launch', estimate_mib=None):
+def require_batch_space(root, remaining_games, trace='launch', estimate_mib=None,
+                        live_games=None, compressed_mib_per_game=None):
     # R2 launch journals measured median 6.2 / p95 22.5 / max 52.1 MiB.
     # This is a capacity forecast, not a bound on arbitrary future policies.
     estimate_mib = estimate_mib if estimate_mib is not None else (64 if trace == 'launch' else 512)
     if estimate_mib <= 0:
         raise ValueError('Storage forecast must be positive')
     free = shutil.disk_usage(root).free
-    required = 50*2**30 + remaining_games*estimate_mib*2**20
+    live = remaining_games if live_games is None else min(remaining_games, live_games)
+    archive_mib = 0 if live_games is None else (compressed_mib_per_game if compressed_mib_per_game is not None else 16 if trace == 'launch' else 128)
+    if live < 0 or archive_mib < 0:
+        raise ValueError('Storage forecast must be nonnegative')
+    required = 50*2**30 + (live*estimate_mib + remaining_games*archive_mib)*2**20
     if free < required:
         raise RuntimeError(f'Batch storage forecast needs {required/2**30:.1f} GiB including 50 GiB reserve; {free/2**30:.1f} GiB available. Compact completed batches or reduce the batch.')
     return dict(freeBytes=free, requiredBytes=required, remainingGames=remaining_games,
-                estimateMiBPerGame=estimate_mib)
+                estimateMiBPerGame=estimate_mib, liveGames=live,
+                compressedMiBPerGame=archive_mib)
 
 
 if __name__ == '__main__':

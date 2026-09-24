@@ -4,7 +4,7 @@ Every child receives a fixed code/model/opponent version; no laptop RPC is invol
 import argparse,concurrent.futures,hashlib,json,os,random,shutil,subprocess,time
 from pathlib import Path
 from launch_outcome import classify
-from experiment_storage import compact_completed, require_batch_space
+from experiment_storage import compact_completed, compact_file, require_batch_space
 
 def digest(path):return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 def atomic(path,value):
@@ -57,9 +57,11 @@ def main():
                 for subject in plan['subjects']:tasks.append((map_name,opponent,repeat,subject))
     random.Random(plan.get('orderSeed',1)).shuffle(tasks)
     remaining=sum(not (root/m/o/f'{r}-{s}'/'batch-row.json').exists() for m,o,r,s in tasks)
-    atomic(root/'storage-budget.json',require_batch_space(root,remaining,plan.get('trace','launch'),plan.get('storageMiBPerGame')))
     started=time.monotonic();rows=[];workers=args.workers or plan.get('workers',4)
     if workers<1 or workers>192:raise ValueError('Explicit worker bound is 1..192; calibrate CPU and memory before scaling')
+    per_game=plan.get('compactEachGame',True)
+    atomic(root/'storage-budget.json',require_batch_space(root,remaining,plan.get('trace','launch'),plan.get('storageMiBPerGame'),
+        live_games=workers if per_game else None,compressed_mib_per_game=plan.get('storageCompressedMiBPerGame')))
     def run(task):
         map_name,opponent,repeat,subject=task;s=plan['subjects'][subject];p=plan['opponents'][opponent]
         directory=root/map_name/opponent/f'{repeat}-{subject}';directory.mkdir(parents=True,exist_ok=True)
@@ -91,7 +93,15 @@ def main():
         except Exception as exc:error=f'{type(exc).__name__}: {exc}';result={};status='E'
         row={'map':map_name,'opponent':opponent,'repeat':repeat,'subject':subject,'outcome':status,'termination':reason,'trainingEligible':training_eligible,'tick':result.get('tick'),'seconds':time.monotonic()-attempt,'dir':str(directory),'error':error}
         if completed.parent!=directory:atomic(directory/'batch-row.json',row)
-        atomic(completed,row);return row
+        atomic(completed,row)
+        # The child has exited and its completion marker is durable. Archive while
+        # the other workers keep playing, rather than retaining a whole raw batch.
+        journal=directory/'decisions.ndjson'
+        if per_game and journal.exists():
+            archived=compact_file(journal)
+            row['storage']={k:archived[k] for k in ['codec','originalBytes','compressedBytes']}
+            atomic(completed,row)
+        return row
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
         futures=[executor.submit(run,t) for t in tasks]
         for future in concurrent.futures.as_completed(futures):

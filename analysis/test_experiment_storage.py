@@ -82,6 +82,14 @@ class StorageTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 require_batch_space('.',17)
 
+    def test_per_game_archiving_reserves_live_raw_files_and_all_future_archives(self):
+        with patch('experiment_storage.shutil.disk_usage') as usage:
+            usage.return_value.free=51*2**30
+            report=require_batch_space('.',32,live_games=4,compressed_mib_per_game=16)
+            self.assertEqual(report['requiredBytes'],50*2**30+(4*64+32*16)*2**20)
+            with self.assertRaises(RuntimeError):
+                require_batch_space('.',80,live_games=4,compressed_mib_per_game=16)
+
 
 if __name__ == '__main__':
     unittest.main()
