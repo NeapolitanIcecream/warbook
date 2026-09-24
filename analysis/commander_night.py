@@ -99,6 +99,10 @@ def main():
         if profile.get('learningRate'):cmd+=['--learning-rate',str(profile['learningRate'])]
         if source:cmd+=['--input',str(source)]
         elif method=='bc':cmd+=['--checkpoints','4','8','12']
+        if plan.get('numaInterleave'):
+            numa=shutil.which('numactl')
+            if not numa:raise ValueError('Requested NUMA interleave requires numactl')
+            cmd=[numa,'--interleave=all',*cmd]
         command(cmd,target.with_suffix('.log'));parity(fitted,fitted.with_suffix('.parity.log'))
         if fitted!=target:
             command([python,'analysis/commander_migrate.py','--input',str(fitted),'--out',str(target),'--encoding',profile['encoding'],'--temperature',str(profile['temperature'])],target.with_suffix('.migration.log'))
