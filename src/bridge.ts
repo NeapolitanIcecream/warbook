@@ -31,6 +31,7 @@ import {
 import {
   distance2,
   INTENT_KINDS,
+  queueRequestQuantity,
   type Observation,
   type Intent,
   type Unit,
@@ -629,6 +630,7 @@ export class WarbookBot extends Bot {
         type: q.type,
         status: q.status,
         size: q.size,
+        maxSize: q.maxSize,
         items: q.items.map((i) => ({
           name: i.rules.name,
           quantity: i.quantity,
@@ -1061,7 +1063,10 @@ export class WarbookBot extends Bot {
               intent.product.queue,
               intent.product.name,
               intent.product.type,
-              1,
+              queueRequestQuantity(
+                intent,
+                this.player.production.getQueueData(intent.product.queue),
+              ),
             );
             break;
           case "place":

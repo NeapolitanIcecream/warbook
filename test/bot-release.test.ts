@@ -130,3 +130,45 @@ test("frozen runtime compatibility follows the SDK, not unrelated application lo
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("frozen commander execution modes are explicit and old missing metadata stays single-item", async () => {
+  const release = await buildBot("HEAD");
+  const dir = mkdtempSync(resolve("work/bot-execution-mode-test-"));
+  try {
+    copyFileSync(resolve(release.path, "../bot.mjs"), `${dir}/bot.mjs`);
+    const metadata = JSON.parse(readFileSync(release.path, "utf8"));
+    writeFileSync(
+      `${dir}/release.json`,
+      JSON.stringify({ ...metadata, commanderExecutionMode: "single-item-v1" }),
+    );
+    assert((await loadBotRelease(`${dir}/release.json`, "LegacyMode")).bot);
+    writeFileSync(
+      `${dir}/release.json`,
+      JSON.stringify({
+        ...metadata,
+        commanderExecutionMode: "native-finite-batches-v1",
+      }),
+    );
+    await assert.rejects(
+      loadBotRelease(`${dir}/release.json`, "WrongMode"),
+      /execution mode differs/,
+    );
+    writeFileSync(
+      `${dir}/release.json`,
+      JSON.stringify({ ...metadata, commanderExecutionMode: "unknown" }),
+    );
+    await assert.rejects(
+      loadBotRelease(`${dir}/release.json`, "UnknownMode"),
+      /Unsupported commander execution mode/,
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("native finite batches cannot be enabled on a non-commander frozen build", async () => {
+  await assert.rejects(
+    buildBot("HEAD", "bastion", undefined, undefined, true),
+    /require a commander model/,
+  );
+});

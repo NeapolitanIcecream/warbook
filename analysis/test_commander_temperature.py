@@ -104,6 +104,11 @@ class TemperatureTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'checkpoints'):validate_ppo_behavior([episode],model,'other-sha')
         changed=copy.deepcopy(episode);changed['rows'][0]['encoding']='graph-plan-v2'
         with self.assertRaisesRegex(ValueError,'encoding'):validate_ppo_behavior([changed],model,'sha')
+        native=copy.deepcopy(episode);native['behavior']['executionMode']='native-finite-batches-v1'
+        validate_ppo_behavior([native],model,'sha')
+        with self.assertRaisesRegex(ValueError,'executor'):validate_ppo_behavior([episode,native],model,'sha')
+        native['behavior']['executionMode']='unknown'
+        with self.assertRaisesRegex(ValueError,'executor'):validate_ppo_behavior([native],model,'sha')
         self.assertEqual(recorded_temperature_config({'encoding':'graph-plan-v2'}),('graph-plan-v2',1.,dict.fromkeys(['queue','amount','cash'],1.)))
 
     def test_bc_requires_explicit_normalization_of_production_overrides(self):

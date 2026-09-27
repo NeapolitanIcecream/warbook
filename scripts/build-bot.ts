@@ -21,11 +21,14 @@ export async function buildBot(
   mode = "combined",
   modelPath?: string,
   tacticalModelPath?: string,
+  nativeFiniteBatches = false,
 ) {
   const launchModel = modelPath
     ? JSON.parse(readFileSync(modelPath, "utf8"))
     : undefined;
   const commanderModel = launchModel?.format === "warbook-commander-model-v1";
+  if (nativeFiniteBatches && !commanderModel)
+    throw new Error("Native finite batches require a commander model");
   const contactModel = [
     "operation-contact-v1",
     "operation-maneuver-v1",
@@ -61,7 +64,9 @@ export async function buildBot(
   if (commanderModel)
     components.push(
       "strategy:new FullCommander(mode,commanderPolicy,'frozen',true)",
-      "production:new ProgramProduction()",
+      nativeFiniteBatches
+        ? "production:new ProgramProduction(true)"
+        : "production:new ProgramProduction()",
     );
   else if (launchModel) {
     const provider = operationModel
@@ -119,6 +124,8 @@ export async function buildBot(
           const artifact = ${JSON.stringify(launchModel)};
           await prepareCommander();
           const commanderPolicy = new NeuralCommanderPolicy(artifact);
+          export const commanderExecutionMode = ${JSON.stringify(nativeFiniteBatches ? "native-finite-batches-v1" : "single-item-v1")};
+          ${nativeFiniteBatches ? "if (new ProgramProduction(true).id !== 'program-production-native-batches-v1') throw new Error('Frozen source lacks native finite batches');" : ""}
           `
               : launchModel
                 ? `
@@ -144,7 +151,7 @@ export async function buildBot(
           `
               : ""
           }
-          export const policyVersion = POLICY_VERSION + ${JSON.stringify((commanderModel ? "-learned-commander" : launchModel ? (operationModel ? "-learned-" + launchModel.controlScope + (contactModel ? "-" + launchModel.contactInput : "") + (maneuverModel ? "-maneuver-" + launchModel.maneuverScope : "") : "-learned") : "") + (tacticalModel ? "-armor" : ""))};
+          export const policyVersion = POLICY_VERSION + ${JSON.stringify((commanderModel ? "-learned-commander" : launchModel ? (operationModel ? "-learned-" + launchModel.controlScope + (contactModel ? "-" + launchModel.contactInput : "") + (maneuverModel ? "-maneuver-" + launchModel.maneuverScope : "") : "-learned") : "") + (tacticalModel ? "-armor" : "") + (nativeFiniteBatches ? "-native-batches" : ""))};
           export const observationProtocol = OBSERVATION_PROTOCOL;
           export const createBot = name => new WarbookBot(name, 'Americans', mode${components.length ? `,{${components.join(",")}}` : ""});
         `,
@@ -241,6 +248,9 @@ export async function buildBot(
       sha256,
       mode,
       policyVersion: module.policyVersion,
+      ...(commanderModel
+        ? { commanderExecutionMode: module.commanderExecutionMode }
+        : {}),
       ...(tacticalModelPath
         ? {
             tacticalModelSha256: fileHash(tacticalModelPath),
@@ -299,6 +309,7 @@ if (
       mode: { type: "string", default: "combined" },
       "launch-model": { type: "string" },
       "tactical-model": { type: "string" },
+      "commander-native-batches": { type: "boolean", default: false },
     },
   });
   console.log(
@@ -308,6 +319,7 @@ if (
         values.mode!,
         values["launch-model"],
         values["tactical-model"],
+        values["commander-native-batches"],
       ),
     ),
   );

@@ -7,6 +7,13 @@ from launch_outcome import classify
 from experiment_storage import compact_completed, compact_file, require_batch_space
 
 def digest(path):return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+def commander_execution_flags(subject):
+    enabled=subject.get('nativeFiniteBatches',False)
+    if not isinstance(enabled,bool):raise ValueError('nativeFiniteBatches must be boolean')
+    if not enabled:return []
+    if not subject.get('commander') or subject.get('policy') not in ['teacher','model'] or subject.get('release') or subject.get('ref'):
+        raise ValueError('nativeFiniteBatches requires a live full commander; frozen peers carry their own execution mode')
+    return ['--commander-native-batches']
 def atomic(path,value):
     p=Path(path);tmp=p.with_suffix(p.suffix+'.tmp');tmp.write_text(json.dumps(value,indent=2)+'\n');tmp.replace(p)
 def fresh_attempt(directory):
@@ -32,6 +39,7 @@ def stage_release(path):
 def main():
     ap=argparse.ArgumentParser();ap.add_argument('plan');ap.add_argument('--out',required=True);ap.add_argument('--workers',type=int);ap.add_argument('--resume',action='store_true');args=ap.parse_args()
     plan=json.loads(Path(args.plan).read_text());root=Path(args.out).resolve();root.mkdir(parents=True,exist_ok=True)
+    for subject in plan['subjects'].values():commander_execution_flags(subject)
     node=os.environ.get('WARBOOK_NODE','node');commit=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
     for s in [*plan['subjects'].values(),*plan['opponents'].values()]:
         if s.get('release'):
@@ -79,6 +87,7 @@ def main():
         if s.get('deterministic'):cmd+=['--commander-deterministic' if s.get('commander') else '--launch-deterministic']
         if s.get('commander') and s.get('prefixUntil'):cmd+=['--commander-prefix',str(s['prefixUntil'])]
         if s.get('commander') and 'daggerBeta' in s:cmd+=['--commander-dagger-beta',str(s['daggerBeta'])]
+        cmd+=commander_execution_flags(s)
         if s.get('tacticalModel'):cmd+=['--tactical-model',s['tacticalModel']]
         if s.get('tacticalScope'):cmd+=['--tactical-scope',s['tacticalScope']]
         if plan.get('trace','launch')=='launch':cmd+=['--trace-level','launch']

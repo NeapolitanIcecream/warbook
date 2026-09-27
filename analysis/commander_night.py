@@ -1,5 +1,5 @@
 """Detached full-strategy bootstrap and joint adaptation, with frozen v1/v2 controls."""
-import argparse,concurrent.futures,datetime,hashlib,json,os,shutil,signal,subprocess,sys,time
+import argparse,concurrent.futures,datetime,hashlib,json,os,shutil,signal,subprocess,sys,time,threading
 from pathlib import Path
 from launch_batch import atomic
 from experiment_storage import require_batch_space
@@ -77,6 +77,7 @@ def choose_peer(profiles,name,cycle):
 
 def policy_spec(profile,model,teacher=False,evaluation=False):
     result={'commander':True,'policy':'model','mode':'bastion' if profile['route']=='main' else 'pressure','model':str(model),'policySeed':profile['seed']}
+    if profile.get('nativeFiniteBatches'):result['nativeFiniteBatches']=True
     if teacher:result.update(daggerBeta=profile.get('daggerBeta',.25),deterministic=profile.get('samplingDeterministic',True))
     elif evaluation and profile.get('evaluationDeterministic'):result['deterministic']=True
     elif not evaluation and profile.get('samplingDeterministic'):raise ValueError('PPO sampling must be stochastic')
@@ -116,6 +117,9 @@ def main():
         state=finalization_snapshot(args.finalize_from)
         if state['source']!=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip():raise ValueError('Finalize from the original frozen working directory')
     prior_games=state['games']
+    training_slots=plan.get('maxConcurrentTrainings',len(plan['profiles']))
+    if not isinstance(training_slots,int) or training_slots<1:raise ValueError('Expected a positive training concurrency limit')
+    training_semaphore=threading.BoundedSemaphore(training_slots)
     atomic(root/'plan.json',plan)
     def save():atomic(root/'state.json',state)
     def command(cmd,log):
@@ -134,9 +138,11 @@ def main():
                 raise
         if code:raise RuntimeError(f'Command failed ({code}); see {log}')
     def parity(model,log):command([node,'--import','tsx','scripts/check-commander-model.ts',str(model),str(Path(model).with_suffix('.golden.json'))],log)
-    def freeze(model,route,directory):
+    def freeze(model,route,directory,native_batches=False):
         directory.mkdir(parents=True,exist_ok=True)
-        log=directory/'freeze.log';command([node,'--import','tsx','scripts/build-bot.ts','--ref',state['source'],'--mode','bastion' if route=='main' else 'pressure','--launch-model',str(model)],log)
+        log=directory/'freeze.log';cmd=[node,'--import','tsx','scripts/build-bot.ts','--ref',state['source'],'--mode','bastion' if route=='main' else 'pressure','--launch-model',str(model)]
+        if native_batches:cmd+=['--commander-native-batches']
+        command(cmd,log)
         return json.loads(log.read_text().splitlines()[-1])['path']
     spec=policy_spec
     def batch(directory,subjects,opponents,rounds,workers,seed):
@@ -162,6 +168,7 @@ def main():
         if method=='bc':cmd+=['--bc-loss','factor','--bc-event-weight','32','--max-updates',str(updates)]
         if method=='bc' and 'temperature' in profile:cmd+=['--bc-temperature','1']
         if method=='ppo' and profile.get('ppoUpdates'):cmd+=['--max-updates',str(profile['ppoUpdates'])]
+        if method=='ppo':cmd+=['--gradient-accumulation',str(profile.get('gradientAccumulation',1))]
         if profile.get('learningRate'):cmd+=['--learning-rate',str(profile['learningRate'])]
         if source:cmd+=['--input',str(source)]
         elif method=='bc':cmd+=['--checkpoints','4','8','12']
@@ -169,7 +176,8 @@ def main():
             numa=shutil.which('numactl')
             if not numa:raise ValueError('Requested NUMA interleave requires numactl')
             cmd=[numa,'--interleave=all',*cmd]
-        command(cmd,target.with_suffix('.log'));parity(fitted,fitted.with_suffix('.parity.log'))
+        with training_semaphore:
+            command(cmd,target.with_suffix('.log'));parity(fitted,fitted.with_suffix('.parity.log'))
         if fitted!=target:
             command([python,'analysis/commander_migrate.py','--input',str(fitted),'--out',str(target),'--encoding',profile['encoding'],'--temperature',str(profile['temperature'])],target.with_suffix('.migration.log'))
             parity(target,target.with_suffix('.parity.log'))
@@ -233,9 +241,9 @@ def main():
                     cached=state.setdefault('retainedReleases',{}).get(name)
                     retained_sha=hashlib.sha256(Path(p['retained']).read_bytes()).hexdigest()
                     if not cached or cached['modelSha256']!=retained_sha:
-                        cached={'modelSha256':retained_sha,'release':freeze(p['retained'],p['route'],d/'retained')}
+                        cached={'modelSha256':retained_sha,'release':freeze(p['retained'],p['route'],d/'retained',p.get('nativeFiniteBatches',False))}
                         state['retainedReleases'][name]=cached
-                    releases[name]=cached['release'] if peer_model(p)==p['retained'] else freeze(peer_model(p),p['route'],d/'current')
+                    releases[name]=cached['release'] if peer_model(p)==p['retained'] else freeze(peer_model(p),p['route'],d/'current',p.get('nativeFiniteBatches',False))
                 except TrainingBoundary:
                     boundary=True;state['stopReason']='Training boundary during freezing; enter final evaluation';break
                 except Exception as error:
@@ -252,6 +260,8 @@ def main():
                 p=profiles[name];d=root/f'cycle-{cycle:02d}'/name
                 peer=choose_peer(state['profiles'],name,cycle)
                 opponents={'supalosa':{'native':'supalosa'},'opposite-rule':{'release':rules['pressure' if p['route']=='main' else 'main']},'current-peer':{'release':releases[peer]},'strong-history':{'release':plan['strongReference']}}
+                if cycle==0 and plan.get('fixedFirstPool'):
+                    opponents={'supalosa':{'native':'supalosa'},'main-rule':{'release':rules['main']},'pressure-rule':{'release':rules['pressure']},'strong-history':{'release':plan['strongReference']}}
                 learning=p['stage']=='ppo'
                 reused=p.get('initialEpisodes') if cycle==0 else None
                 if reused:
@@ -261,6 +271,8 @@ def main():
                     for episode in new:
                         m=json.loads((Path(episode)/'manifest.json').read_text()).get('commanderExperiment',{})
                         if m.get('modelSha256')!=expected or m.get('deterministic') or m.get('prefixUntil',0):raise ValueError('Shared initial data must be fully stochastic on-policy')
+                        expected_execution='native-finite-batches-v1' if p.get('nativeFiniteBatches') else 'single-item-v1'
+                        if m.get('executionMode','single-item-v1')!=expected_execution:raise ValueError('Shared initial data uses a different production executor')
                         if not learning and m.get('daggerBeta')!=0:raise ValueError('Shared correction data needs queried teacher labels without intervention')
                     atomic(d/'sampling-reused.json',{'episodes':reused,'summary':p['initialSummary'],'uses':len(new),'newGames':0})
                 else:
@@ -360,7 +372,7 @@ def main():
             releases={}
             for name,p in state['profiles'].items():
                 directory=root/'cross'/name;directory.mkdir(parents=True,exist_ok=True)
-                try:releases[name]=freeze(p['retained'],p['route'],directory)
+                try:releases[name]=freeze(p['retained'],p['route'],directory,p.get('nativeFiniteBatches',False))
                 except Exception as error:state.setdefault('finalFailures',[]).append({'name':name,'phase':'cross-freeze','error':str(error)})
             def cross_step(name):
                 p=state['profiles'][name]

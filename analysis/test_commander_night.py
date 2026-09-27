@@ -101,6 +101,13 @@ class NightSelectionTests(unittest.TestCase):
         self.assertTrue(policy_spec(p,'model',evaluation=True)['deterministic'])
         with self.assertRaises(ValueError):policy_spec({**p,'samplingDeterministic':True},'model')
 
+    def test_native_executor_is_explicit_for_sampling_and_evaluation(self):
+        profile={'route':'pressure','seed':83,'nativeFiniteBatches':True}
+        for evaluation in [False,True]:
+            spec=policy_spec(profile,'candidate',evaluation=evaluation)
+            self.assertTrue(spec['nativeFiniteBatches']);self.assertNotIn('deterministic',spec)
+            self.assertNotIn('nativeFiniteBatches',policy_spec({**profile,'nativeFiniteBatches':False},'candidate',evaluation=evaluation))
+
     def test_failed_and_interrupted_attempts_count_once(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp);a=root/'a';b=root/'b';a.mkdir();b.mkdir()

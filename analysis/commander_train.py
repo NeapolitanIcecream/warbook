@@ -54,6 +54,9 @@ def load_model(artifact):
 
 def validate_ppo_behavior(episodes,model,expected_sha):
     expected=(model.encoding,model.temperature,model.effective_production_temperatures())
+    modes={e['behavior'].get('executionMode','single-item-v1') for e in episodes}
+    if len(modes)!=1 or not modes<={'single-item-v1','native-finite-batches-v1'}:
+        raise ValueError('PPO needs a single recorded production executor')
     for episode in episodes:
         if episode['deterministic']:raise ValueError('Greedy behavior is not the recorded stochastic PPO distribution')
         if episode['modelSha']!=expected_sha:raise ValueError('Mixed behavior checkpoints')
@@ -216,9 +219,13 @@ def main():
         if e is None or args.method=='ppo' and not any(r['executionSource']=='policy' for r in e['rows']):excluded.append(path)
         else:train.append(e)
     if not train:raise ValueError('Each rank needs a valid whole episode')
-    details=all_objects({'paths':[e['path'] for e in train],'excluded':excluded,'hashes':list({e['encoderSha'] for e in train}),'greedy':any(e['deterministic'] for e in train)},world_size)
+    details=all_objects({'paths':[e['path'] for e in train],'excluded':excluded,'hashes':list({e['encoderSha'] for e in train}),'greedy':any(e['deterministic'] for e in train),
+                        'executionModes':list({e['behavior'].get('executionMode','single-item-v1') for e in train})},world_size)
     hashes={h for d in details for h in d['hashes']}
     if len(hashes)!=1 or None in hashes:raise ValueError('Mixed/unrecorded encoder source')
+    execution_modes={mode for d in details for mode in d['executionModes']}
+    if args.method=='ppo' and (len(execution_modes)!=1 or not execution_modes<={'single-item-v1','native-finite-batches-v1'}):
+        raise ValueError('PPO cannot combine different production executors across ranks')
     torch.manual_seed(args.seed);np.random.seed(args.seed);random.seed(args.seed+rank)
     if args.input:
         artifact=json.loads(Path(args.input).read_text());model=load_model(artifact)
@@ -274,7 +281,7 @@ def main():
                 'inputSha256':hashlib.sha256(Path(args.input).read_bytes()).hexdigest() if args.input else None,
                 'git':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),
                 'worldSize':world_size,'sequence':args.sequence,'burnIn':args.burn,'bcEventWeight':args.bc_event_weight,'bcLoss':args.bc_loss,
-                **accumulation_info,'trainingUsage':usage,
+                **accumulation_info,'trainingUsage':usage,'executionModes':sorted(execution_modes),
                 'encoding':model.encoding,'temperature':model.temperature,'learningRate':learning_rate,'bcMemory':'continuous episode carry','objective':'terminal MC; checkpoint before final validation'}
             if model.encoding=='graph-plan-v4':info['productionTemperatures']=model.effective_production_temperatures()
             sha=export(model,target,info);torch.save(optimizer.state_dict(),target.with_suffix('.optimizer.pt'));golden(model,train,target.with_suffix('.golden.json'))
@@ -349,7 +356,7 @@ def main():
     metadata={'method':args.method,'seed':args.seed,'git':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),
       'trainerSha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),'modelCodeSha256':hashlib.sha256(Path(__file__).with_name('commander_model.py').read_bytes()).hexdigest(),
       'encoderSha256':next(iter(hashes)),'worldSize':world_size,'localBatch':args.batch,'globalBatch':args.batch*world_size,'windowCounts':window_counts,
-      **accumulation_info,'trainingUsage':usage,'productionEventsSha256':hashlib.sha256(event_path.read_bytes()).hexdigest(),
+      **accumulation_info,'trainingUsage':usage,'executionModes':sorted(execution_modes),'productionEventsSha256':hashlib.sha256(event_path.read_bytes()).hexdigest(),
       'padding':'Zero-loss empty ranks, no repeated training windows','bcEventWeight':args.bc_event_weight,'bcMemory':'Chronological whole episodes with detached carried hidden state',
       'bcLoss':args.bc_loss,'bcFactorNormalization':'Per frame: mean across active domains; changed factors weighted directly; one mean KEEP negative per domain; global valid-frame DDP mean',
       'encoding':model.encoding,'temperature':model.temperature,'learningRate':learning_rate,'optimizerStart':'restored' if optimizer_sha else 'cold','inputOptimizerSha256':optimizer_sha,'episodeMemory':'float32 feature blocks and int32 edges; identical pack tensors','validationFraction':args.validation_fraction,'labelAdapter':'v2 confirms retyped members; v3 BC labels edit decisions from demonstrated plan changes; PPO retains recorded choices',

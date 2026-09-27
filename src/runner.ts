@@ -82,6 +82,7 @@ const { values } = parseArgs({
     "commander-deterministic": { type: "boolean", default: false },
     "commander-prefix": { type: "string", default: "0" },
     "commander-dagger-beta": { type: "string" },
+    "commander-native-batches": { type: "boolean", default: false },
     "tactical-model": { type: "string" },
     "tactical-scope": { type: "string", default: "duel" },
     "launch-model": { type: "string" },
@@ -128,6 +129,8 @@ async function main(): Promise<void> {
       !["bastion", "pressure"].includes(values.mode!))
   )
     throw new Error("Invalid commander configuration");
+  if (values["commander-native-batches"] && !values["commander-policy"])
+    throw new Error("Native finite batches require a full commander");
   let commanderNetwork: NeuralCommanderPolicy | undefined;
   let armorTactics: LearnedArmorTactics | undefined;
   if (values["tactical-model"]) {
@@ -173,6 +176,9 @@ async function main(): Promise<void> {
         prefix,
         daggerBeta,
       )
+    : undefined;
+  const commanderProduction = fullStrategy
+    ? new ProgramProduction(values["commander-native-batches"])
     : undefined;
   if (
     values["launch-policy"] &&
@@ -289,7 +295,7 @@ async function main(): Promise<void> {
             ? {
                 strategy: fullStrategy,
                 tactics: armorTactics ?? new CommanderTactics(),
-                production: new ProgramProduction(),
+                production: commanderProduction!,
               }
             : launch || operation
               ? {
@@ -339,7 +345,9 @@ async function main(): Promise<void> {
       !values["commander-model"] ||
       prefix ||
       daggerBeta !== undefined ||
-      shadow.release.launchModelSha256 !== sha256(values["commander-model"]))
+      shadow.release.launchModelSha256 !== sha256(values["commander-model"]) ||
+      (shadow.release.commanderExecutionMode ?? "single-item-v1") !==
+        commanderProduction?.executionMode)
   )
     throw new Error(
       "Commander shadow requires identical weights, clock and deterministic execution",
@@ -429,6 +437,8 @@ async function main(): Promise<void> {
             route: values.mode,
             encoding: fullStrategy.encoding,
             temperature: commanderNetwork?.temperature ?? 1,
+            executionMode: commanderProduction!.executionMode,
+            nativeFiniteBatches: commanderProduction!.nativeFiniteBatches,
             ...(fullStrategy.productionTemperatures
               ? { productionTemperatures: fullStrategy.productionTemperatures }
               : {}),

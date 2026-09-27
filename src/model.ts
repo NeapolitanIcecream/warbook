@@ -87,6 +87,8 @@ export interface Queue {
   type: number;
   status: number;
   size: number;
+  /** Own native queue capacity; not a neural feature column. */
+  maxSize?: number;
   items: { name: string; quantity: number }[];
 }
 export interface Observation {
@@ -160,7 +162,7 @@ export type Intent = (
   | { kind: "deploy"; refs: string[] }
   | { kind: "stop"; refs: string[] }
   | { kind: "scatter"; refs: string[] }
-  | { kind: "queue"; product: Product }
+  | { kind: "queue"; product: Product; quantity?: number }
   | { kind: "place"; name: string; x: number; y: number }
   | {
       kind: "attack" | "crush" | "capture" | "dock";
@@ -204,6 +206,37 @@ export const INTENT_KINDS: ReadonlySet<string> = new Set([
 
 export const distance2 = (a: Point, b: Point): number =>
   (a.x - b.x) ** 2 + (a.y - b.y) ** 2;
+
+export function nativeQueueFreeCapacity(
+  q: Pick<Queue, "size" | "maxSize">,
+): number {
+  if (
+    !Number.isSafeInteger(q.maxSize) ||
+    q.maxSize! < 0 ||
+    !Number.isSafeInteger(q.size) ||
+    q.size < 0
+  )
+    throw new Error("Invalid or missing observed native queue capacity");
+  return Math.max(0, q.maxSize! - q.size);
+}
+
+/** The pinned action payload encodes quantity as uint16. */
+export function queueRequestQuantity(
+  intent: Extract<Intent, { kind: "queue" }>,
+  q: Pick<Queue, "size" | "maxSize">,
+): number {
+  const quantity = intent.quantity ?? 1;
+  if (
+    !Number.isSafeInteger(quantity) ||
+    quantity <= 0 ||
+    quantity > 65535 ||
+    (quantity > 1 && quantity > nativeQueueFreeCapacity(q))
+  )
+    throw new Error(
+      "Invalid production quantity or native queue capacity exceeded",
+    );
+  return quantity;
+}
 
 /** Ground weapon geometry uses 3D world distance, including infantry subcells. */
 export const weaponDistance2 = (

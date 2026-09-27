@@ -31,6 +31,8 @@ export interface BotRelease {
   controlScope?: "launch" | "operation";
   contactInput?: "local" | "zero";
   maneuverScope?: "base" | "local";
+  /** Absent on older releases means the original single-item executor. */
+  commanderExecutionMode?: "single-item-v1" | "native-finite-batches-v1";
   apiSha256: string;
   resourceSha256: string;
   lockSha256: string;
@@ -56,6 +58,13 @@ export async function loadBotRelease(
   name: string | ((release: BotRelease) => string),
 ) {
   const release: BotRelease = JSON.parse(readFileSync(path, "utf8"));
+  if (
+    release.commanderExecutionMode !== undefined &&
+    !["single-item-v1", "native-finite-batches-v1"].includes(
+      release.commanderExecutionMode,
+    )
+  )
+    throw new Error("Unsupported commander execution mode");
   const file = resolve(dirname(path), "bot.mjs");
   if (release.format !== "warbook-bot-v1" || fileHash(file) !== release.sha256)
     throw new Error("Frozen bot artifact hash mismatch or unsupported format");
@@ -74,6 +83,11 @@ export async function loadBotRelease(
     module.mode !== release.mode
   )
     throw new Error("Frozen bot metadata differs from its code");
+  if (
+    (module.commanderExecutionMode ?? "single-item-v1") !==
+    (release.commanderExecutionMode ?? "single-item-v1")
+  )
+    throw new Error("Frozen commander execution mode differs from its code");
   const bot: DrivenBot = module.createBot(
     typeof name === "function" ? name(release) : name,
   );
