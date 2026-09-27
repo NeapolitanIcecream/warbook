@@ -1,5 +1,6 @@
 """Sequence BC/PPO for the whole-strategy interface, reusing real-game storage/outcomes."""
 import argparse,hashlib,json,random,subprocess,time,os,datetime,math
+from contextlib import nullcontext
 from pathlib import Path
 import numpy as np
 import torch
@@ -113,6 +114,42 @@ def all_objects(value,world_size):
     if world_size==1:return [value]
     output=[None]*world_size;dist.all_gather_object(output,value);return output
 
+def positive_int(value):
+    number=int(value)
+    if number<1:raise argparse.ArgumentTypeError('Must be a positive integer')
+    return number
+
+def microbatch_groups(steps,accumulation):
+    for start in range(0,steps,accumulation):
+        yield range(start,min(steps,start+accumulation))
+
+def active_frames(batch):
+    # The same non-burn, non-padding decisions that batch_steps includes in its loss.
+    return sum(sum(r['executionSource']=='policy' for r in rows) if e.get('ppo') else len(rows)
+               for e,_,rows,*_ in batch)
+
+def backward_microbatches(objective,batches,world_size):
+    """Accumulate one global valid-frame mean; caller zeroes, clips and steps once."""
+    expected=[active_frames(batch) for batch in batches]
+    total=torch.tensor(float(sum(expected)),dtype=torch.float64)
+    if world_size>1:dist.all_reduce(total)
+    if float(total)<=0:raise ValueError('Global empty optimization step')
+    results=[]
+    for i,(batch,count) in enumerate(zip(batches,expected)):
+        # DDP must see both the forward and backward inside no_sync. The last
+        # microbatch synchronizes the accumulated gradients, including empty ranks.
+        context=objective.no_sync() if world_size>1 and i+1<len(batches) else nullcontext()
+        with context:
+            result=objective(batch)
+            if result is None:raise ValueError('Empty training block')
+            loss,kl,frames,last_hidden=result
+            if frames!=count:raise ValueError('Active-frame count differs from objective')
+            if not torch.isfinite(loss):raise ValueError('Nonfinite update')
+            # With one microbatch this is the original loss scaling exactly.
+            (loss*(frames*world_size/float(total))).backward()
+        results.append((float(loss.detach()),kl,frames,last_hidden))
+    return results
+
 def golden(model,episodes,path):
     selected=[]
     predicates=[lambda r:True,lambda r:len(r['world']['unitRefs'])>=8,
@@ -133,11 +170,13 @@ def main():
     ap.add_argument('--epochs',type=int);ap.add_argument('--batch',type=int,default=4);ap.add_argument('--sequence',type=int,default=16);ap.add_argument('--burn',type=int,default=8);ap.add_argument('--threads',type=int,default=1)
     ap.add_argument('--bc-event-weight',type=float,default=32.);ap.add_argument('--bc-loss',choices=['legacy','factor'],default='factor');ap.add_argument('--max-updates',type=int);ap.add_argument('--entropy',type=float,default=.001);ap.add_argument('--checkpoints',type=int,nargs='*',default=[])
     ap.add_argument('--update-checkpoints',type=int,nargs='*',default=[])
+    ap.add_argument('--gradient-accumulation',type=positive_int,default=1)
     ap.add_argument('--learning-rate',type=float);ap.add_argument('--bc-temperature',type=float)
     ap.add_argument('--action-encoding',choices=['graph-plan-v1','graph-plan-v2','graph-plan-v3']);ap.add_argument('--validation-fraction',type=float,default=.2);args=ap.parse_args()
     if not 0<=args.validation_fraction<1:raise ValueError('Invalid validation fraction')
     if args.learning_rate is not None and (not math.isfinite(args.learning_rate) or args.learning_rate<=0):raise ValueError('Invalid learning rate')
     if args.bc_temperature is not None and args.method!='bc':raise ValueError('PPO must retain the recorded behavior temperature')
+    if args.gradient_accumulation>1 and args.method!='ppo':raise ValueError('Gradient accumulation is PPO-only')
     world_size=int(os.environ.get('WORLD_SIZE','1'));rank=int(os.environ.get('RANK','0'))
     torch.set_num_threads(args.threads)
     if world_size>1:dist.init_process_group('gloo',timeout=datetime.timedelta(minutes=10))
@@ -197,50 +236,63 @@ def main():
     samples=windows(train,args.sequence,args.burn)
     window_counts=all_objects(len(samples),world_size)
     history=[];updates=0;epochs=args.epochs or (12 if args.method=='bc' else 3)
+    microbatch_steps=0;rank_microbatches=0;window_uses=0;frame_uses=0;seen_windows=set()
+    accumulation_info={'gradientAccumulation':args.gradient_accumulation,
+        'effectiveGlobalBatch':args.batch*world_size*args.gradient_accumulation,
+        'gradientNormalization':'One global valid-frame mean across the update; one clip and Adam step; trailing groups use their actual frames'}
+    def training_usage():
+        counts=torch.tensor([rank_microbatches,window_uses,frame_uses,len(seen_windows)],dtype=torch.int64)
+        if world_size>1:dist.all_reduce(counts)
+        return {'microbatchSteps':microbatch_steps,'nonemptyRankMicrobatches':int(counts[0]),
+            'windowUses':int(counts[1]),'activeFrames':int(counts[2]),'uniqueWindows':int(counts[3])}
     def checkpoint(suffix,epoch):
+        usage=training_usage()
         if rank==0:
             base=Path(args.out);base.parent.mkdir(parents=True,exist_ok=True);target=base.with_name(base.stem+suffix+'.json')
             info={'method':args.method,'seed':args.seed,'epochs':epoch+1,'updates':updates,'encoderSha256':next(iter(hashes)),
                 'inputSha256':hashlib.sha256(Path(args.input).read_bytes()).hexdigest() if args.input else None,
                 'git':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),
                 'worldSize':world_size,'sequence':args.sequence,'burnIn':args.burn,'bcEventWeight':args.bc_event_weight,'bcLoss':args.bc_loss,
+                **accumulation_info,'trainingUsage':usage,
                 'encoding':model.encoding,'temperature':model.temperature,'learningRate':learning_rate,'bcMemory':'continuous episode carry','objective':'terminal MC; checkpoint before final validation'}
             sha=export(model,target,info);torch.save(optimizer.state_dict(),target.with_suffix('.optimizer.pt'));golden(model,train,target.with_suffix('.golden.json'))
             target.with_suffix('.done.json').write_text(json.dumps({'sha256':sha,'epoch':epoch+1,'updates':updates})+'\n')
         if world_size>1:dist.barrier()
     for epoch in range(epochs):
-        losses=[];kls=[];count=0;epoch_start=time.monotonic();carry={}
+        losses=[];kls=[];count=0;epoch_windows=0;epoch_microbatches=0;epoch_nonempty=0;epoch_start=time.monotonic();carry={}
         if args.method=='bc':
             ordered=list(train);random.shuffle(ordered);schedule=stream_batches(ordered,args.sequence,args.batch)
         else:
             random.shuffle(samples);schedule=unique_batches(samples,args.batch)
         steps=max(all_objects(len(schedule),world_size))
-        for i in range(steps):
-            descriptors=schedule[i] if i<len(schedule) else []
-            batch=[(e,[],e['rows'][start:start+args.sequence],carry.get(e['path'],[0.]*HIDDEN) if start else [0.]*HIDDEN) for e,start in descriptors] if args.method=='bc' else descriptors
-            result=objective(batch)
-            if result is None:raise ValueError('Empty training block')
-            loss,kl,frames,last_hidden=result
-            if args.method=='bc':
-                for j,(e,start) in enumerate(descriptors):carry[e['path']]=last_hidden[j].tolist()
-            if not torch.isfinite(loss):raise ValueError('Nonfinite update')
-            # DDP averages gradients. Scale by the actual non-padding decision count.
-            total=torch.tensor(float(frames),dtype=torch.float64)
-            if world_size>1:dist.all_reduce(total)
-            if float(total)<=0:raise ValueError('Global empty optimization step')
-            optimizer.zero_grad();(loss*(frames*world_size/float(total))).backward()
+        for indices in microbatch_groups(steps,args.gradient_accumulation):
+            descriptors=[schedule[i] if i<len(schedule) else [] for i in indices]
+            batches=[[(e,[],e['rows'][start:start+args.sequence],carry.get(e['path'],[0.]*HIDDEN) if start else [0.]*HIDDEN) for e,start in block] if args.method=='bc' else block for block in descriptors]
+            optimizer.zero_grad()
+            results=backward_microbatches(objective,batches,world_size)
             nnorm=torch.nn.utils.clip_grad_norm_(model.parameters(),.5)
             if not torch.isfinite(nnorm):raise ValueError('Nonfinite gradient')
-            optimizer.step();updates+=1;losses.append(float(loss.detach())*frames);kls.append(kl*frames);count+=frames
+            optimizer.step();updates+=1
+            for block,batch,(loss,kl,frames,last_hidden) in zip(descriptors,batches,results):
+                if args.method=='bc':
+                    for j,(e,start) in enumerate(block):carry[e['path']]=last_hidden[j].tolist()
+                    seen_windows.update((e['path'],start) for e,start in block)
+                else:seen_windows.update((e['path'],rows[0]['tick']) for e,_,rows in batch)
+                losses.append(loss*frames);kls.append(kl*frames);count+=frames
+                epoch_windows+=len(batch);epoch_nonempty+=bool(batch);epoch_microbatches+=1
+                window_uses+=len(batch);frame_uses+=frames;rank_microbatches+=bool(batch);microbatch_steps+=1
             if updates in args.update_checkpoints:checkpoint(f'-update-{updates}',epoch)
             if args.max_updates and updates>=args.max_updates:break
-        metrics=torch.tensor([sum(losses),sum(kls),count],dtype=torch.float64)
+        metrics=torch.tensor([sum(losses),sum(kls),count,epoch_windows,epoch_nonempty],dtype=torch.float64)
         if world_size>1:dist.all_reduce(metrics)
-        row={'epoch':epoch,'loss':float(metrics[0]/metrics[2]),'approxKL':float(metrics[1]/metrics[2]),'frames':int(metrics[2]),'seconds':time.monotonic()-epoch_start,'updates':updates};history.append(row)
+        row={'epoch':epoch,'loss':float(metrics[0]/metrics[2]),'approxKL':float(metrics[1]/metrics[2]),'frames':int(metrics[2]),
+            'windows':int(metrics[3]),'microbatchSteps':epoch_microbatches,'nonemptyRankMicrobatches':int(metrics[4]),
+            'seconds':time.monotonic()-epoch_start,'updates':updates};history.append(row)
         if rank==0:print(json.dumps(row),flush=True)
         if epoch+1 in args.checkpoints:
             checkpoint(f'-after-{epoch+1}',epoch)
         if args.max_updates and updates>=args.max_updates or args.method=='ppo' and row['approxKL']>.02:break
+    usage=training_usage()
     if world_size>1:dist.barrier();dist.destroy_process_group()
     if rank!=0:return
     validation=[];metrics={}
@@ -260,6 +312,7 @@ def main():
     metadata={'method':args.method,'seed':args.seed,'git':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),
       'trainerSha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),'modelCodeSha256':hashlib.sha256(Path(__file__).with_name('commander_model.py').read_bytes()).hexdigest(),
       'encoderSha256':next(iter(hashes)),'worldSize':world_size,'localBatch':args.batch,'globalBatch':args.batch*world_size,'windowCounts':window_counts,
+      **accumulation_info,'trainingUsage':usage,
       'padding':'Zero-loss empty ranks, no repeated training windows','bcEventWeight':args.bc_event_weight,'bcMemory':'Chronological whole episodes with detached carried hidden state',
       'bcLoss':args.bc_loss,'bcFactorNormalization':'Per frame: mean across active domains; changed factors weighted directly; one mean KEEP negative per domain; global valid-frame DDP mean',
       'encoding':model.encoding,'temperature':model.temperature,'learningRate':learning_rate,'optimizerStart':'restored' if optimizer_sha else 'cold','inputOptimizerSha256':optimizer_sha,'episodeMemory':'float32 feature blocks and int32 edges; identical pack tensors','validationFraction':args.validation_fraction,'labelAdapter':'v2 confirms retyped members; v3 BC labels edit decisions from demonstrated plan changes; PPO retains recorded choices',
