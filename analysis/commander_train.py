@@ -256,14 +256,16 @@ def main():
     window_counts=all_objects(len(samples),world_size)
     history=[];updates=0;epochs=args.epochs or (12 if args.method=='bc' else 3)
     microbatch_steps=0;rank_microbatches=0;window_uses=0;frame_uses=0;seen_windows=set()
+    seen_games=set();production_sets=set();production_alternatives=set()
     accumulation_info={'gradientAccumulation':args.gradient_accumulation,
         'effectiveGlobalBatch':args.batch*world_size*args.gradient_accumulation,
         'gradientNormalization':'One global valid-frame mean across the update; one clip and Adam step; trailing groups use their actual frames'}
     def training_usage():
-        counts=torch.tensor([rank_microbatches,window_uses,frame_uses,len(seen_windows)],dtype=torch.int64)
+        counts=torch.tensor([rank_microbatches,window_uses,frame_uses,len(seen_windows),len(seen_games),len(production_sets),len(production_alternatives)],dtype=torch.int64)
         if world_size>1:dist.all_reduce(counts)
         return {'microbatchSteps':microbatch_steps,'nonemptyRankMicrobatches':int(counts[0]),
-            'windowUses':int(counts[1]),'activeFrames':int(counts[2]),'uniqueWindows':int(counts[3])}
+            'windowUses':int(counts[1]),'activeFrames':int(counts[2]),'uniqueWindows':int(counts[3]),
+            'sourceGamesUsed':int(counts[4]),'uniqueProductionSets':int(counts[5]),'uniqueNondefaultProductionSets':int(counts[6])}
     def checkpoint(suffix,epoch):
         usage=training_usage()
         if rank==0:
@@ -297,7 +299,18 @@ def main():
                 if args.method=='bc':
                     for j,(e,start) in enumerate(block):carry[e['path']]=last_hidden[j].tolist()
                     seen_windows.update((e['path'],start) for e,start in block)
-                else:seen_windows.update((e['path'],rows[0]['tick']) for e,_,rows in batch)
+                else:
+                    seen_windows.update((e['path'],rows[0]['tick']) for e,_,rows in batch)
+                    for e,_,rows in batch:
+                        for record in rows:
+                            if record['executionSource']!='policy':continue
+                            for queue,choice in enumerate(record['action']['queues']):
+                                if choice<4:continue
+                                key=(e['path'],record['tick'],queue)
+                                production_sets.add(key)
+                                if record['action']['amounts'][queue]!=0 or record['action']['cash'][queue]!=0:
+                                    production_alternatives.add(key)
+                seen_games.update(item[0]['path'] for item in batch)
                 losses.append(loss*frames);kls.append(kl*frames);count+=frames
                 epoch_windows+=len(batch);epoch_nonempty+=bool(batch);epoch_microbatches+=1
                 window_uses+=len(batch);frame_uses+=frames;rank_microbatches+=bool(batch);microbatch_steps+=1
@@ -313,6 +326,7 @@ def main():
             checkpoint(f'-after-{epoch+1}',epoch)
         if args.max_updates and updates>=args.max_updates or args.method=='ppo' and row['approxKL']>.02:break
     usage=training_usage()
+    alternative_events=all_objects(sorted(production_alternatives),world_size)
     if world_size>1:dist.barrier();dist.destroy_process_group()
     if rank!=0:return
     validation=[];metrics={}
@@ -329,10 +343,13 @@ def main():
                     losses.append(float(r[0]));h=r[3][0].tolist()
         metrics={'sequenceLoss':float(np.mean(losses)),'windows':len(losses),'scope':'Per-invocation whole-episode split; warm starts may already have seen these sources; not independent holdout or playing strength'}
     out=Path(args.out);out.parent.mkdir(parents=True,exist_ok=True)
+    event_path=out.with_suffix('.production-events.json')
+    event_path.write_text(json.dumps({'scope':'Distinct nondefault SET decisions included in PPO loss; join with observed order lifetimes by directory/tick/queue',
+        'events':[{'directory':path,'tick':tick,'queue':queue} for group in alternative_events for path,tick,queue in group]},indent=2)+'\n')
     metadata={'method':args.method,'seed':args.seed,'git':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),
       'trainerSha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),'modelCodeSha256':hashlib.sha256(Path(__file__).with_name('commander_model.py').read_bytes()).hexdigest(),
       'encoderSha256':next(iter(hashes)),'worldSize':world_size,'localBatch':args.batch,'globalBatch':args.batch*world_size,'windowCounts':window_counts,
-      **accumulation_info,'trainingUsage':usage,
+      **accumulation_info,'trainingUsage':usage,'productionEventsSha256':hashlib.sha256(event_path.read_bytes()).hexdigest(),
       'padding':'Zero-loss empty ranks, no repeated training windows','bcEventWeight':args.bc_event_weight,'bcMemory':'Chronological whole episodes with detached carried hidden state',
       'bcLoss':args.bc_loss,'bcFactorNormalization':'Per frame: mean across active domains; changed factors weighted directly; one mean KEEP negative per domain; global valid-frame DDP mean',
       'encoding':model.encoding,'temperature':model.temperature,'learningRate':learning_rate,'optimizerStart':'restored' if optimizer_sha else 'cold','inputOptimizerSha256':optimizer_sha,'episodeMemory':'float32 feature blocks and int32 edges; identical pack tensors','validationFraction':args.validation_fraction,'labelAdapter':'v2 confirms retyped members; v3 BC labels edit decisions from demonstrated plan changes; PPO retains recorded choices',
