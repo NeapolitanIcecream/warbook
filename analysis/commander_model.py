@@ -13,7 +13,30 @@ SLOTS=16
 HIDDEN=128
 AMOUNTS=[1,2,4,8,-1]
 FLOORS=[0,250,500,1000,2000,4000]
+ENCODINGS=['graph-plan-v1','graph-plan-v2','graph-plan-v3','graph-plan-v4']
+PRODUCTION_FAMILIES=('queue','amount','cash')
+_UNSET=object()
 FIELDS={'entities':64,'regions':16,'products':24,'goals':32,'tasks':32,'placements':32,'queues':16}
+
+def validate_temperature(temperature):
+    if not isinstance(temperature,(int,float)) or isinstance(temperature,bool) or not math.isfinite(temperature) or temperature<=0:raise ValueError('Invalid temperature')
+    return float(temperature)
+
+def validate_production_temperatures(encoding,overrides=_UNSET):
+    if overrides is _UNSET:return {}
+    if encoding!='graph-plan-v4':raise ValueError('Production temperatures require graph-plan-v4')
+    if not isinstance(overrides,dict) or set(overrides)-set(PRODUCTION_FAMILIES):raise ValueError('Invalid production temperatures')
+    return {key:validate_temperature(value) for key,value in overrides.items()}
+
+def recorded_temperature_config(record):
+    """v4 journals/manifests record resolved heads; artifacts may be sparse."""
+    encoding=record.get('encoding')
+    if encoding not in ENCODINGS:raise ValueError('Unsupported commander encoding')
+    if encoding=='graph-plan-v4' and ('temperature' not in record or not isinstance(record.get('productionTemperatures'),dict) or set(record['productionTemperatures'])!=set(PRODUCTION_FAMILIES)):
+        raise ValueError('v4 behavior requires explicit production temperatures')
+    temperature=validate_temperature(record.get('temperature',1.))
+    overrides=validate_production_temperatures(encoding,record.get('productionTemperatures',_UNSET))
+    return encoding,temperature,{key:overrides.get(key,temperature) for key in PRODUCTION_FAMILIES}
 
 def pack(worlds,vocabulary):
     ids={name:i+1 for i,name in enumerate(vocabulary)}
@@ -75,9 +98,10 @@ def summary(x,mask):
     return torch.cat([mean,maximum],-1)
 
 class CommanderModel(nn.Module):
-    def __init__(self,vocabulary,encoding='graph-plan-v2',temperature=1.):
+    def __init__(self,vocabulary,encoding='graph-plan-v2',temperature=1.,production_temperatures=_UNSET):
         super().__init__();self.vocabulary=vocabulary;self.encoding=encoding
         self.change_temperature(temperature)
+        self.production_temperatures={}
         self.names=nn.Embedding(len(vocabulary)+1,16)
         self.entity0=nn.Linear(80,64);self.entity1=nn.Linear(128,64)
         self.region0=nn.Linear(16,32);self.region1=nn.Linear(64,32)
@@ -96,16 +120,23 @@ class CommanderModel(nn.Module):
         self.value0=nn.Linear(HIDDEN,64);self.value1=nn.Linear(64,1)
         self.editGate=None
         self.change_encoding(encoding)
+        self.change_production_temperatures(production_temperatures)
     def change_encoding(self,encoding):
-        if encoding not in ['graph-plan-v1','graph-plan-v2','graph-plan-v3']:raise ValueError('Unsupported encoding')
+        if encoding not in ENCODINGS:raise ValueError('Unsupported encoding')
+        if encoding!='graph-plan-v4' and self.production_temperatures:raise ValueError('Production temperatures require graph-plan-v4')
         self.encoding=encoding
         if encoding=='graph-plan-v3' and self.editGate is None:
             self.editGate=nn.Linear(HIDDEN,5)
             nn.init.zeros_(self.editGate.weight);nn.init.constant_(self.editGate.bias,math.log(19.))
         elif encoding!='graph-plan-v3':self.editGate=None
     def change_temperature(self,temperature):
-        if not isinstance(temperature,(int,float)) or isinstance(temperature,bool) or not math.isfinite(temperature) or temperature<=0:raise ValueError('Invalid temperature')
-        self.temperature=float(temperature)
+        self.temperature=validate_temperature(temperature)
+    def change_production_temperatures(self,overrides=_UNSET):
+        self.production_temperatures=validate_production_temperatures(self.encoding,overrides)
+    def effective_production_temperatures(self):
+        return {key:self.production_temperatures.get(key,self.temperature) for key in PRODUCTION_FAMILIES}
+    def factor_temperature(self,name):
+        return self.production_temperatures.get(name[:-1],self.temperature) if name[-1:].isdigit() else self.temperature
     def encode_world(self,d):
         e=torch.tanh(self.entity0(torch.cat([d['entities'],self.names(d['entityIds'])],-1)))
         e=torch.tanh(self.entity1(torch.cat([e,neighbor_mean(e,d['entityEdges'])],-1)))
@@ -126,7 +157,7 @@ class CommanderModel(nn.Module):
             nonlocal logp,entropy,factors,bc,bc_weight
             if valid is None:valid=torch.ones(selected.shape,dtype=torch.bool)
             masked=logits.double().masked_fill(~mask,-torch.inf)
-            logs=((masked-masked.max(-1,keepdim=True).values)/self.temperature).log_softmax(-1);probs=logs.exp()
+            logs=((masked-masked.max(-1,keepdim=True).values)/self.factor_temperature(name)).log_softmax(-1);probs=logs.exp()
             selected_valid=mask.gather(-1,selected.unsqueeze(-1)).squeeze(-1)
             if not selected_valid[valid].all():raise ValueError('Recorded action outside mask: '+name)
             lp=logs.gather(-1,selected.unsqueeze(-1)).squeeze(-1)
@@ -249,5 +280,6 @@ def export(model,path,metadata):
     import json,hashlib
     artifact={'format':'warbook-commander-model-v1','schema':'commander-v1','encoding':model.encoding,'temperature':model.temperature,'hidden':HIDDEN,
       'vocabulary':model.vocabulary,'tensors':{name:{'shape':list(t.shape),'values':t.detach().cpu().reshape(-1).tolist()} for name,t in model.state_dict().items()},'training':metadata}
+    if model.encoding=='graph-plan-v4':artifact['productionTemperatures']=dict(model.production_temperatures)
     path.write_text(json.dumps(artifact,separators=(',',':'))+'\n')
     return hashlib.sha256(path.read_bytes()).hexdigest()

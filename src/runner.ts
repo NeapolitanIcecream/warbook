@@ -429,6 +429,9 @@ async function main(): Promise<void> {
             route: values.mode,
             encoding: fullStrategy.encoding,
             temperature: commanderNetwork?.temperature ?? 1,
+            ...(fullStrategy.productionTemperatures
+              ? { productionTemperatures: fullStrategy.productionTemperatures }
+              : {}),
             seed: values["policy-seed"],
             deterministic: values["commander-deterministic"],
             prefixUntil: prefix,

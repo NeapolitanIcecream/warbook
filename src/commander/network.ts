@@ -11,7 +11,9 @@ import {
 import {
   actionEdits,
   commanderRoleMask,
+  resolveProductionTemperatures,
   type CommanderEncoding,
+  type ProductionTemperatures,
   type EncodedCommanderAction as CommanderAction,
 } from "./action-mask.js";
 
@@ -21,6 +23,7 @@ export interface CommanderModel {
   encoding: CommanderEncoding;
   hidden: number;
   temperature?: number;
+  productionTemperatures?: ProductionTemperatures;
   vocabulary: string[];
   tensors: Record<string, { shape: number[]; values: number[] }>;
   training?: Record<string, unknown>;
@@ -41,6 +44,7 @@ export class NeuralCommanderPolicy implements CommanderPolicy {
       : this.artifact.temperature;
   }
   readonly hiddenSize: number;
+  readonly productionTemperatures?: Readonly<Required<ProductionTemperatures>>;
   private tensors: Record<string, tf.Tensor> = {};
   private names: Map<string, number>;
   constructor(
@@ -50,14 +54,22 @@ export class NeuralCommanderPolicy implements CommanderPolicy {
     if (
       artifact.format !== "warbook-commander-model-v1" ||
       artifact.schema !== "commander-v1" ||
-      !["graph-plan-v1", "graph-plan-v2", "graph-plan-v3"].includes(
-        artifact.encoding,
-      ) ||
+      ![
+        "graph-plan-v1",
+        "graph-plan-v2",
+        "graph-plan-v3",
+        "graph-plan-v4",
+      ].includes(artifact.encoding) ||
       artifact.hidden !== 128
     )
       throw new Error("Unsupported commander artifact");
-    if (!Number.isFinite(this.temperature) || this.temperature <= 0)
-      throw new Error("Invalid commander temperature");
+    const productionTemperatures = resolveProductionTemperatures(
+      this.encoding,
+      this.temperature,
+      artifact.productionTemperatures,
+    );
+    if (this.encoding === "graph-plan-v4")
+      this.productionTemperatures = Object.freeze(productionTemperatures);
     this.hiddenSize = artifact.hidden;
     this.names = new Map(artifact.vocabulary.map((n, i) => [n, i + 1]));
     for (const [name, value] of Object.entries(artifact.tensors)) {
@@ -222,6 +234,10 @@ export class NeuralCommanderPolicy implements CommanderPolicy {
         masks: boolean[][],
         given?: number[],
       ) => {
+        const family = /^(queue|amount|cash)\d$/.exec(name)?.[1] as
+          keyof ProductionTemperatures | undefined;
+        const temperature =
+          (family && this.productionTemperatures?.[family]) ?? this.temperature;
         const raw = logits.dataSync(),
           width = logits.shape[1],
           choices: number[] = [];
@@ -233,7 +249,7 @@ export class NeuralCommanderPolicy implements CommanderPolicy {
           const values = Array.from(raw.slice(i * width, (i + 1) * width));
           const maximum = Math.max(...values.filter((_, j) => mask[j]));
           const exp = values.map((v, j) =>
-              mask[j] ? Math.exp((v - maximum) / this.temperature) : 0,
+              mask[j] ? Math.exp((v - maximum) / temperature) : 0,
             ),
             total = exp.reduce((a, b) => a + b, 0),
             probs = exp.map((v) => v / total);
@@ -255,14 +271,12 @@ export class NeuralCommanderPolicy implements CommanderPolicy {
           if (!mask[selected]) throw new Error(`Invalid forced ${name} action`);
           if (mask.filter(Boolean).length > 1) {
             const logNormalizer = Math.log(total);
-            logp +=
-              (values[selected] - maximum) / this.temperature - logNormalizer;
+            logp += (values[selected] - maximum) / temperature - logNormalizer;
             entropy -= probs.reduce(
               (n, v, j) =>
                 n +
                 (v
-                  ? v *
-                    ((values[j] - maximum) / this.temperature - logNormalizer)
+                  ? v * ((values[j] - maximum) / temperature - logNormalizer)
                   : 0),
               0,
             );

@@ -13,9 +13,11 @@ import {
   COMMANDER_SCHEMA,
 } from "./teacher.js";
 import { ProgramController } from "./program.js";
-import type {
-  CommanderEncoding,
-  EncodedCommanderAction as CommanderAction,
+import {
+  resolveProductionTemperatures,
+  type ProductionTemperatures,
+  type CommanderEncoding,
+  type EncodedCommanderAction as CommanderAction,
 } from "./action-mask.js";
 import {
   buildWorld,
@@ -37,6 +39,7 @@ export interface CommanderPolicy {
   readonly hiddenSize: number;
   readonly encoding?: CommanderEncoding;
   readonly temperature?: number;
+  readonly productionTemperatures?: ProductionTemperatures;
   predict(
     world: CommanderWorld,
     hidden: readonly number[],
@@ -49,6 +52,7 @@ export interface CommanderRecord {
   schema: typeof COMMANDER_SCHEMA;
   encoding: CommanderEncoding;
   temperature: number;
+  productionTemperatures?: Required<ProductionTemperatures>;
   tick: number;
   world: CommanderWorld;
   action: CommanderAction;
@@ -73,6 +77,7 @@ export class FullCommander implements StrategicController {
   private teacher?: CommanderTeacher;
   private random: () => number;
   private hidden: number[];
+  readonly productionTemperatures?: Required<ProductionTemperatures>;
   record?: CommanderRecord;
   constructor(
     readonly route: "bastion" | "pressure",
@@ -83,6 +88,13 @@ export class FullCommander implements StrategicController {
     private daggerBeta?: number,
   ) {
     this.program = new ProgramController(policy?.encoding ?? "graph-plan-v2");
+    const productionTemperatures = resolveProductionTemperatures(
+      this.encoding,
+      policy?.temperature ?? 1,
+      policy?.productionTemperatures,
+    );
+    if (this.encoding === "graph-plan-v4")
+      this.productionTemperatures = productionTemperatures;
     if (
       daggerBeta !== undefined &&
       (!policy ||
@@ -172,6 +184,9 @@ export class FullCommander implements StrategicController {
         schema: COMMANDER_SCHEMA,
         encoding: this.encoding,
         temperature: this.policy?.temperature ?? 1,
+        ...(this.productionTemperatures
+          ? { productionTemperatures: { ...this.productionTemperatures } }
+          : {}),
         tick: o.tick,
         world,
         action,

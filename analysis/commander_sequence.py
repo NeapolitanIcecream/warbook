@@ -44,4 +44,5 @@ def canonical_action(action,world,encoding):
         if selected==18 and changed:result['units'][i]=old
         elif selected==old and old!=17 and not changed:result['units'][i]=18
     if encoding=='graph-plan-v3':result['edits']=action_edits(result)
+    elif encoding=='graph-plan-v4':result.pop('edits',None)
     return result

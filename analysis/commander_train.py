@@ -6,7 +6,7 @@ import numpy as np
 import torch
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel
-from commander_model import CommanderModel,pack,pack_actions,export,HIDDEN,FIELDS
+from commander_model import CommanderModel,pack,pack_actions,export,HIDDEN,FIELDS,ENCODINGS,recorded_temperature_config
 from experiment_storage import open_text
 from launch_outcome import classify
 from commander_sequence import stream_batches,unique_batches,event_weight,training_action,canonical_action
@@ -38,17 +38,39 @@ def read_episode(path,compact=True):
                 if compact:compact_world(row['world'])
                 rows.append(row)
     if not rows:return None
-    if any(r.get('encoding') not in ['graph-plan-v1','graph-plan-v2','graph-plan-v3'] or r['schema']!='commander-v1' for r in rows):raise ValueError('Unsupported commander encoding')
+    if any(r.get('encoding') not in ENCODINGS or r['schema']!='commander-v1' for r in rows):raise ValueError('Unsupported commander encoding')
     if any(b['tick']-a['tick']!=75 for a,b in zip(rows,rows[1:])):raise ValueError('Missing strategy step')
     if not 0<=result['tick']-rows[-1]['tick']<=75:raise ValueError('Invalid terminal boundary')
     return {'path':str(path),'rows':rows,'reward':float(outcome=='W'),'outcome':outcome,
       'modelSha':manifest.get('commanderExperiment',{}).get('modelSha256'),'deterministic':manifest.get('commanderExperiment',{}).get('deterministic',False),'source':manifest['git'],
+      'behavior':manifest.get('commanderExperiment',{}),
       'encoderSha':manifest.get('sourceHashes',{}).get('src/commander/world.ts')}
 
 def load_model(artifact):
-    model=CommanderModel(artifact['vocabulary'],artifact['encoding'],artifact.get('temperature',1.))
+    model=CommanderModel(artifact['vocabulary'],artifact['encoding'],artifact.get('temperature',1.),
+      **({'production_temperatures':artifact['productionTemperatures']} if 'productionTemperatures' in artifact else {}))
     model.load_state_dict({name:torch.tensor(x['values'],dtype=torch.float32).reshape(x['shape']) for name,x in artifact['tensors'].items()})
     return model
+
+def validate_ppo_behavior(episodes,model,expected_sha):
+    expected=(model.encoding,model.temperature,model.effective_production_temperatures())
+    for episode in episodes:
+        if episode['deterministic']:raise ValueError('Greedy behavior is not the recorded stochastic PPO distribution')
+        if episode['modelSha']!=expected_sha:raise ValueError('Mixed behavior checkpoints')
+        if recorded_temperature_config(episode['behavior'])!=expected:raise ValueError('PPO manifest temperature/encoding mismatch')
+        for row in episode['rows']:
+            if row['encoding']!=model.encoding:raise ValueError('PPO behavior encoding mismatch')
+            if row['executionSource']=='policy':
+                if recorded_temperature_config(row)!=expected:raise ValueError('PPO behavior temperature mismatch')
+                if model.encoding=='graph-plan-v3' and 'edits' not in row['action']:raise ValueError('PPO needs the recorded edit decisions; do not infer latent choices')
+
+def configure_bc_temperature(model,temperature):
+    if temperature is None:
+        if model.production_temperatures:raise ValueError('BC with production overrides requires explicit --bc-temperature to normalize every head')
+        return
+    model.change_temperature(temperature)
+    # Explicit BC temperature applies to every head, including v4 production.
+    if model.encoding=='graph-plan-v4':model.change_production_temperatures({})
 
 def windows(episodes,length,burn):
     out=[]
@@ -172,7 +194,7 @@ def main():
     ap.add_argument('--update-checkpoints',type=int,nargs='*',default=[])
     ap.add_argument('--gradient-accumulation',type=positive_int,default=1)
     ap.add_argument('--learning-rate',type=float);ap.add_argument('--bc-temperature',type=float)
-    ap.add_argument('--action-encoding',choices=['graph-plan-v1','graph-plan-v2','graph-plan-v3']);ap.add_argument('--validation-fraction',type=float,default=.2);args=ap.parse_args()
+    ap.add_argument('--action-encoding',choices=ENCODINGS);ap.add_argument('--validation-fraction',type=float,default=.2);args=ap.parse_args()
     if not 0<=args.validation_fraction<1:raise ValueError('Invalid validation fraction')
     if args.learning_rate is not None and (not math.isfinite(args.learning_rate) or args.learning_rate<=0):raise ValueError('Invalid learning rate')
     if args.bc_temperature is not None and args.method!='bc':raise ValueError('PPO must retain the recorded behavior temperature')
@@ -207,14 +229,11 @@ def main():
     if args.action_encoding:
         if args.method=='ppo' and args.action_encoding!=model.encoding:raise ValueError('PPO cannot change behavior encoding')
         model.change_encoding(args.action_encoding)
-    if args.bc_temperature is not None:model.change_temperature(args.bc_temperature)
+    if args.method=='bc':configure_bc_temperature(model,args.bc_temperature)
     if args.method=='ppo':
         if any(d['greedy'] for d in details):raise ValueError('Greedy behavior is not the recorded stochastic PPO distribution')
         expected=hashlib.sha256(Path(args.input).read_bytes()).hexdigest()
-        if any(e['modelSha']!=expected for e in train):raise ValueError('Mixed behavior checkpoints')
-        if any(r['encoding']!=model.encoding for e in train for r in e['rows']):raise ValueError('PPO behavior encoding mismatch')
-        if any(r.get('temperature',1.)!=model.temperature for e in train for r in e['rows'] if r['executionSource']=='policy'):raise ValueError('PPO behavior temperature mismatch')
-        if model.encoding=='graph-plan-v3' and any('edits' not in r['action'] for e in train for r in e['rows'] if r['executionSource']=='policy'):raise ValueError('PPO needs the recorded edit decisions; do not infer latent choices')
+        validate_ppo_behavior(train,model,expected)
         values=np.asarray([e['reward']-r['value'] for e in train for r in e['rows'] if r['executionSource']=='policy'])
         moments=torch.tensor([values.sum(),(values**2).sum(),len(values)],dtype=torch.float64)
         if world_size>1:dist.all_reduce(moments)
@@ -255,6 +274,7 @@ def main():
                 'worldSize':world_size,'sequence':args.sequence,'burnIn':args.burn,'bcEventWeight':args.bc_event_weight,'bcLoss':args.bc_loss,
                 **accumulation_info,'trainingUsage':usage,
                 'encoding':model.encoding,'temperature':model.temperature,'learningRate':learning_rate,'bcMemory':'continuous episode carry','objective':'terminal MC; checkpoint before final validation'}
+            if model.encoding=='graph-plan-v4':info['productionTemperatures']=model.effective_production_temperatures()
             sha=export(model,target,info);torch.save(optimizer.state_dict(),target.with_suffix('.optimizer.pt'));golden(model,train,target.with_suffix('.golden.json'))
             target.with_suffix('.done.json').write_text(json.dumps({'sha256':sha,'epoch':epoch+1,'updates':updates})+'\n')
         if world_size>1:dist.barrier()
@@ -322,6 +342,7 @@ def main():
       'history':history,'validation':metrics,'sequence':args.sequence,'burnIn':args.burn,'updates':updates,
       'objective':'terminal W=1,L/U=0; E excluded; PPO gamma1 terminal MC; prefix teacher actor steps excluded',
       'seconds':time.monotonic()-training_started,'parameters':sum(p.numel() for p in model.parameters())}
+    if model.encoding=='graph-plan-v4':metadata['productionTemperatures']=model.effective_production_temperatures()
     torch.save(optimizer.state_dict(),out.with_suffix('.optimizer.pt'))
     sha=export(model,out,{k:v for k,v in metadata.items() if k not in ['trainingEpisodes','validationEpisodes','excluded','history']})
     out.with_suffix('.training.json').write_text(json.dumps(metadata,indent=2)+'\n');golden(model,train,out.with_suffix('.golden.json'))
