@@ -142,6 +142,63 @@ class RetentionTrainerTests(unittest.TestCase):
             if name.startswith(('value0.','value1.')):self.assertIsNone(value.grad,name)
         self.assertGreater(float(model.queueSpecial.weight.grad.norm()),0.)
 
+    def test_full_history_matches_explicit_continuous_prefix_and_actor_gradient(self):
+        torch.manual_seed(71);initial=CommanderModel(['GAPOWR','MTNK'],'graph-plan-v4',.2)
+        episode=model_episode(initial,length=10);episode['rows'][1]['executionSource']='teacher'
+        student=copy.deepcopy(initial)
+        with torch.no_grad():student.world0.bias.add_(.08)
+        block=windows([episode],2,2)[4]
+        # Every recorded state is deliberately wrong; full mode may only read
+        # the actual worlds. The explicit reference advances one frame at a time.
+        for row in episode['rows']:row['hidden']=[20.]*HIDDEN
+        for actor_only in [False,True]:
+            actual=copy.deepcopy(student);reference=copy.deepcopy(student)
+            with torch.no_grad():
+                hidden=torch.zeros(1,HIDDEN)
+                for row in episode['rows'][:6]:
+                    data=pack([row['world']],reference.vocabulary)
+                    hidden=reference(data,hidden,pack_actions([row['action']],data))['hidden']
+            full=argparse.Namespace(method='ppo',burn=2,sequence=2,entropy=.001,ppo_history='full')
+            recorded=argparse.Namespace(method='ppo',burn=2,sequence=2,entropy=.001)
+            before_torch=torch.random.get_rng_state();before_random=random.getstate()
+            result=batch_steps([block],actual,full,True,actor_only=actor_only)
+            expected=batch_steps([(*block,hidden[0].tolist())],reference,recorded,True,actor_only=actor_only)
+            self.assertTrue(torch.equal(torch.random.get_rng_state(),before_torch));self.assertEqual(random.getstate(),before_random)
+            torch.testing.assert_close(result[0],expected[0],rtol=2e-6,atol=2e-7)
+            torch.testing.assert_close(result[3],expected[3],rtol=2e-6,atol=2e-7)
+            self.assertEqual(result[2],2);self.assertEqual(full._ppo_history_cost['prefixFrames'],6)
+            result[0].backward();expected[0].backward()
+            for (name,left),right in zip(actual.named_parameters(),reference.parameters()):
+                if left.grad is None:self.assertIsNone(right.grad,name)
+                else:torch.testing.assert_close(left.grad,right.grad,rtol=3e-5,atol=3e-7,msg=name)
+
+    def test_full_history_reconstructs_after_weights_change(self):
+        torch.manual_seed(73);model=CommanderModel(['GAPOWR','MTNK'],'graph-plan-v4',.2)
+        episode=model_episode(model,length=8);block=windows([episode],2,1)[3]
+        args=argparse.Namespace(method='ppo',burn=1,sequence=2,entropy=.001,ppo_history='full')
+        first=batch_steps([block],model,args,True)[3]
+        with torch.no_grad():model.memory.bias_hh.add_(.15)
+        second=batch_steps([block],model,args,True)[3]
+        self.assertFalse(torch.equal(first,second));self.assertEqual(args._ppo_history_cost['prefixFrames'],10)
+        with torch.no_grad():
+            hidden=torch.zeros(1,HIDDEN)
+            for row in episode['rows']:
+                data=pack([row['world']],model.vocabulary);hidden=model(data,hidden,pack_actions([row['action']],data))['hidden']
+        torch.testing.assert_close(second,hidden,rtol=2e-6,atol=2e-7)
+
+    def test_recorded_history_default_is_bit_exact_for_loss_and_gradient(self):
+        torch.manual_seed(79);model=CommanderModel(['GAPOWR','MTNK'],'graph-plan-v4',.2)
+        episode=model_episode(model,length=6);batch=windows([episode],2,1)[1:]
+        reference=copy.deepcopy(model);plain=argparse.Namespace(method='ppo',burn=1,sequence=2,entropy=.001)
+        explicit=argparse.Namespace(method='ppo',burn=1,sequence=2,entropy=.001,ppo_history='recorded')
+        a=batch_steps(batch,model,plain,True);b=batch_steps(batch,reference,explicit,True)
+        self.assertTrue(torch.equal(a[0],b[0]));self.assertTrue(torch.equal(a[3],b[3]))
+        a[0].backward();b[0].backward()
+        for left,right in zip(model.parameters(),reference.parameters()):
+            if left.grad is None:self.assertIsNone(right.grad)
+            else:self.assertTrue(torch.equal(left.grad,right.grad))
+        self.assertFalse(hasattr(plain,'_ppo_history_cost'));self.assertFalse(hasattr(explicit,'_ppo_history_cost'))
+
     def test_reference_preparation_keeps_rng_actions_and_ddp_parameter_tree(self):
         torch.manual_seed(19);model=CommanderModel(['GAPOWR','MTNK'],'graph-plan-v4',.2)
         with tempfile.TemporaryDirectory() as directory:
@@ -214,6 +271,7 @@ class RetentionTrainerTests(unittest.TestCase):
                      'ppo','--episodes',str(episodes),'--input',str(reference),'--out',str(root/'plus.json'),
                      '--epochs','1','--batch','1','--sequence','2','--burn','1','--threads','1','--max-updates','3',
                      '--retention-reference',str(reference),'--retention-episodes',str(anchors),'--retention-weight','.001',
+                     '--ppo-history','full',
                      '--max-coverage','1','--coverage-checkpoints','.25','.5','--update-checkpoints','1']
             result=subprocess.run(command,capture_output=True,text=True,timeout=120)
             self.assertEqual(result.returncode,0,result.stderr)
@@ -224,6 +282,9 @@ class RetentionTrainerTests(unittest.TestCase):
             self.assertEqual(usage['nonemptyRankMicrobatches'],2)
             self.assertEqual(metadata['coverage']['availableActorFrames'],12)
             self.assertEqual(metadata['coverage']['repeatedActorFrames'],0)
+            self.assertEqual(metadata['ppoHistory']['mode'],'full')
+            self.assertGreater(metadata['trainingUsage']['ppoHistory']['prefixFrames'],0)
+            self.assertGreater(metadata['trainingUsage']['ppoHistory']['prefixCpuSeconds'],0.)
             self.assertTrue((root/'plus-coverage-0p25.done.json').exists())
             self.assertTrue((root/'plus-coverage-0p5.done.json').exists())
 

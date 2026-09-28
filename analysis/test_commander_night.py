@@ -13,10 +13,11 @@ class NightSelectionTests(unittest.TestCase):
                          {'schedule':'interleaved','initializationGate':'/shared/gate','repeatOffset':3})
 
     def test_coverage_and_retention_use_frozen_reference_without_update_cap(self):
-        p={'ppoCoverage':1,'initial':'C0.json','retentionEpisodes':'anchors.json','retentionWeight':.1}
+        p={'ppoCoverage':1,'initial':'C0.json','retentionEpisodes':'anchors.json','retentionWeight':.1,'ppoHistory':'full'}
         flags=commander_night.ppo_training_flags(p)
         self.assertEqual(flags[flags.index('--max-coverage')+1],'1')
         self.assertEqual(flags[flags.index('--retention-reference')+1],'C0.json')
+        self.assertEqual(flags[flags.index('--ppo-history')+1],'full')
         self.assertNotIn('--max-updates',flags)
         with self.assertRaises(ValueError):commander_night.ppo_training_flags({**p,'ppoUpdates':8})
 

@@ -6,7 +6,7 @@ import unittest
 import torch
 
 from commander_model import CommanderModel,HIDDEN,pack,pack_actions
-from commander_retention import build_teacher_cache,conditional_kl,reconstruct_hidden,retention_batch
+from commander_retention import build_teacher_cache,conditional_kl,current_hidden_for_batch,reconstruct_hidden,retention_batch
 
 
 def fixture(step=0,units=1,buildings=0,products=True,placements=False):
@@ -178,6 +178,42 @@ class RetentionTests(unittest.TestCase):
         self.assertEqual(modes,[False]*3+[True]*3)
         self.assertEqual(count,3);loss.backward()
         self.assertGreater(float(student.memory.bias_ih.grad.abs().max()),0.)
+
+    def test_ppo_full_prefix_then_burn_matches_continuous_current_history(self):
+        model=self.model();source=episode(length=14);records=source['rows']
+        with torch.no_grad():model.memory.bias_ih.add_(.15)
+        # Selected row 11 with eight burn-in worlds: reconstruct only rows 0:3.
+        batch=[(source,records[3:11],records[11:14],[99.]*HIDDEN),
+               (source,records[:2],records[2:4])]
+        hidden,frames=current_hidden_for_batch(model,batch,chunk_size=2)
+        self.assertEqual(frames,3);self.assertFalse(hidden.requires_grad)
+        self.assertTrue((hidden[1]==0).all())
+        for index,(e,before,rows,*_) in enumerate(batch):
+            h=hidden[index:index+1]
+            with torch.no_grad():
+                for row in before:h=model.advance_hidden(pack([row['world']],model.vocabulary),h)
+            start=11 if index==0 else 2
+            direct=reconstruct_hidden(model,e,start,chunk_size=2)
+            torch.testing.assert_close(h,direct,rtol=1e-5,atol=1e-7)
+            data=pack([rows[0]['world']],model.vocabulary)
+            with torch.no_grad():action=model(data,direct,generator=torch.Generator().manual_seed(9))['actions']
+            full=model(data,direct,action);prepared=model(data,h,action)
+            torch.testing.assert_close(full['logp'],prepared['logp'],rtol=1e-5,atol=1e-7)
+        previous=hidden.clone()
+        with torch.no_grad():model.memory.bias_ih.add_(.1)
+        changed,_=current_hidden_for_batch(model,batch,chunk_size=2)
+        self.assertGreater(float((previous[0]-changed[0]).abs().max()),.01)
+
+    def test_ppo_history_verifies_row_identity_and_handles_empty_rank(self):
+        model=self.model();source=episode();rows=source['rows']
+        hidden,count=current_hidden_for_batch(model,[])
+        self.assertEqual(tuple(hidden.shape),(0,HIDDEN));self.assertEqual(count,0)
+        batch=[(source,rows[1:3],rows[3:5])]*2
+        hidden,count=current_hidden_for_batch(model,batch)
+        self.assertEqual(count,1);self.assertTrue(torch.equal(hidden[0],hidden[1]))
+        for before,selected in [(rows[1:3],rows[4:6]),([copy.deepcopy(rows[1])],rows[2:4]),([],[])]:
+            with self.subTest(before=len(before),rows=len(selected)),self.assertRaises(ValueError):
+                current_hidden_for_batch(model,[(source,before,selected)])
 
     def test_keep_uses_retyped_slot_in_actual_world_and_kind_change_disables_keep_unit(self):
         teacher=self.model();before,action=fixture(units=1)

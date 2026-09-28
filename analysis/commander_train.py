@@ -86,15 +86,17 @@ def windows(episodes,length,burn):
     return out
 
 def batch_steps(batch,model,args,train,actor_only=False):
-    """BC carries the forward state across adjacent blocks; PPO uses recorded state plus burn-in."""
+    """BC carries state; PPO optionally rebuilds the current-weight prefix before burn-in."""
     if not batch:
         zero=sum((p.sum()*0 for p in model.parameters()))
         return zero,0.,0,torch.zeros((0,HIDDEN))
     burn=0 if args.method=='bc' else args.burn;length=args.sequence
+    full_history=args.method=='ppo' and getattr(args,'ppo_history','recorded')=='full'
     worlds=[];actions=[];valid=[];present=[];returns=[];oldlog=[];adv=[];weights=[];first_hidden=[]
-    for item in batch:
-        e,before,rows=item[:3];first=(before or rows)[0]
-        first_hidden.append(item[3] if len(item)>3 else first['hidden'] if e.get('ppo') else [0.]*HIDDEN)
+    if not full_history:
+        for item in batch:
+            e,before,rows=item[:3];first=(before or rows)[0]
+            first_hidden.append(item[3] if len(item)>3 else first['hidden'] if e.get('ppo') else [0.]*HIDDEN)
     for t in range(burn+length):
         for item in batch:
             e,before,rows=item[:3]
@@ -110,7 +112,15 @@ def batch_steps(batch,model,args,train,actor_only=False):
     valid=torch.tensor(valid,dtype=torch.bool).reshape(burn+length,b);present=torch.tensor(present,dtype=torch.bool).reshape(burn+length,b)
     ret=torch.tensor(returns,dtype=torch.float32).reshape(burn+length,b);weights=torch.tensor(weights,dtype=torch.float32).reshape(burn+length,b)
     old=torch.tensor(oldlog,dtype=torch.float64).reshape(burn+length,b);advantages=torch.tensor(adv,dtype=torch.float32).reshape(burn+length,b)
-    h=torch.tensor(first_hidden,dtype=torch.float32);losses=[];kls=[]
+    if full_history:
+        from commander_retention import current_hidden_for_batch
+        wall=time.monotonic();cpu=time.process_time();h,prefix_frames=current_hidden_for_batch(model,batch)
+        cost=getattr(args,'_ppo_history_cost',{'prefixFrames':0,'forwardCalls':0,'cpuSeconds':0.,'rankSeconds':0.})
+        cost['prefixFrames']+=prefix_frames;cost['forwardCalls']+=1
+        cost['cpuSeconds']+=time.process_time()-cpu;cost['rankSeconds']+=time.monotonic()-wall
+        args._ppo_history_cost=cost
+    else:h=torch.tensor(first_hidden,dtype=torch.float32)
+    losses=[];kls=[]
     encoded=model.encode_world(d)
     for t in range(burn+length):
         start=t*b;end=start+b
@@ -135,7 +145,7 @@ def batch_steps(batch,model,args,train,actor_only=False):
 class SequenceObjective(torch.nn.Module):
     def __init__(self,model,args,retention=None):
         super().__init__();self.model=model;self.args=args;self.retention=retention
-        self.profile=bool(retention is not None or getattr(args,'max_coverage',None) or getattr(args,'coverage_checkpoints',[]))
+        self.profile=bool(retention is not None or getattr(args,'max_coverage',None) or getattr(args,'coverage_checkpoints',[]) or getattr(args,'ppo_history','recorded')=='full')
         self.rl_cpu_seconds=0.;self.rl_seconds=0.
     def forward(self,batch,kind='rl'):
         if kind=='rl':
@@ -402,6 +412,7 @@ def main():
     ap.add_argument('--coverage-checkpoints',type=positive_float,nargs='*',default=[],help='Save at actor-frame coverage fractions; endpoints crossed together alias one checkpoint')
     ap.add_argument('--gradient-accumulation',type=positive_int,default=1)
     ap.add_argument('--learning-rate',type=float);ap.add_argument('--bc-temperature',type=float)
+    ap.add_argument('--ppo-history',choices=['recorded','full'],default='recorded',help='Recorded hidden plus burn-in (default), or rebuild actual current-weight history before the same burn-in and active window')
     ap.add_argument('--retention-reference',help='Frozen C0 artifact; never replaces the on-policy --input behavior checkpoint')
     ap.add_argument('--retention-episodes',help='Predeclared JSON list of complete C0 source episodes')
     ap.add_argument('--retention-weight',type=float,default=0.)
@@ -411,6 +422,7 @@ def main():
     if args.learning_rate is not None and (not math.isfinite(args.learning_rate) or args.learning_rate<=0):raise ValueError('Invalid learning rate')
     if args.bc_temperature is not None and args.method!='bc':raise ValueError('PPO must retain the recorded behavior temperature')
     if args.gradient_accumulation>1 and args.method!='ppo':raise ValueError('Gradient accumulation is PPO-only')
+    if args.ppo_history!='recorded' and args.method!='ppo':raise ValueError('Full PPO history is PPO-only')
     coverage_requested=args.max_coverage is not None or bool(args.coverage_checkpoints)
     retention_requested=args.retention_reference is not None or args.retention_episodes is not None or args.retention_weight!=0
     if (coverage_requested or retention_requested) and args.method!='ppo':raise ValueError('Coverage and retention are PPO-only')
@@ -493,6 +505,8 @@ def main():
     accumulation_info={'gradientAccumulation':args.gradient_accumulation,
         'effectiveGlobalBatch':args.batch*world_size*args.gradient_accumulation,
         'gradientNormalization':'One global valid-frame mean across the update; one clip and Adam step; trailing groups use their actual frames'}
+    history_info={'mode':args.ppo_history,'burnIn':args.burn,'activeWindow':args.sequence,
+                  'definition':'Actual world history replayed from zero with current weights before each window; detached prefix, unchanged burn-in and active-window BPTT; no hidden cache across updates' if args.ppo_history=='full' else 'Recorded hidden at the first burn/window row, followed by burn-in'}
     def training_usage():
         counts=torch.tensor([rank_microbatches,window_uses,frame_uses,len(seen_windows),len(seen_games),len(production_sets),len(production_alternatives)],dtype=torch.int64)
         if world_size>1:dist.all_reduce(counts)
@@ -501,10 +515,19 @@ def main():
             'sourceGamesUsed':int(counts[4]),'uniqueProductionSets':int(counts[5]),'uniqueNondefaultProductionSets':int(counts[6])}
         if coverage is not None:
             usage['coverage']=coverage.metadata()
+        if sequence_objective.profile:
             cpu=torch.tensor([sequence_objective.rl_cpu_seconds,sequence_objective.rl_seconds,optimization_cpu],dtype=torch.float64)
             if world_size>1:dist.all_reduce(cpu)
             usage['cost']={'rlForwardCpuSeconds':float(cpu[0]),'rlForwardRankSeconds':float(cpu[1]),'optimizationCpuSeconds':float(cpu[2]),
                            'scope':'Summed rank process CPU; optimization includes forward/backward, synchronization and optimizer; cache preparation separate'}
+        if args.ppo_history=='full':
+            local=getattr(args,'_ppo_history_cost',{})
+            history_counts=torch.tensor([local.get('prefixFrames',0),local.get('forwardCalls',0)],dtype=torch.int64)
+            history_cost=torch.tensor([local.get('cpuSeconds',0.),local.get('rankSeconds',0.)],dtype=torch.float64)
+            if world_size>1:dist.all_reduce(history_counts);dist.all_reduce(history_cost)
+            usage['ppoHistory']={'prefixFrames':int(history_counts[0]),'nonemptyRankForwards':int(history_counts[1]),
+                                 'prefixCpuSeconds':float(history_cost[0]),'prefixRankSeconds':float(history_cost[1]),
+                                 'includedIn':'RL forward and optimization CPU costs; not additional cost to sum twice'}
         if retention is not None:
             ac=torch.tensor([*anchor_window_uses,*anchor_frame_uses,*(len(seen) for seen in anchor_seen),anchor_microbatches,
                              retention.prefix_frames,retention.active_factors],dtype=torch.int64)
@@ -536,6 +559,7 @@ def main():
                 info['optimizerStart']='restored' if optimizer_sha else 'cold';info['inputOptimizerSha256']=optimizer_sha
             if model.encoding=='graph-plan-v4':info['productionTemperatures']=model.effective_production_temperatures()
             if advantage_info is not None:info['advantageNormalization']=advantage_info
+            if args.method=='ppo':info['ppoHistory']=history_info
             if coverage is not None:info['checkpointAliases']=[suffix,*aliases];info['coverage']=coverage.metadata()
             if retention_info is not None:info['retention']=retention_info
             sha=export(model,target,info);torch.save(optimizer.state_dict(),target.with_suffix('.optimizer.pt'));golden(model,train,target.with_suffix('.golden.json'))
@@ -564,13 +588,13 @@ def main():
                 anchor_steps=max(all_objects(len(anchor_batches),world_size))
                 anchor_batches.extend([] for _ in range(anchor_steps-len(anchor_batches)))
             optimizer.zero_grad()
-            cpu=time.process_time() if coverage is not None else 0.
+            cpu=time.process_time() if sequence_objective.profile else 0.
             if retention is None:results=backward_microbatches(objective,batches,world_size);anchor_results=[]
             else:results,anchor_results=backward_with_retention(objective,batches,anchor_batches,world_size,args.retention_weight)
             nnorm=torch.nn.utils.clip_grad_norm_(model.parameters(),.5)
             if not torch.isfinite(nnorm):raise ValueError('Nonfinite gradient')
             optimizer.step();updates+=1
-            if coverage is not None:optimization_cpu+=time.process_time()-cpu
+            if sequence_objective.profile:optimization_cpu+=time.process_time()-cpu
             for source,(episode,start,end) in selected:
                 anchor_window_uses[source]+=1;anchor_frame_uses[source]+=end-start
                 anchor_seen[source].add((episode['path'],start,end))
@@ -646,6 +670,7 @@ def main():
       'seconds':time.monotonic()-training_started,'parameters':sum(p.numel() for p in model.parameters())}
     if model.encoding=='graph-plan-v4':metadata['productionTemperatures']=model.effective_production_temperatures()
     if advantage_info is not None:metadata['advantageNormalization']=advantage_info
+    if args.method=='ppo':metadata['ppoHistory']=history_info
     if coverage is not None:metadata['coverage']=coverage.metadata();metadata['checkpointRecords']=checkpoint_records
     if retention_info is not None:metadata['retention']=retention_info
     torch.save(optimizer.state_dict(),out.with_suffix('.optimizer.pt'))

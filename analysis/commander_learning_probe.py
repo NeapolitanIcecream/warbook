@@ -123,7 +123,8 @@ def main():
             row['_advantage'] = ((episode['reward'] - row['value'] - normalization['mean'])
                                  / normalization['std'])
     cache = build_teacher_cache(teacher, [*fixed, *current], seed=args.seed + 15485863)
-    settings = SimpleNamespace(method='ppo', sequence=16, burn=8, entropy=.001)
+    history_mode = artifact['training'].get('ppoHistory', {}).get('mode', 'recorded')
+    settings = SimpleNamespace(method='ppo', sequence=16, burn=8, entropy=.001, ppo_history=history_mode)
     results, drift_windows = [], []
     for index in range(args.panels):
         actor = choose_windows(current, 32, args.seed + index * 1009)
@@ -155,6 +156,7 @@ def main():
                  'reference': args.reference, 'referenceSha256': digest(args.reference),
                  'episodesSha256': digest(args.episodes), 'referenceEpisodesSha256': digest(args.reference_episodes),
                  'advantageNormalization': normalization, 'targetRatio': args.target_ratio,
+                 'ppoHistory': history_mode,
                  'suggestedWeight': weight, 'panels': results,
                  'recurrentDrift': recurrent_drift(model, drift_windows),
                  'seconds': time.monotonic() - started, 'cpuSeconds': time.process_time() - cpu,

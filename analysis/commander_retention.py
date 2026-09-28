@@ -68,6 +68,37 @@ def reconstruct_hidden(model,episode,stop,chunk_size=64):
     return hidden.detach()
 
 
+@torch.no_grad()
+def current_hidden_for_batch(model,batch,chunk_size=64):
+    """Current-weight hidden before each PPO burn-in segment, plus replay cost.
+
+    Input items retain the trainer's ``(episode, before, rows[, old_hidden])``
+    shape. Row identity verifies that burn-in and selected rows form one real,
+    contiguous history segment; an old supplied hidden is deliberately ignored.
+    The caller then performs its unchanged burn-in and selected-window BPTT.
+    Prefixes may be shared inside this call only, never across weight updates.
+    """
+    if chunk_size<1:raise ValueError('History chunk size must be positive')
+    if not batch:return next(model.parameters()).new_zeros((0,HIDDEN)),0
+    positions={};prefixes={};hidden=[];frames=0
+    for item in batch:
+        episode,before,rows=item[:3]
+        if not rows:raise ValueError('Full-history PPO needs selected rows')
+        history=episode['rows'];identity=id(history)
+        if identity not in positions:
+            positions[identity]={id(row):index for index,row in enumerate(history)}
+            if len(positions[identity])!=len(history):raise ValueError('Ambiguous repeated history row')
+        segment=[*before,*rows];start=positions[identity].get(id(segment[0]))
+        if start is None or start+len(segment)>len(history) or any(history[start+offset] is not row for offset,row in enumerate(segment)):
+            raise ValueError('PPO burn-in/selected rows are not a contiguous actual history')
+        key=(identity,start)
+        if key not in prefixes:
+            prefixes[key]=reconstruct_hidden(model,episode,start,chunk_size)
+            frames+=start
+        hidden.append(prefixes[key])
+    return torch.cat(hidden).detach(),frames
+
+
 def _plain_actions(actions,index,world):
     result={name:value[index].tolist() for name,value in actions.items()}
     result['units']=result['units'][:len(world['unitIndices'])]

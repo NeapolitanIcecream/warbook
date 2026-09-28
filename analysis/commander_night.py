@@ -103,6 +103,7 @@ def comparison_protocol(plan,comparison=True,repeat_offset=0):
 
 def ppo_training_flags(profile):
     result=['--gradient-accumulation',str(profile.get('gradientAccumulation',1))]
+    if profile.get('ppoHistory'):result+=['--ppo-history',profile['ppoHistory']]
     if profile.get('ppoCoverage'):
         if profile.get('ppoUpdates'):raise ValueError('Choose coverage or update cap explicitly')
         result+=['--max-coverage',str(profile['ppoCoverage'])]
