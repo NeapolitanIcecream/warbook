@@ -1,4 +1,4 @@
-import unittest,tempfile,json,hashlib,datetime,sys
+import unittest,tempfile,json,hashlib,datetime,sys,time
 from pathlib import Path
 from unittest.mock import patch
 import commander_night
@@ -65,6 +65,7 @@ class NightSelectionTests(unittest.TestCase):
                   'strongReference':'reference','anchors':{'main':[],'pressure':[]},
                   'profiles':[{'name':r,'route':r,'arm':'same','encoding':'graph-plan-v2','seed':1,'input':'old'} for r in ['main','pressure']]}
             plan_path.write_text(json.dumps(plan))
+            trained=set()
             class Process:
                 def __init__(self,cmd,stdout,**kwargs):
                     self.pid=123;self.code=0;log=str(Path(stdout.name).relative_to(root))
@@ -80,15 +81,28 @@ class NightSelectionTests(unittest.TestCase):
                         out.write_text('initial-'+out.parent.name)
                     elif 'analysis/commander_train.py' in cmd:
                         out=Path(cmd[cmd.index('--out')+1]);out.write_text(str(out))
+                        if fault=='phase-overlap':self.training=tuple(log.split('/')[:2])
                     elif 'analysis/launch_batch.py' in cmd:
                         source=Path(cmd[cmd.index('analysis/launch_batch.py')+1]);p=json.loads(source.read_text());out=Path(cmd[cmd.index('--out')+1]);out.mkdir()
+                        if fault=='phase-overlap' and 'candidate' in p['subjects']:
+                            cycle=log.split('/')[0]
+                            assert {(cycle,'main'),(cycle,'pressure')}<=trained,'Evaluation overlapped another rollout/training phase'
                         n=len(p['maps'])*len(p['opponents'])*p['rounds'];counts={name:{'W':0,'L':n,'U':0,'E':0} for name in p['subjects']}
                         (out/'summary.json').write_text(json.dumps({'complete':True,'completed':n*len(counts),'counts':counts}))
                         (out/'learner-episodes.json').write_text('[]')
-                def wait(self,timeout=None):return self.code
+                def wait(self,timeout=None):
+                    if hasattr(self,'training'):
+                        if self.training[1]=='pressure':time.sleep(.02)
+                        trained.add(self.training)
+                    return self.code
             with patch.object(sys,'argv',['commander_night.py',str(plan_path),'--out',str(root)]),patch.object(commander_night.subprocess,'Popen',Process),patch.object(commander_night.subprocess,'check_output',return_value='source\n'),patch.object(commander_night,'require_batch_space',return_value={}):
                 code=commander_night.main()
             return code,json.loads((root/'state.json').read_text())
+
+    def test_all_sampling_finishes_before_comparison_initialization(self):
+        code,state=self.run_fault_case('phase-overlap')
+        self.assertEqual(code,0)
+        self.assertEqual(len(state['history']),4)
 
     def test_freeze_boundary_enters_final_instead_of_stopping_the_driver(self):
         code,state=self.run_fault_case('boundary')

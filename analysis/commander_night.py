@@ -285,7 +285,7 @@ def main():
             if boundary:break
             profiles=active_profiles(state['profiles'])
             if not profiles:state['stopReason']='No active profiles after freezing';break
-            def step(name):
+            def prepare(name):
                 p=profiles[name];d=root/f'cycle-{cycle:02d}'/name
                 peer=choose_peer(state['profiles'],name,cycle)
                 opponents={'supalosa':{'native':'supalosa'},'opposite-rule':{'release':rules['pressure' if p['route']=='main' else 'main']},'current-peer':{'release':releases[peer]},'strong-history':{'release':plan['strongReference']}}
@@ -312,6 +312,14 @@ def main():
                 candidate=train(p,episodes,p['current'],d/'candidate.json','ppo' if learning else 'bc',p.get('updates',plan.get('updates',400)))
                 optimizer=Path(candidate).with_suffix('.optimizer.pt')
                 atomic(d/'candidate-verified.json',{'name':name,'cycle':cycle,'model':candidate,'sha256':hashlib.sha256(Path(candidate).read_bytes()).hexdigest(),'optimizerSha256':hashlib.sha256(optimizer.read_bytes()).hexdigest() if optimizer.exists() else None,'encoding':p['encoding'],'verifiedAt':time.time(),'source':state['source']})
+                return {'name':name,'profile':p,'directory':d,'peer':peer,'opponents':opponents,
+                        'learning':learning,'reused':reused,'new':new,'recent':recent,
+                        'sampling':sampling,'candidate':candidate}
+            def assess(prepared):
+                name=prepared['name'];p=prepared['profile'];d=prepared['directory']
+                peer=prepared['peer'];opponents=prepared['opponents'];learning=prepared['learning']
+                reused=prepared['reused'];new=prepared['new'];recent=prepared['recent']
+                sampling=prepared['sampling'];candidate=prepared['candidate']
                 check_profile={**p,'seed':p['seed']+2003*cycle}
                 check=batch(d/'check',{'incumbent':spec(check_profile,p['retained'],evaluation=True),'candidate':spec(check_profile,candidate,evaluation=True)},opponents,plan.get('checkRounds',1),workers,20000+cycle*37+p['seed'])
                 old=check['counts']['incumbent']['W'];won=check['counts']['candidate']['W']
@@ -329,9 +337,22 @@ def main():
                 row={'cycle':cycle,'name':name,'method':'ppo' if learning else 'dagger-bc','peer':peer,'sampling':sampling['counts'],'sampleUses':len(new),'reusedInitialSampling':bool(reused),'check':check['counts'],'controlFirstScores':scores,'candidate':candidate,'retained':kept,'games':(0 if reused else sampling['completed'])+check['completed']}
                 atomic(d/'profile-complete.json',{'profile':updated,'result':row})
                 return name,updated,row
-            boundary=False
+            # Evaluation's source seconds must not overlap an unfinished ungated
+            # rollout from another profile. Training itself can remain parallel.
+            boundary=False;prepared_profiles={}
             with concurrent.futures.ThreadPoolExecutor(max_workers=len(profiles)) as ex:
-                futures={ex.submit(step,name):name for name in profiles}
+                futures={ex.submit(prepare,name):name for name in profiles}
+                for future in concurrent.futures.as_completed(futures):
+                    try:
+                        prepared=future.result();prepared_profiles[prepared['name']]=prepared
+                    except TrainingBoundary:boundary=True
+                    except Exception as error:quarantine_profile(state,futures[future],cycle,error)
+                    state['games']=completed_games(root);state['pending']=verified_candidate_receipts(root);save()
+            if boundary:
+                state['stopReason']='Training phase deadline; finalize verified models';break
+            state['phase']='cycle-check';save()
+            with concurrent.futures.ThreadPoolExecutor(max_workers=max(1,len(prepared_profiles))) as ex:
+                futures={ex.submit(assess,prepared):name for name,prepared in prepared_profiles.items()}
                 for future in concurrent.futures.as_completed(futures):
                     try:
                         name,p,row=future.result();state['profiles'][name]=p;state['history'].append(row)

@@ -1,5 +1,6 @@
-"""Run a bounded/resumable matrix of independent full games on one machine.
+"""Run a bounded/resumable matrix of separate full-game instances on one machine.
 Every child receives a fixed code/model/opponent version; no laptop RPC is involved.
+Shared engine initialization sources are recorded rather than assumed independent.
 """
 import argparse,concurrent.futures,hashlib,json,os,random,shutil,subprocess,time
 from collections import Counter

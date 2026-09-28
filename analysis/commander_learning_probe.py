@@ -82,7 +82,8 @@ def main():
     parser.add_argument('--input', required=True, help='P-minus update8 checkpoint (or deeper diagnostic endpoint)')
     parser.add_argument('--reference', required=True)
     parser.add_argument('--episodes', required=True, help='Predeclared current-source game panel')
-    parser.add_argument('--reference-episodes', required=True)
+    parser.add_argument('--reference-episodes')
+    parser.add_argument('--drift-only', action='store_true', help='Inspect deeper recurrent state without recalibrating lambda')
     parser.add_argument('--out', required=True)
     parser.add_argument('--target-ratio', type=float, default=.1)
     parser.add_argument('--seed', type=int, default=47)
@@ -99,8 +100,22 @@ def main():
     model = load_model(artifact)
     teacher = load_model(json.loads(Path(args.reference).read_text())).eval()
     teacher.requires_grad_(False)
-    current, fixed = load_panel(args.episodes), load_panel(args.reference_episodes)
+    current = load_panel(args.episodes)
     validate_ppo_behavior(current, teacher, digest(args.reference))
+    if args.drift_only:
+        rows = recurrent_drift(model, choose_windows(current, 16, args.seed))
+        out = Path(args.out)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        atomic(out, {'input': args.input, 'inputSha256': digest(args.input),
+                     'reference': args.reference, 'referenceSha256': digest(args.reference),
+                     'episodesSha256': digest(args.episodes), 'recurrentDrift': rows,
+                     'seconds': time.monotonic() - started, 'cpuSeconds': time.process_time() - cpu,
+                     'scope': 'Full-current-weight history versus recorded hidden plus burn8; no parameter or lambda changes'})
+        print(json.dumps({'out': str(out), 'maxConditionalKL': max(row['conditionalKL'] for row in rows)}), flush=True)
+        return
+    if not args.reference_episodes:
+        raise ValueError('Gradient calibration requires predeclared reference episodes')
+    fixed = load_panel(args.reference_episodes)
     validate_ppo_behavior(fixed, teacher, digest(args.reference))
     for episode in current:
         episode['ppo'] = True
