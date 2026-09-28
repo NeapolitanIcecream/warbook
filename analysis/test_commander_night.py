@@ -5,6 +5,21 @@ import commander_night
 from commander_night import next_learning_state,verified_candidate_receipts,completed_games,active_profiles,peer_model,quarantine_profile,comparison_score,choose_peer,policy_spec,segment_decision,cycle_game_reserve,final_game_reserve
 
 class NightSelectionTests(unittest.TestCase):
+    def test_new_comparisons_keep_swap_across_single_round_passes(self):
+        self.assertEqual(commander_night.comparison_protocol({}),{})
+        plan={'evaluationSchedule':'interleaved','initializationGate':'/shared/gate'}
+        self.assertEqual(commander_night.comparison_protocol(plan,False),{})
+        self.assertEqual(commander_night.comparison_protocol(plan,repeat_offset=3),
+                         {'schedule':'interleaved','initializationGate':'/shared/gate','repeatOffset':3})
+
+    def test_coverage_and_retention_use_frozen_reference_without_update_cap(self):
+        p={'ppoCoverage':1,'initial':'C0.json','retentionEpisodes':'anchors.json','retentionWeight':.1}
+        flags=commander_night.ppo_training_flags(p)
+        self.assertEqual(flags[flags.index('--max-coverage')+1],'1')
+        self.assertEqual(flags[flags.index('--retention-reference')+1],'C0.json')
+        self.assertNotIn('--max-updates',flags)
+        with self.assertRaises(ValueError):commander_night.ppo_training_flags({**p,'ppoUpdates':8})
+
     def test_operator_finalization_recovers_completed_workers_without_training(self):
         with tempfile.TemporaryDirectory() as tmp:
             parent=Path(tmp);old=parent/'old';old.mkdir();out=parent/'final';calls=[]

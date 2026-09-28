@@ -148,16 +148,33 @@ class CommanderModel(nn.Module):
         x=torch.cat([d['global'],summary(e,d['entitiesMask']),summary(r,d['regionsMask']),summary(p,d['productsMask']),
                      summary(tasks,d['tasksMask']),d['queues'].flatten(1),self.names(d['queueIds']).flatten(1)],-1)
         return e,p,goals,places,tasks,torch.tanh(self.world0(x))
-    def forward(self,d,hidden,a,return_probabilities=False,encoded=None,bc_factor_boost=0.):
+    def advance_hidden(self,d,hidden,encoded=None):
+        """Advance only the real-world recurrence; no action is needed or applied."""
+        x=(self.encode_world(d) if encoded is None else encoded)[-1]
+        return self.memory(x,hidden)
+    def forward(self,d,hidden,a=None,return_probabilities=False,encoded=None,bc_factor_boost=0.,
+                return_conditionals=False,generator=None):
+        """Score a recorded chain, or sample a complete legal chain when a is None.
+
+        Conditional distributions are evaluated on the same preceding choices
+        used to decode the rest of the action. Sampling uses the model's recorded
+        base/family temperatures and never changes the supplied world.
+        """
+        sampling=a is None
         e,p,g,places,tasks,x=self.encode_world(d) if encoded is None else encoded
         h=self.memory(x,hidden);b=len(h)
         zero=torch.zeros(b,dtype=h.dtype);logp=zero.double();entropy=zero;factors=zero;bc=zero;bc_weight=zero
-        probabilities={};domains={}
+        probabilities={};conditionals={};domains={};sampled={}
+        def label(name,index=None):
+            if sampling:return None
+            return a[name] if index is None else a[name][:,index]
         def choice(name,logits,mask,selected,valid=None,keep=None):
             nonlocal logp,entropy,factors,bc,bc_weight
-            if valid is None:valid=torch.ones(selected.shape,dtype=torch.bool)
+            if valid is None:valid=torch.ones(logits.shape[:-1],dtype=torch.bool)
             masked=logits.double().masked_fill(~mask,-torch.inf)
             logs=((masked-masked.max(-1,keepdim=True).values)/self.factor_temperature(name)).log_softmax(-1);probs=logs.exp()
+            if sampling:
+                selected=torch.multinomial(probs.reshape(-1,probs.shape[-1]),1,generator=generator).reshape(probs.shape[:-1])
             selected_valid=mask.gather(-1,selected.unsqueeze(-1)).squeeze(-1)
             if not selected_valid[valid].all():raise ValueError('Recorded action outside mask: '+name)
             lp=logs.gather(-1,selected.unsqueeze(-1)).squeeze(-1)
@@ -181,6 +198,8 @@ class CommanderModel(nn.Module):
                 terms=(summed(-lp.float()*changed*importance),summed(-lp.float()*keep_mask),summed(changed.float()),summed(keep_mask.float()))
                 old=domains.get(domain,(zero,zero,zero,zero));domains[domain]=tuple(x+y for x,y in zip(old,terms))
             if return_probabilities:probabilities[name]=probs
+            if return_conditionals:
+                conditionals[name]={'log_probabilities':logs,'probabilities':probs,'mask':mask,'active':active}
             return selected
         gate_logits=self.editGate(h) if self.editGate is not None else None
         def edit(index,required=None,available=None):
@@ -188,7 +207,9 @@ class CommanderModel(nn.Module):
             if required is None:required=torch.zeros(b,dtype=torch.bool)
             if available is None:available=torch.ones(b,dtype=torch.bool)
             logits=torch.stack([zero,gate_logits[:,index]],-1)
-            return choice(f'edit{index}',logits,torch.stack([~required,available],-1),a['edits'][:,index],keep=0).bool()
+            selected=choice(f'edit{index}',logits,torch.stack([~required,available],-1),label('edits',index),keep=0)
+            if sampling:sampled.setdefault('edits',[]).append(selected)
+            return selected.bool()
         edit_production=edit(0)
         context=torch.zeros((b,64),dtype=h.dtype)
         queue_queries=[]
@@ -198,15 +219,18 @@ class CommanderModel(nn.Module):
             logits=torch.cat([self.queueSpecial(query),torch.einsum('bd,bnd->bn',query,p)/8],-1)
             mask=torch.cat([torch.ones((b,4),dtype=torch.bool),d['productsMask']&(d['productQueue']==q)],-1)
             mask&=edit_production[:,None]|(torch.arange(mask.shape[-1])[None,:]==0)
-            selected=choice(f'queue{q}',logits,mask,a['queues'][:,q],keep=0)
+            selected=choice(f'queue{q}',logits,mask,label('queues',q),keep=0)
             product=gather_rows(p,(selected-4).clamp_min(0)[:,None]).squeeze(1)
             special=self.queueSpecialKeys[selected.clamp_max(3)]
             key=torch.where((selected>=4)[:,None],product,special)
             param=self.queueParameter(torch.cat([query,key],-1));active=selected>=4
-            for name,logit,label,size in [('amount',param[:,:5],a['amounts'][:,q],5),('cash',param[:,5:],a['cash'][:,q],6)]:
+            parameters={}
+            for name,field,logit,size in [('amount','amounts',param[:,:5],5),('cash','cash',param[:,5:],6)]:
                 m=active[:,None].expand(-1,size)|((torch.arange(size)[None,:]==0)&~active[:,None])
-                choice(f'{name}{q}',logit,m,label,valid=active)
-            coded=torch.cat([torch.nn.functional.one_hot(a['amounts'][:,q],5),torch.nn.functional.one_hot(a['cash'][:,q],6),
+                parameters[field]=choice(f'{name}{q}',logit,m,label(field,q),valid=active)
+                if sampling:sampled.setdefault(field,[]).append(parameters[field])
+            if sampling:sampled.setdefault('queues',[]).append(selected)
+            coded=torch.cat([torch.nn.functional.one_hot(parameters['amounts'],5),torch.nn.functional.one_hot(parameters['cash'],6),
                               torch.nn.functional.one_hot(selected.clamp_max(4),5)],-1).float()
             context=torch.tanh(self.queueContext(torch.cat([context,key,coded],-1)))
         slot=self.slots(torch.arange(SLOTS))[None].expand(b,-1,-1)
@@ -215,8 +239,8 @@ class CommanderModel(nn.Module):
         km=torch.ones((b,SLOTS,11),dtype=torch.bool);km[:,:,1]=d['previousKind']>=2
         km[:,:,7]=(d['goalKind']==6).any(1)[:,None]
         km&=edit_tasks[:,None,None]|(torch.arange(11)[None,None,:]==0)
-        choice('kind',self.kind(tq),km,a['kinds'],keep=0)
-        kind=a['kinds'];ke=self.kindEmbedding(torch.where(kind==0,d['previousKind'],kind))
+        kind=choice('kind',self.kind(tq),km,label('kinds'),keep=0)
+        ke=self.kindEmbedding(torch.where(kind==0,d['previousKind'],kind))
         gq=torch.tanh(self.goalQuery(torch.cat([tq,ke],-1)))
         gl=torch.einsum('bsd,bgd->bsg',gq,g)/8
         goal_kinds=d['goalKind'][:,None,:]
@@ -225,11 +249,11 @@ class CommanderModel(nn.Module):
         gm=torch.where((kind==7)[:,:,None],d['goalsMask'][:,None,:]&(goal_kinds==6),gm)
         active=(kind>=2)&(kind!=10)
         gm=torch.where(active[:,:,None],gm,torch.arange(g.shape[1])[None,None,:]==d['previousGoal'][:,:,None])
-        choice('goal',gl,gm,a['goals'],valid=active)
+        selected_goal=choice('goal',gl,gm,label('goals'),valid=active)
         em=active[:,:,None].expand(-1,-1,8)|((torch.arange(8)[None,None,:]==0)&~active[:,:,None])
-        choice('engagement',self.engagement(tq),em,a['engagement'],valid=active)
+        selected_engagement=choice('engagement',self.engagement(tq),em,label('engagement'),valid=active)
         actual_kind=torch.where(kind==0,d['previousKind'],kind)
-        actual_goal=torch.where(kind==0,d['previousGoal'],a['goals'])
+        actual_goal=torch.where(kind==0,d['previousGoal'],selected_goal)
         actual_goal=torch.where((actual_kind<2)|(actual_kind==10),torch.zeros_like(actual_goal),actual_goal)
         task_keys=torch.tanh(self.roleKeys(torch.cat([tq,gather_rows(g,actual_goal),self.kindEmbedding(actual_kind)],-1)))
         unit_e=gather_rows(e,d['unitIndex']);uq=torch.tanh(self.unitQuery(torch.cat([unit_e,h[:,None].expand(-1,unit_e.shape[1],-1)],-1)))
@@ -248,19 +272,20 @@ class CommanderModel(nn.Module):
             um=um&~(torch.nn.functional.one_hot(previous,20).bool()&duplicate[:,:,None])
         edit_units=edit(2,required=((~um[:,:,18])&d['unitIndexMask']).any(1),available=d['unitIndexMask'].any(1))
         um&=edit_units[:,None,None]|(torch.arange(20)[None,None,:]==18)
-        choice('unit',ul,um,a['units'],valid=d['unitIndexMask'],keep=18)
+        selected_units=choice('unit',ul,um,label('units'),valid=d['unitIndexMask'],keep=18)
         building_e=gather_rows(e,d['buildingIndex']);bq=torch.tanh(self.building0(torch.cat([building_e,h[:,None].expand(-1,building_e.shape[1],-1)],-1)))
         bm=torch.stack([torch.ones_like(d['buildingCap'][:,:,0]),d['buildingCap'][:,:,0],d['buildingCap'][:,:,0],d['buildingCap'][:,:,1]],-1)
         edit_buildings=edit(3,available=d['buildingIndexMask'].any(1))
         bm&=edit_buildings[:,None,None]|(torch.arange(4)[None,None,:]==0)
-        choice('building',self.building1(bq),bm,a['buildings'],valid=d['buildingIndexMask'],keep=0)
+        selected_buildings=choice('building',self.building1(bq),bm,label('buildings'),valid=d['buildingIndexMask'],keep=0)
         edit_placements=edit(4,available=d['placementsMask'].any(1))
         for q in range(2):
             pq=torch.tanh(self.placeQuery(torch.cat([h,d['queues'][:,q],self.names(d['queueIds'][:,q])],-1)))
             pl=torch.cat([self.placeKeep(pq),torch.einsum('bd,bnd->bn',pq,places)/8],-1)
             pm=torch.cat([torch.ones((b,1),dtype=torch.bool),d['placementsMask']&(d['placementQueue']==q)],-1)
             pm&=edit_placements[:,None]|(torch.arange(pm.shape[-1])[None,:]==0)
-            choice(f'place{q}',pl,pm,a['placements'][:,q],keep=0)
+            selected=choice(f'place{q}',pl,pm,label('placements',q),keep=0)
+            if sampling:sampled.setdefault('placements',[]).append(selected)
         value=torch.sigmoid(self.value1(torch.tanh(self.value0(h)))).squeeze(-1)
         if bc_factor_boost:
             # Explicit per-frame objective: each domain has one aggregate KEEP
@@ -273,8 +298,14 @@ class CommanderModel(nn.Module):
                 domain_count=domain_count+(count>0)
             bc_loss=domain_loss/domain_count.clamp_min(1)
         else:bc_loss=bc/bc_weight.clamp_min(1)
-        return {'logp':logp,'entropy':entropy/factors.clamp_min(1),'value':value,'hidden':h,
+        result={'logp':logp,'entropy':entropy/factors.clamp_min(1),'value':value,'hidden':h,
                 'bcLoss':bc_loss,'factors':factors,'probabilities':probabilities}
+        if return_conditionals:result['conditionals']=conditionals
+        if sampling:
+            sampled={name:torch.stack(values,1) for name,values in sampled.items()}
+            sampled.update(kinds=kind,goals=selected_goal,engagement=selected_engagement,units=selected_units,buildings=selected_buildings)
+            result['actions']=sampled
+        return result
 
 def export(model,path,metadata):
     import json,hashlib

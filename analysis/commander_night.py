@@ -91,6 +91,34 @@ def final_game_reserve(plan,profiles):
 def cycle_game_reserve(plan,profiles,cycle):
     return sum((0 if cycle==0 and p.get('initialEpisodes') else len(plan['maps'])*4*p.get('rounds',plan.get('rounds',4)))+len(plan['maps'])*4*2*plan.get('checkRounds',1) for p in profiles.values())
 
+def comparison_protocol(plan,comparison=True,repeat_offset=0):
+    """Keep legacy plans intact; new comparisons share creation and slot rules."""
+    result={}
+    if not comparison:return result
+    if 'evaluationSchedule' in plan:result['schedule']=plan['evaluationSchedule']
+    if plan.get('initializationGate'):result['initializationGate']=plan['initializationGate']
+    if plan.get('evaluationSchedule') or repeat_offset:
+        result['repeatOffset']=plan.get('evaluationRepeatOffset',0)+repeat_offset
+    return result
+
+def ppo_training_flags(profile):
+    result=['--gradient-accumulation',str(profile.get('gradientAccumulation',1))]
+    if profile.get('ppoCoverage'):
+        if profile.get('ppoUpdates'):raise ValueError('Choose coverage or update cap explicitly')
+        result+=['--max-coverage',str(profile['ppoCoverage'])]
+    elif profile.get('ppoUpdates'):result+=['--max-updates',str(profile['ppoUpdates'])]
+    if profile.get('coverageCheckpoints'):
+        result+=['--coverage-checkpoints',*[str(x) for x in profile['coverageCheckpoints']]]
+    if profile.get('updateCheckpoints'):
+        result+=['--update-checkpoints',*[str(x) for x in profile['updateCheckpoints']]]
+    if profile.get('retentionWeight'):
+        if not profile.get('retentionEpisodes'):raise ValueError('Retention requires predeclared C0 sources')
+        result+=['--retention-reference',str(profile.get('retentionReference',profile['initial'])),
+                 '--retention-episodes',str(profile['retentionEpisodes']),
+                 '--retention-weight',str(profile['retentionWeight']),
+                 '--retention-fraction',str(profile.get('retentionFraction',.25))]
+    return result
+
 def segment_decision(profile,models,counts,minimum_gain,patience,cycle):
     reference=counts['reference']['W'];winner=max(['current','retained'],key=lambda k:counts[k]['W'])
     improved=counts[winner]['W']>=reference+minimum_gain
@@ -112,7 +140,8 @@ def main():
     state={'phase':'initializing','profiles':{},'history':[],'games':0,'source':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'startedAt':time.time()}
     if args.finalize_from:
         original=json.loads((Path(args.finalize_from)/'plan.json').read_text())
-        for field in ['maps','profiles','strongReference','finalRounds','crossFinal','crossFinalRounds']:
+        for field in ['maps','profiles','strongReference','finalRounds','crossFinal','crossFinalRounds',
+                      'evaluationSchedule','initializationGate','evaluationRepeatOffset']:
             if plan.get(field)!=original.get(field):raise ValueError('Finalization must preserve the original comparison protocol')
         state=finalization_snapshot(args.finalize_from)
         if state['source']!=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip():raise ValueError('Finalize from the original frozen working directory')
@@ -145,8 +174,9 @@ def main():
         command(cmd,log)
         return json.loads(log.read_text().splitlines()[-1])['path']
     spec=policy_spec
-    def batch(directory,subjects,opponents,rounds,workers,seed):
+    def batch(directory,subjects,opponents,rounds,workers,seed,comparison=True,repeat_offset=0):
         directory.mkdir(parents=True,exist_ok=True);p={'maps':plan['maps'],'rounds':rounds,'workers':workers,'trace':'launch','seconds':600,'storageMiBPerGame':192,'orderSeed':seed,'subjects':subjects,'opponents':opponents}
+        p.update(comparison_protocol(plan,comparison,repeat_offset))
         atomic(directory/'plan.json',p)
         try:command([python,'analysis/launch_batch.py',str(directory/'plan.json'),'--out',str(directory/'games')],directory/'batch.log')
         finally:
@@ -167,8 +197,7 @@ def main():
         cmd=[str(Path(python).with_name('torchrun')),'--standalone','--nproc-per-node',str(plan.get('ranks',8)),'analysis/commander_train.py',method,'--episodes',str(episode_file),'--out',str(fitted),'--seed',str(profile['seed']),'--epochs','24' if method=='bc' else '3','--batch',str(plan.get('localBatch',4)),'--sequence','16','--burn','8','--threads','1','--validation-fraction','0','--action-encoding',profile['encoding']]
         if method=='bc':cmd+=['--bc-loss','factor','--bc-event-weight','32','--max-updates',str(updates)]
         if method=='bc' and 'temperature' in profile:cmd+=['--bc-temperature','1']
-        if method=='ppo' and profile.get('ppoUpdates'):cmd+=['--max-updates',str(profile['ppoUpdates'])]
-        if method=='ppo':cmd+=['--gradient-accumulation',str(profile.get('gradientAccumulation',1))]
+        if method=='ppo':cmd+=ppo_training_flags(profile)
         if profile.get('learningRate'):cmd+=['--learning-rate',str(profile['learningRate'])]
         if source:cmd+=['--input',str(source)]
         elif method=='bc':cmd+=['--checkpoints','4','8','12']
@@ -276,7 +305,7 @@ def main():
                         if not learning and m.get('daggerBeta')!=0:raise ValueError('Shared correction data needs queried teacher labels without intervention')
                     atomic(d/'sampling-reused.json',{'episodes':reused,'summary':p['initialSummary'],'uses':len(new),'newGames':0})
                 else:
-                    sampling=batch(d/'sample',{'learner':spec({**p,'seed':p['seed']+1009*cycle},p['current'],not learning)},opponents,p.get('rounds',plan.get('rounds',4)),workers,10000+cycle*37+p['seed'])
+                    sampling=batch(d/'sample',{'learner':spec({**p,'seed':p['seed']+1009*cycle},p['current'],not learning)},opponents,p.get('rounds',plan.get('rounds',4)),workers,10000+cycle*37+p['seed'],comparison=False)
                     new=json.loads((d/'sample/games/learner-episodes.json').read_text())
                 recent=[*p['recent'],new][-2:]
                 episodes=new if learning else [*plan['anchors'][p['route']],*[x for chunk in recent for x in chunk]]
@@ -357,7 +386,7 @@ def main():
             def final_step(name):
                 subjects={label:{**p,'policySeed':p['policySeed']+repetition*1009} for label,p in matrices[name].items()}
                 opponents={'supalosa':{'native':'supalosa'},'main-rule':{'release':rules['main']},'pressure-rule':{'release':rules['pressure']},'strong-history':{'release':plan['strongReference']}}
-                return name,batch(root/'final'/name/f'pass-{repetition:02d}',subjects,opponents,1,max(1,plan.get('finalWorkers',96)//max(1,len(matrices))),29024+repetition)
+                return name,batch(root/'final'/name/f'pass-{repetition:02d}',subjects,opponents,1,max(1,plan.get('finalWorkers',96)//max(1,len(matrices))),29024+repetition,repeat_offset=repetition)
             with concurrent.futures.ThreadPoolExecutor(max_workers=max(1,len(matrices))) as ex:
                 futures={ex.submit(final_step,name):name for name in matrices}
                 for future in concurrent.futures.as_completed(futures):
