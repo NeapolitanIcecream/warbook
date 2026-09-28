@@ -2,11 +2,39 @@
 Every child receives a fixed code/model/opponent version; no laptop RPC is involved.
 """
 import argparse,concurrent.futures,hashlib,json,os,random,shutil,subprocess,time
+from collections import Counter
 from pathlib import Path
 from launch_outcome import classify
 from experiment_storage import compact_completed, compact_file, require_batch_space
 
 def digest(path):return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+def global_repeat(plan,repeat):
+    offset=plan.get('repeatOffset',0)
+    if isinstance(offset,bool) or not isinstance(offset,int) or offset<0:raise ValueError('repeatOffset must be a nonnegative integer')
+    return offset+repeat
+def policy_seed(plan,subject,map_name,opponent,repeat):
+    return subject.get('policySeed',plan.get('policySeed',1))*100000+global_repeat(plan,repeat)*31+plan['maps'].index(map_name)*7+list(plan['opponents']).index(opponent)
+def scheduled_tasks(plan):
+    global_repeat(plan,0)
+    schedule=plan.get('schedule','shuffle');rng=random.Random(plan.get('orderSeed',1))
+    cases=[(m,o,r) for m in plan['maps'] for o in plan['opponents'] for r in range(plan['rounds'])]
+    subjects=list(plan['subjects'])
+    if schedule=='shuffle':
+        tasks=[(*case,s) for case in cases for s in subjects];rng.shuffle(tasks);return tasks
+    if schedule!='interleaved':raise ValueError('schedule must be shuffle or interleaved')
+    # Keep all arms in each map/opponent/repeat block adjacent, while balancing
+    # their queue positions across blocks. Actual initialization time is recorded.
+    rng.shuffle(cases);rng.shuffle(subjects)
+    return [(*case,s) for i,case in enumerate(cases) for s in subjects[i%len(subjects):]+subjects[:i%len(subjects)]]
+def initialization_summary(rows):
+    def count(group):
+        keys=[r['initialization']['randomSourceKey'] for r in group if r.get('initialization')]
+        counts=Counter(keys)
+        return {'games':len(group),'recorded':len(keys),'sources':len(counts),
+            'repeatedSources':sum(n>1 for n in counts.values()),'gamesInRepeatedSources':sum(n for n in counts.values() if n>1),
+            'largestSource':max(counts.values(),default=0)}
+    return {'scope':'native replay PRNG input sources; not an effective independent sample size',**count(rows),
+        'bySubject':{s:count([r for r in rows if r['subject']==s]) for s in sorted({r['subject'] for r in rows})}}
 def commander_execution_flags(subject):
     enabled=subject.get('nativeFiniteBatches',False)
     if not isinstance(enabled,bool):raise ValueError('nativeFiniteBatches must be boolean')
@@ -40,6 +68,11 @@ def main():
     ap=argparse.ArgumentParser();ap.add_argument('plan');ap.add_argument('--out',required=True);ap.add_argument('--workers',type=int);ap.add_argument('--resume',action='store_true');args=ap.parse_args()
     plan=json.loads(Path(args.plan).read_text());root=Path(args.out).resolve();root.mkdir(parents=True,exist_ok=True)
     for subject in plan['subjects'].values():commander_execution_flags(subject)
+    tasks=scheduled_tasks(plan)
+    gate=plan.get('initializationGate')
+    if gate is not None:
+        if not isinstance(gate,str) or not gate.strip():raise ValueError('initializationGate must be a nonempty directory path')
+        plan['initializationGate']=gate=str(Path(gate).resolve())
     node=os.environ.get('WARBOOK_NODE','node');commit=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
     for s in [*plan['subjects'].values(),*plan['opponents'].values()]:
         if s.get('release'):
@@ -49,7 +82,8 @@ def main():
     identity={'plan':plan,'git':commit};fingerprint=hashlib.sha256(json.dumps(identity,sort_keys=True).encode()).hexdigest();manifest=root/'batch.json'
     if manifest.exists():
         if not args.resume or json.loads(manifest.read_text())['fingerprint']!=fingerprint:raise ValueError('Batch already exists or source/plan changed')
-    else:atomic(manifest,{**identity,'fingerprint':fingerprint,'startedAt':time.time(),'slots':'alternate creation order; not seeded or controlled spawns'})
+    else:atomic(manifest,{**identity,'fingerprint':fingerprint,'startedAt':time.time(),'slots':'alternate by global repeat (repeatOffset + local repeat); not seeded or controlled spawns',
+        'schedule':plan.get('schedule','shuffle'),'initializationGate':gate})
     releases={}
     for side in ['subjects','opponents']:
         for name,s in plan[side].items():
@@ -58,12 +92,7 @@ def main():
             if key not in releases:
                 out=subprocess.check_output([node,'--import','tsx','scripts/build-bot.ts','--ref',key[0],'--mode',key[1]],text=True)
                 releases[key]=json.loads(out.splitlines()[-1])['path']
-    tasks=[]
-    for map_name in plan['maps']:
-        for opponent in plan['opponents']:
-            for repeat in range(plan['rounds']):
-                for subject in plan['subjects']:tasks.append((map_name,opponent,repeat,subject))
-    random.Random(plan.get('orderSeed',1)).shuffle(tasks)
+    positions={task:i for i,task in enumerate(tasks)}
     remaining=sum(not (root/m/o/f'{r}-{s}'/'batch-row.json').exists() for m,o,r,s in tasks)
     started=time.monotonic();rows=[];workers=args.workers or plan.get('workers',4)
     if workers<1 or workers>192:raise ValueError('Explicit worker bound is 1..192; calibrate CPU and memory before scaling')
@@ -76,12 +105,15 @@ def main():
         completed=directory/'batch-row.json'
         if completed.exists():return json.loads(completed.read_text())
         directory=fresh_attempt(directory)
-        atomic(directory/'attempt-started.json',{'map':map_name,'opponent':opponent,'repeat':repeat,'subject':subject,'at':time.time()})
+        global_index=global_repeat(plan,repeat);seed=policy_seed(plan,s,map_name,opponent,repeat) if 'policy' in s else None
+        scheduling={'globalRepeat':global_index,'swapped':bool(global_index%2),'policySeed':seed,
+            'scheduleBlock':f'{map_name}/{opponent}/{global_index}','schedulePosition':positions[task]}
+        atomic(directory/'attempt-started.json',{'map':map_name,'opponent':opponent,'repeat':repeat,'subject':subject,'at':time.time(),**scheduling})
         seconds=plan.get('seconds',300)
         cmd=[node,'--env-file-if-exists=.env','--import','./src/engine-diagnostics.mjs','--import','tsx','src/runner.ts','--units','0','--map',map_name,'--mode',s.get('mode','bastion'),'--out',str(directory),'--seconds',str(seconds)]
         if 'ref' in s:cmd+=['--actor-release',releases[(s['ref'],s.get('mode','bastion'))]]
         if 'release' in s:cmd+=['--actor-release',s['release']]
-        if 'policy' in s:cmd+=['--commander-policy' if s.get('commander') else '--launch-policy',s['policy'],'--policy-seed',str(s.get('policySeed',plan.get('policySeed',1))*100000+repeat*31+plan['maps'].index(map_name)*7+list(plan['opponents']).index(opponent))]
+        if 'policy' in s:cmd+=['--commander-policy' if s.get('commander') else '--launch-policy',s['policy'],'--policy-seed',str(seed)]
         if s.get('model'):cmd+=['--commander-model' if s.get('commander') else '--launch-model',s['model']]
         if s.get('scope'):cmd+=['--operation-scope',s['scope']]
         if s.get('deterministic'):cmd+=['--commander-deterministic' if s.get('commander') else '--launch-deterministic']
@@ -94,14 +126,16 @@ def main():
         if 'native' in p:cmd+=['--opponent',p['native']]
         elif 'release' in p:cmd+=['--opponent-release',p['release']]
         else:cmd+=['--opponent-release',releases[(p['ref'],p.get('mode','bastion'))]]
-        if repeat%2:cmd+=['--swap']
+        if global_index%2:cmd+=['--swap']
+        if gate:cmd+=['--initialization-gate',gate]
         attempt=time.monotonic();error=None;reason='execution_error';training_eligible=False
         try:
-            with (directory/'console.log').open('w') as log:subprocess.run(cmd,stdout=log,stderr=subprocess.STDOUT,check=True,timeout=seconds+45)
+            with (directory/'console.log').open('w') as log:subprocess.run(cmd,stdout=log,stderr=subprocess.STDOUT,check=True,timeout=seconds+45+(300 if gate else 0))
             result=json.loads((directory/'result.json').read_text());m=json.loads((directory/'manifest.json').read_text())
             status,reason,training_eligible=classify(result,m)
         except Exception as exc:error=f'{type(exc).__name__}: {exc}';result={};status='E'
-        row={'map':map_name,'opponent':opponent,'repeat':repeat,'subject':subject,'outcome':status,'termination':reason,'trainingEligible':training_eligible,'tick':result.get('tick'),'seconds':time.monotonic()-attempt,'dir':str(directory),'error':error}
+        row={'map':map_name,'opponent':opponent,'repeat':repeat,'subject':subject,'outcome':status,'termination':reason,'trainingEligible':training_eligible,'tick':result.get('tick'),'seconds':time.monotonic()-attempt,'dir':str(directory),'error':error,
+            **scheduling,'initialization':result.get('initialization'),'initializationTiming':result.get('initializationTiming')}
         if completed.parent!=directory:atomic(directory/'batch-row.json',row)
         atomic(completed,row)
         # The child has exited and its completion marker is durable. Archive while
@@ -117,7 +151,7 @@ def main():
         for future in concurrent.futures.as_completed(futures):
             row=future.result();rows.append(row);elapsed=time.monotonic()-started
             counts={s:{o:sum(r['subject']==s and r['outcome']==o for r in rows) for o in ['W','L','U','E']} for s in plan['subjects']}
-            atomic(root/'summary.json',{'rows':rows,'counts':counts,'completed':len(rows),'planned':len(tasks),'elapsedSeconds':elapsed,'workers':workers,'complete':len(rows)==len(tasks)})
+            atomic(root/'summary.json',{'rows':rows,'counts':counts,'completed':len(rows),'planned':len(tasks),'elapsedSeconds':elapsed,'workers':workers,'complete':len(rows)==len(tasks),'initialization':initialization_summary(rows)})
             print(json.dumps({'completed':len(rows),'planned':len(tasks),'last':row,'counts':counts}),flush=True)
     for subject in plan['subjects']:
         atomic(root/f'{subject}-episodes.json',[r['dir'] for r in rows if r['subject']==subject and r.get('trainingEligible',r['outcome']!='E')])

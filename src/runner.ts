@@ -31,6 +31,10 @@ import { POLICY_VERSION, POLICY_MODES, type PolicyMode } from "./policy.js";
 import { SupalosaOpponent, SUPALOSA_VERSION } from "./opponent.js";
 import { policyPlayerName } from "./player-identity.js";
 import { recordDestruction } from "./referee.js";
+import {
+  createWithInitializationGate,
+  offlineInitialization,
+} from "./engine-initialization.js";
 import { createOfficialOpponent } from "./official-opponent.js";
 import { loadBotRelease, type DrivenBot } from "./bot-release.js";
 import { DecisionShadow, ShadowMismatch } from "./analysis/shadow.js";
@@ -90,6 +94,7 @@ const { values } = parseArgs({
     "policy-seed": { type: "string", default: "0" },
     "launch-deterministic": { type: "boolean", default: false },
     "trace-level": { type: "string", default: "full" },
+    "initialization-gate": { type: "string" },
   },
 });
 const start = performance.now();
@@ -509,6 +514,7 @@ async function main(): Promise<void> {
         "src/effects.ts",
         "src/referee.ts",
         "src/engine-diagnostics.mjs",
+        "src/engine-initialization.ts",
         "src/bot-release.ts",
         "src/player-identity.ts",
         "src/control/launch-provider.ts",
@@ -526,7 +532,8 @@ async function main(): Promise<void> {
       name,
       sha256: sha256(`${mixDir}/${name}`),
     })),
-    randomness: "engine uncontrolled; starts recorded after initialization",
+    randomness:
+      "engine PRNG input source recorded from native replay; no seeded reset or controlled starts",
     limits: { ticks: Number(values.ticks), seconds: Number(values.seconds) },
   };
   writeFileSync(`${dir}/manifest.json`, JSON.stringify(manifest, null, 2));
@@ -544,7 +551,15 @@ async function main(): Promise<void> {
     superWeapons: false,
     unitCount: Number(values.units),
   };
-  game = await cdapi.createGame(options);
+  const creation = await createWithInitializationGate(
+    () => cdapi.createGame(options),
+    values["initialization-gate"],
+  );
+  game = creation.value;
+  // Gate waiting is orchestration time, separate from the playable game budget.
+  const gameBudgetStart = values["initialization-gate"]
+    ? performance.now()
+    : start;
   const runningGame = game;
   const rulesHash = createHash("sha256")
     .update(game.gameApi.getRulesIni().toString())
@@ -564,6 +579,7 @@ async function main(): Promise<void> {
       {
         players: initial,
         rulesHash,
+        initializationTiming: creation.timing,
         allied: game.gameApi.areAlliedPlayers(agents[0].name, agents[1].name),
         options: { ...options, agents: initial.map((p) => p.name) },
       },
@@ -580,7 +596,7 @@ async function main(): Promise<void> {
     while (
       !game.isFinished() &&
       game.getCurrentTick() < manifest.limits.ticks &&
-      (performance.now() - start) / 1000 < manifest.limits.seconds
+      (performance.now() - gameBudgetStart) / 1000 < manifest.limits.seconds
     ) {
       if (game.getCurrentTick() % 3 === 0) {
         const t = performance.now();
@@ -662,6 +678,19 @@ async function main(): Promise<void> {
       : { type: "outcome_unresolved" };
   const replay = game.saveReplay(dir);
   const replayMetadata = Replay.parse(readFileSync(replay, "utf8"));
+  const initialization = offlineInitialization(replayMetadata, rulesHash);
+  writeFileSync(
+    `${dir}/manifest.json`,
+    JSON.stringify(
+      {
+        ...manifest,
+        initialization,
+        initializationTiming: creation.timing,
+      },
+      null,
+      2,
+    ),
+  );
   const stopState = (
     engine as unknown as {
       warbookReadStopState: (instance: unknown) => {
@@ -686,6 +715,8 @@ async function main(): Promise<void> {
     wallSeconds: (performance.now() - start) / 1000,
     isFinished: game.isFinished(),
     stats,
+    initialization,
+    initializationTiming: creation.timing,
     error,
     replay: {
       file: replay,
