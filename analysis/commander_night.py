@@ -142,7 +142,7 @@ def main():
     if args.finalize_from:
         original=json.loads((Path(args.finalize_from)/'plan.json').read_text())
         for field in ['maps','profiles','strongReference','finalRounds','crossFinal','crossFinalRounds',
-                      'evaluationSchedule','initializationGate','evaluationRepeatOffset']:
+                      'evaluationSchedule','initializationGate','evaluationRepeatOffset','gameSeconds']:
             if plan.get(field)!=original.get(field):raise ValueError('Finalization must preserve the original comparison protocol')
         state=finalization_snapshot(args.finalize_from)
         if state['source']!=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip():raise ValueError('Finalize from the original frozen working directory')
@@ -176,7 +176,7 @@ def main():
         return json.loads(log.read_text().splitlines()[-1])['path']
     spec=policy_spec
     def batch(directory,subjects,opponents,rounds,workers,seed,comparison=True,repeat_offset=0):
-        directory.mkdir(parents=True,exist_ok=True);p={'maps':plan['maps'],'rounds':rounds,'workers':workers,'trace':'launch','seconds':600,'storageMiBPerGame':192,'orderSeed':seed,'subjects':subjects,'opponents':opponents}
+        directory.mkdir(parents=True,exist_ok=True);p={'maps':plan['maps'],'rounds':rounds,'workers':workers,'trace':'launch','seconds':plan.get('gameSeconds',600),'storageMiBPerGame':192,'orderSeed':seed,'subjects':subjects,'opponents':opponents}
         p.update(comparison_protocol(plan,comparison,repeat_offset))
         atomic(directory/'plan.json',p)
         try:command([python,'analysis/launch_batch.py',str(directory/'plan.json'),'--out',str(directory/'games')],directory/'batch.log')
