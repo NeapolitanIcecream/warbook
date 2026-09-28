@@ -9,7 +9,9 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import signal
+import stat
 import subprocess
 import sys
 import time
@@ -80,6 +82,115 @@ def stop_scope(directory):
     return sorted(known)
 
 
+def private_initialization_gate(original_plan, run, cwd):
+    value = original_plan.get('initializationGate')
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError('initializationGate must be a nonempty path')
+    path = Path(value)
+    gate = (path if path.is_absolute() else Path(cwd) / path).resolve()
+    run = Path(run).resolve()
+    if gate == run or not gate.is_relative_to(run):
+        raise ValueError('Initialization gate must be strictly inside the registered run root')
+    return gate
+
+
+def initialization_gate_users(gate):
+    """Find flag users across the host, including processes outside our cwd."""
+    users = []
+    for process in psutil.process_iter():
+        try:
+            command = process.cmdline()
+            values = [argument.split('=', 1)[1] for argument in command
+                      if argument.startswith('--initialization-gate=')]
+            values += [command[i + 1] for i, argument in enumerate(command[:-1])
+                       if argument == '--initialization-gate']
+            for value in values:
+                path = Path(value)
+                candidate = (path if path.is_absolute() else Path(process.cwd()) / path).resolve()
+                if candidate == gate and live(process):
+                    users.append(process.pid)
+                    break
+        except psutil.NoSuchProcess:
+            continue
+        except psutil.AccessDenied as error:
+            raise RuntimeError(f'Cannot verify initialization gate users: PID {process.pid}') from error
+    return sorted(users)
+
+
+def cleanup_initialization_gate(original_plan, run, cwd, receipt=None):
+    """Remove only stale gate tickets/owner after this run's scope is empty.
+
+    This is supervisor recovery, not a competing gate lock implementation.
+    The private path and absence of live users also permit a killed partial write.
+    """
+    gate = private_initialization_gate(original_plan, run, cwd)
+    if gate is None:
+        return None
+    receipt = {} if receipt is None else receipt
+    receipt.update(gate=str(gate), startedAt=time.time(), removed=[], complete=False)
+
+    def require_empty():
+        occupied = [p.pid for p in scope_processes(cwd)]
+        users = initialization_gate_users(gate)
+        if occupied or users:
+            raise RuntimeError(f'Cannot clean initialization gate with live users: scope={occupied}, gate={users}')
+
+    def require_dead(pids, path):
+        for pid in pids:
+            try:
+                if live(psutil.Process(pid)):
+                    raise RuntimeError(f'Initialization gate file names a live PID {pid}: {path}')
+            except psutil.NoSuchProcess:
+                pass
+
+    require_empty()
+    if gate.exists() and not gate.is_dir():
+        raise ValueError('Initialization gate is not a directory')
+    # Owner is last: until it is removed a new caller cannot acquire that lock.
+    paths = sorted(gate.glob('pending-*.json'))
+    if (gate / 'owner.json').exists() or (gate / 'owner.json').is_symlink():
+        paths.append(gate / 'owner.json')
+    entries = []
+    for path in paths:
+        info = path.lstat()
+        if not stat.S_ISREG(info.st_mode):
+            raise ValueError(f'Initialization gate ephemeral file is not regular: {path}')
+        pids = set()
+        try:
+            owner = json.loads(path.read_text())
+            pid = owner.get('pid') if isinstance(owner, dict) else None
+            valid = type(pid) is int and pid > 0
+            if valid:
+                pids.add(pid)
+        except (ValueError, UnicodeError):
+            valid = False
+        # FIFO ticket names retain the PID even if its JSON write was interrupted.
+        named = re.match(r'^pending-\d+-(\d+)-', path.name)
+        if named:
+            pids.add(int(named.group(1)))
+        require_dead(pids, path)
+        entries.append((path, info, {'file': path.name, 'pids': sorted(pids),
+                                     'content': 'valid-owner' if valid else 'partial-or-malformed'}))
+    # Recheck after reading files. New users/files are never silently taken over.
+    require_empty()
+    receipt['emptyScopeVerifiedAt'] = time.time()
+    for path, before, record in entries:
+        current = path.lstat()
+        signature = lambda s: (s.st_dev, s.st_ino, s.st_mtime_ns, s.st_size)
+        if signature(current) != signature(before):
+            raise RuntimeError(f'Initialization gate file changed during cleanup: {path}')
+        require_dead(record['pids'], path)
+        path.unlink()
+        receipt['removed'].append(record)
+    require_empty()
+    if (gate / 'owner.json').exists() or list(gate.glob('pending-*.json')):
+        raise RuntimeError(f'Initialization gate gained new ephemeral files during cleanup: {gate}')
+    receipt.update(complete=True, completedAt=time.time(), stateFilePreserved=True)
+    return receipt
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('plan')
@@ -105,6 +216,7 @@ def main():
     if not time.time() < cutoff <= training_end < evaluation_end < release:
         raise ValueError('Expected future ordered cutoffs with a cleanup reserve')
     original = json.loads((run / 'plan.json').read_text())
+    gate = private_initialization_gate(original, run, cwd)
     final_plan = {**original, 'trainingCutoff': plan['trainingCutoff'],
                   'trainingPhaseDeadline': plan['trainingPhaseDeadline'], 'hardDeadline': plan['evaluationDeadline']}
     atomic(root / 'final-plan.json', final_plan)
@@ -140,6 +252,12 @@ def main():
         state['stoppedProcesses'] = stop_scope(cwd)
         completed = phase() in ['complete', 'complete_with_failures']
         if not completed and time.time() + 60 < evaluation_end:
+            if gate is not None:
+                # stop_scope has verified emptiness. Preserve a partial receipt
+                # in supervisor state even if recovery refuses before finalizing.
+                state['initializationGateCleanup'] = {}
+                cleanup_initialization_gate(original, run, cwd, state['initializationGateCleanup'])
+                save()
             atomic(run / 'operator-stop.json', {'reason': 'Shortened server resource budget',
                    'lease': str(root), 'stoppedAt': time.time(), 'originalPhase': phase()})
             state.update(phase='final-evaluation', finalization=str(root / 'finalization'))
