@@ -99,7 +99,7 @@ export function commanderArtifactEncoding(
   }
   throw new Error("Unsupported commander artifact format");
 }
-/** v4 keeps the v2 grammar and optionally changes production sampling only. */
+/** Production sampling overrides leave the v4 action grammar unchanged. */
 export interface ProductionTemperatures {
   queue?: number;
   amount?: number;
