@@ -47,6 +47,8 @@ Pro10建议独立比较原评分R、把当前任务有效logit并入canonical KE
 
 已验证案例及脚本：`work/commander-depth-20260928/keep-parameterization/`、`tank-oscillation*`、`tank-role-logits*`。旧main47-minus100桥头片段可做失效诊断，不进入训练标签/奖励。法国冰天打法仍只作人类侧能力思想实验，不进入示范、课程、奖励或模板。完整战略归模型、固定机械执行器、消费级Mac推理仍是设计基础。
 
+29日原因追问增加了一个约24秒的离线复查：pressure83最终cycle15在原先16个旧失败状态、相同已发生动作前缀下，近基地目标条件概率最高仍仅0.0353%，任一坦克改派最高0.0841%。各模型使用自己的连续记忆，C0数值参考复现；这是局部反事实，不能当作新模型自由运行的探索频率。脚本/证据在`work/commander-harvest-20260929/exploration-followup*`，没有新训练或对局。
+
 ## 昨日证据与清理
 
 [日间深度曲线](docs/learning-depth-cycle.md)：旧hidden深端点偏差已修；P−100对50%、同50%的保持项四谱系均负方向。唯一600秒截断保留，统一1800秒的56局复核均正常。
