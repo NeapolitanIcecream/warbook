@@ -4,6 +4,14 @@ from pathlib import Path
 from launch_batch import atomic
 from experiment_storage import require_batch_space
 
+def model_encoding(artifact):
+    # Keep the lightweight scheduler independent of torch imports.
+    if artifact.get('format')=='warbook-commander-model-v2':
+        if 'encoding' in artifact or 'memberScoring' not in artifact:
+            raise ValueError('Invalid v2 commander policy contract')
+        return artifact.get('actionEncoding')
+    return artifact.get('encoding')
+
 class TrainingBoundary(TimeoutError):pass
 
 def verified_candidate_receipts(root):
@@ -218,7 +226,7 @@ def main():
             model=train(p,plan['anchors'][item['route']],None,directory/'initial.json','bc',plan.get('freshUpdates',1600))
         elif item.get('copyInput'):
             original=Path(item['input']);artifact=json.loads(original.read_text())
-            if artifact['encoding']!=item['encoding'] or artifact.get('temperature',1.)!=item.get('temperature',artifact.get('temperature',1.)):raise ValueError('Exact initializer grammar/temperature mismatch')
+            if model_encoding(artifact)!=item['encoding'] or artifact.get('temperature',1.)!=item.get('temperature',artifact.get('temperature',1.)):raise ValueError('Exact initializer grammar/temperature mismatch')
             model=directory/'initial.json';shutil.copyfile(original,model)
             for suffix in ['.golden.json','.optimizer.pt']:
                 src=original.with_suffix(suffix)

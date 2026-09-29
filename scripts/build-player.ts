@@ -73,7 +73,9 @@ let release = {
   sha256,
   version: POLICY_VERSION,
   mode: launchModel
-    ? launchModel.format === "warbook-commander-model-v1"
+    ? ["warbook-commander-model-v1", "warbook-commander-model-v2"].includes(
+        launchModel.format,
+      )
       ? "learned-commander"
       : [
             "operation-v2",

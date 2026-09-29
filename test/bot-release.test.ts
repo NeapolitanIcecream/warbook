@@ -172,3 +172,33 @@ test("native finite batches cannot be enabled on a non-commander frozen build", 
     /require a commander model/,
   );
 });
+
+test("frozen member scoring metadata cannot claim a different policy than the code", async () => {
+  const release = await buildBot("HEAD");
+  const dir = mkdtempSync(resolve("work/bot-member-scoring-test-"));
+  try {
+    copyFileSync(resolve(release.path, "../bot.mjs"), `${dir}/bot.mjs`);
+    const metadata = JSON.parse(readFileSync(release.path, "utf8"));
+    writeFileSync(
+      `${dir}/release.json`,
+      JSON.stringify({
+        ...metadata,
+        commanderMemberScoring: { mode: "separate-v1" },
+      }),
+    );
+    assert((await loadBotRelease(`${dir}/release.json`, "LegacyScoring")).bot);
+    writeFileSync(
+      `${dir}/release.json`,
+      JSON.stringify({
+        ...metadata,
+        commanderMemberScoring: { mode: "current-task-keep-v1" },
+      }),
+    );
+    await assert.rejects(
+      loadBotRelease(`${dir}/release.json`, "WrongScoring"),
+      /member scoring differs/,
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

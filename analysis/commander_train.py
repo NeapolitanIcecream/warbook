@@ -6,7 +6,7 @@ import numpy as np
 import torch
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel
-from commander_model import CommanderModel,pack,pack_actions,export,HIDDEN,FIELDS,ENCODINGS,recorded_temperature_config
+from commander_model import CommanderModel,pack,pack_actions,export,HIDDEN,FIELDS,ENCODINGS,recorded_temperature_config,recorded_member_scoring_config,artifact_encoding
 from experiment_storage import open_text
 from launch_outcome import classify
 from commander_sequence import stream_batches,unique_batches,event_weight,training_action,canonical_action
@@ -47,8 +47,9 @@ def read_episode(path,compact=True):
       'encoderSha':manifest.get('sourceHashes',{}).get('src/commander/world.ts')}
 
 def load_model(artifact):
-    model=CommanderModel(artifact['vocabulary'],artifact['encoding'],artifact.get('temperature',1.),
-      **({'production_temperatures':artifact['productionTemperatures']} if 'productionTemperatures' in artifact else {}))
+    model=CommanderModel(artifact['vocabulary'],artifact_encoding(artifact),artifact.get('temperature',1.),
+      **({'production_temperatures':artifact['productionTemperatures']} if 'productionTemperatures' in artifact else {}),
+      **({'member_scoring':artifact['memberScoring']} if 'memberScoring' in artifact else {}))
     model.load_state_dict({name:torch.tensor(x['values'],dtype=torch.float32).reshape(x['shape']) for name,x in artifact['tensors'].items()})
     return model
 
@@ -61,10 +62,12 @@ def validate_ppo_behavior(episodes,model,expected_sha):
         if episode['deterministic']:raise ValueError('Greedy behavior is not the recorded stochastic PPO distribution')
         if episode['modelSha']!=expected_sha:raise ValueError('Mixed behavior checkpoints')
         if recorded_temperature_config(episode['behavior'])!=expected:raise ValueError('PPO manifest temperature/encoding mismatch')
+        if recorded_member_scoring_config(episode['behavior'])!=model.member_scoring:raise ValueError('PPO manifest member scoring mismatch')
         for row in episode['rows']:
             if row['encoding']!=model.encoding:raise ValueError('PPO behavior encoding mismatch')
             if row['executionSource']=='policy':
                 if recorded_temperature_config(row)!=expected:raise ValueError('PPO behavior temperature mismatch')
+                if recorded_member_scoring_config(row)!=model.member_scoring:raise ValueError('PPO behavior member scoring mismatch')
                 if model.encoding=='graph-plan-v3' and 'edits' not in row['action']:raise ValueError('PPO needs the recorded edit decisions; do not infer latent choices')
 
 def configure_bc_temperature(model,temperature):
@@ -344,8 +347,8 @@ def prepare_retention(args,model,train,rank,world_size,encoder_sha,execution_mod
     reference=Path(args.retention_reference);reference_sha=hashlib.sha256(reference.read_bytes()).hexdigest()
     # Loading the reference must not consume the PPO model's random stream.
     with torch.random.fork_rng():teacher=load_model(json.loads(reference.read_text()))
-    if (teacher.vocabulary,teacher.encoding,teacher.temperature,teacher.effective_production_temperatures())!=(model.vocabulary,model.encoding,model.temperature,model.effective_production_temperatures()):
-        raise ValueError('Retention reference must preserve vocabulary, encoding and deployment temperatures')
+    if (teacher.vocabulary,teacher.encoding,teacher.temperature,teacher.effective_production_temperatures(),teacher.member_scoring)!=(model.vocabulary,model.encoding,model.temperature,model.effective_production_temperatures(),model.member_scoring):
+        raise ValueError('Retention reference must preserve vocabulary, encoding, deployment temperatures and member scoring')
     teacher.eval();teacher.requires_grad_(False)
     path=Path(args.retention_episodes);fixed_paths=json.loads(path.read_text())
     if not isinstance(fixed_paths,list) or not fixed_paths or len(set(fixed_paths))!=len(fixed_paths):
@@ -362,6 +365,8 @@ def prepare_retention(args,model,train,rank,world_size,encoder_sha,execution_mod
             raise ValueError('Fixed anchors use a different production executor')
         if recorded_temperature_config(episode['behavior'])!=(teacher.encoding,teacher.temperature,teacher.effective_production_temperatures()):
             raise ValueError('Fixed anchor deployment temperature mismatch')
+        if recorded_member_scoring_config(episode['behavior'])!=teacher.member_scoring:
+            raise ValueError('Fixed anchor member scoring mismatch')
         fixed.append(episode);by_path[episode['path']]=episode
     pools=[anchor_windows(fixed,args.sequence),anchor_windows(train,args.sequence)]
     counts=all_objects([len(pool) for pool in pools],world_size)
@@ -554,7 +559,7 @@ def main():
                 'git':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),
                 'worldSize':world_size,'sequence':args.sequence,'burnIn':args.burn,'bcEventWeight':args.bc_event_weight,'bcLoss':args.bc_loss,
                 **accumulation_info,'trainingUsage':usage,'executionModes':sorted(execution_modes),
-                'encoding':model.encoding,'temperature':model.temperature,'learningRate':learning_rate,'bcMemory':'continuous episode carry','objective':'terminal MC; checkpoint before final validation'}
+                'encoding':model.encoding,'temperature':model.temperature,'memberScoring':dict(model.member_scoring),'learningRate':learning_rate,'bcMemory':'continuous episode carry','objective':'terminal MC; checkpoint before final validation'}
             if coverage is not None or retention_info is not None:
                 info['optimizerStart']='restored' if optimizer_sha else 'cold';info['inputOptimizerSha256']=optimizer_sha
             if model.encoding=='graph-plan-v4':info['productionTemperatures']=model.effective_production_temperatures()
@@ -661,7 +666,7 @@ def main():
       **accumulation_info,'trainingUsage':usage,'executionModes':sorted(execution_modes),'productionEventsSha256':hashlib.sha256(event_path.read_bytes()).hexdigest(),
       'padding':'Zero-loss empty ranks, no repeated training windows','bcEventWeight':args.bc_event_weight,'bcMemory':'Chronological whole episodes with detached carried hidden state',
       'bcLoss':args.bc_loss,'bcFactorNormalization':'Per frame: mean across active domains; changed factors weighted directly; one mean KEEP negative per domain; global valid-frame DDP mean',
-      'encoding':model.encoding,'temperature':model.temperature,'learningRate':learning_rate,'optimizerStart':'restored' if optimizer_sha else 'cold','inputOptimizerSha256':optimizer_sha,'episodeMemory':'float32 feature blocks and int32 edges; identical pack tensors','validationFraction':args.validation_fraction,'labelAdapter':'v2 confirms retyped members; v3 BC labels edit decisions from demonstrated plan changes; PPO retains recorded choices',
+      'encoding':model.encoding,'temperature':model.temperature,'memberScoring':dict(model.member_scoring),'learningRate':learning_rate,'optimizerStart':'restored' if optimizer_sha else 'cold','inputOptimizerSha256':optimizer_sha,'episodeMemory':'float32 feature blocks and int32 edges; identical pack tensors','validationFraction':args.validation_fraction,'labelAdapter':'v2 confirms retyped members; v3 BC labels edit decisions from demonstrated plan changes; PPO retains recorded choices',
       'trainingEpisodes':[p for d in details for p in d['paths']],'validationEpisodes':validation,'excluded':[p for d in details for p in d['excluded']],
       'inputSha256':hashlib.sha256(Path(args.input).read_bytes()).hexdigest() if args.input else None,
       'labels':'BC uses explicit teacherAction where recorded; PPO uses executed action only',

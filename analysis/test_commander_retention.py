@@ -243,6 +243,9 @@ class RetentionTests(unittest.TestCase):
         student.change_production_temperatures({'amount':1.})
         with self.assertRaisesRegex(ValueError,'configuration mismatch'):retention_batch(student,teacher,cache,[])
         student=copy.deepcopy(teacher)
+        student.change_member_scoring({'mode':'current-task-keep-v1'})
+        with self.assertRaisesRegex(ValueError,'configuration mismatch'):retention_batch(student,teacher,cache,[])
+        student=copy.deepcopy(teacher)
         with torch.no_grad():teacher.queueSpecial.bias.add_(.01)
         with self.assertRaisesRegex(ValueError,'teacher changed'):retention_batch(student,teacher,cache,[])
 

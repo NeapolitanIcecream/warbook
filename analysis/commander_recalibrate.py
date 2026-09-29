@@ -17,7 +17,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from commander_model import AMOUNTS,FLOORS,pack,pack_actions,export,recorded_temperature_config
+from commander_model import AMOUNTS,FLOORS,pack,pack_actions,export,recorded_temperature_config,recorded_member_scoring_config
 from commander_train import load_model,compact_world,golden
 from experiment_storage import open_text
 from launch_outcome import classify
@@ -91,6 +91,7 @@ def selected_records(game,parent,parent_sha):
     if behavior.get('modelSha256')!=parent_sha or behavior.get('deterministic'):
         raise ValueError('Sources must use the recorded stochastic parent')
     if recorded_temperature_config(behavior)!=expected:raise ValueError('Source behavior configuration mismatch')
+    if recorded_member_scoring_config(behavior)!=parent.member_scoring:raise ValueError('Source member scoring mismatch')
     actor=next(p['name'] for p in manifest['participants'] if p['role']=='subject')
     def records():
         with open_text(path/'decisions.ndjson') as stream:
@@ -100,7 +101,7 @@ def selected_records(game,parent,parent_sha):
                 if event.get('kind')=='commander_decision' and event.get('actor')==actor:yield event['record']
     events=[];previous=None;first_tick=None;count=0
     for row in records():
-        if row['schema']!='commander-v1' or row['executionSource']!='policy' or recorded_temperature_config(row)!=expected:
+        if row['schema']!='commander-v1' or row['executionSource']!='policy' or recorded_temperature_config(row)!=expected or recorded_member_scoring_config(row)!=parent.member_scoring:
             raise ValueError('Source contains a different actor, encoding or temperature')
         if previous is not None and row['tick']-previous!=75:raise ValueError('Missing strategy decision')
         previous=row['tick'];first_tick=row['tick'] if first_tick is None else first_tick;count+=1

@@ -248,6 +248,7 @@ test("v4 decision records contain every effective production temperature", () =>
     encoding: "graph-plan-v4",
     temperature: 0.01,
     productionTemperatures: { cash: 3 },
+    memberScoring: { mode: "current-task-keep-v1" },
     predict(world, hidden) {
       return {
         action: keepAction(world),
@@ -269,5 +270,8 @@ test("v4 decision records contain every effective production temperature", () =>
     cash: 3,
   });
   assert.equal(commander.record?.temperature, 0.01);
+  assert.deepEqual(commander.record?.memberScoring, {
+    mode: "current-task-keep-v1",
+  });
   assert.equal(commander.record?.action.edits, undefined);
 });

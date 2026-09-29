@@ -10,20 +10,26 @@ import {
 } from "./world.js";
 import {
   actionEdits,
+  commanderArtifactEncoding,
   commanderRoleMask,
+  memberKeepEligible,
+  resolveMemberScoring,
   resolveProductionTemperatures,
   type CommanderEncoding,
   type ProductionTemperatures,
+  type MemberScoring,
   type EncodedCommanderAction as CommanderAction,
 } from "./action-mask.js";
 
 export interface CommanderModel {
-  format: "warbook-commander-model-v1";
+  format: "warbook-commander-model-v1" | "warbook-commander-model-v2";
   schema: "commander-v1";
-  encoding: CommanderEncoding;
+  encoding?: CommanderEncoding;
+  actionEncoding?: CommanderEncoding;
   hidden: number;
   temperature?: number;
   productionTemperatures?: ProductionTemperatures;
+  memberScoring?: MemberScoring;
   vocabulary: string[];
   tensors: Record<string, { shape: number[]; values: number[] }>;
   training?: Record<string, unknown>;
@@ -35,9 +41,7 @@ export async function prepareCommander() {
 
 /** Mirrors the small PyTorch model; recurrent state belongs to each game controller. */
 export class NeuralCommanderPolicy implements CommanderPolicy {
-  get encoding() {
-    return this.artifact.encoding;
-  }
+  readonly encoding: CommanderEncoding;
   get temperature() {
     return this.artifact.temperature === undefined
       ? 1
@@ -45,23 +49,15 @@ export class NeuralCommanderPolicy implements CommanderPolicy {
   }
   readonly hiddenSize: number;
   readonly productionTemperatures?: Readonly<Required<ProductionTemperatures>>;
+  readonly memberScoring: Readonly<MemberScoring>;
   private tensors: Record<string, tf.Tensor> = {};
   private names: Map<string, number>;
   constructor(
     readonly artifact: CommanderModel,
     private collectProbabilities = false,
   ) {
-    if (
-      artifact.format !== "warbook-commander-model-v1" ||
-      artifact.schema !== "commander-v1" ||
-      ![
-        "graph-plan-v1",
-        "graph-plan-v2",
-        "graph-plan-v3",
-        "graph-plan-v4",
-      ].includes(artifact.encoding) ||
-      artifact.hidden !== 128
-    )
+    this.encoding = commanderArtifactEncoding(artifact);
+    if (artifact.schema !== "commander-v1" || artifact.hidden !== 128)
       throw new Error("Unsupported commander artifact");
     const productionTemperatures = resolveProductionTemperatures(
       this.encoding,
@@ -70,6 +66,11 @@ export class NeuralCommanderPolicy implements CommanderPolicy {
     );
     if (this.encoding === "graph-plan-v4")
       this.productionTemperatures = Object.freeze(productionTemperatures);
+    const memberScoring = resolveMemberScoring(
+      this.encoding,
+      artifact.memberScoring,
+    );
+    this.memberScoring = Object.freeze(memberScoring);
     this.hiddenSize = artifact.hidden;
     this.names = new Map(artifact.vocabulary.map((n, i) => [n, i + 1]));
     for (const [name, value] of Object.entries(artifact.tensors)) {
@@ -233,6 +234,11 @@ export class NeuralCommanderPolicy implements CommanderPolicy {
         logits: tf.Tensor2D,
         masks: boolean[][],
         given?: number[],
+        adjustRow?: (
+          values: number[],
+          row: number,
+          temperature: number,
+        ) => void,
       ) => {
         const family = /^(queue|amount|cash)\d$/.exec(name)?.[1] as
           keyof ProductionTemperatures | undefined;
@@ -247,6 +253,7 @@ export class NeuralCommanderPolicy implements CommanderPolicy {
           if (mask.length !== width || !mask.some(Boolean))
             throw new Error(`Empty/mismatched ${name} mask`);
           const values = Array.from(raw.slice(i * width, (i + 1) * width));
+          adjustRow?.(values, i, temperature);
           const maximum = Math.max(...values.filter((_, j) => mask[j]));
           const exp = values.map((v, j) =>
               mask[j] ? Math.exp((v - maximum) / temperature) : 0,
@@ -451,6 +458,26 @@ export class NeuralCommanderPolicy implements CommanderPolicy {
         roleMasks.some((mask) => !mask[KEEP_UNIT]),
         w.unitRefs.length > 0,
       );
+      const memberScoring = this.memberScoring;
+      const adjustMemberRow =
+        memberScoring.mode === "separate-v1" ||
+        (memberScoring.mode === "keep-bias-v1" && memberScoring.bias === 0)
+          ? undefined
+          : (values: number[], i: number, temperature: number) => {
+              if (!memberKeepEligible(w, i, a.kinds, roleMasks[i])) return;
+              const keep = values[KEEP_UNIT] / temperature;
+              let effectiveKeep: number;
+              if (memberScoring.mode === "current-task-keep-v1") {
+                const current = values[w.previousRoles[i]] / temperature,
+                  maximum = Math.max(keep, current);
+                effectiveKeep =
+                  maximum +
+                  Math.log1p(Math.exp(Math.min(keep, current) - maximum));
+              } else effectiveKeep = keep + memberScoring.bias;
+              // choose() expects raw-domain values. Preserve this adjustment in
+              // JS double precision; a TF float32 round trip changes low-T odds.
+              values[KEEP_UNIT] = effectiveKeep * temperature;
+            };
       a.units = choose(
         "unit",
         tf.div(tf.matMul(uq, roleKeys, false, true), 8) as tf.Tensor2D,
@@ -458,6 +485,7 @@ export class NeuralCommanderPolicy implements CommanderPolicy {
           mask.map((allowed, j) => allowed && (editUnits || j === KEEP_UNIT)),
         ),
         forced?.units,
+        adjustMemberRow,
       );
       const bq = dense(
         cat([gather(e, w.buildingIndices), tile(h, w.buildingRefs.length)]),

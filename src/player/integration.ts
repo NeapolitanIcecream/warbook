@@ -42,6 +42,15 @@ declare const __WARBOOK_LAUNCH_MODEL__:
   LaunchModel | LinearLaunchModel | CommanderModel | null;
 declare const __WARBOOK_TACTICAL_MODEL__: TacticalModel | null;
 
+function isCommanderArtifact(
+  artifact: typeof __WARBOOK_LAUNCH_MODEL__,
+): artifact is CommanderModel {
+  return (
+    artifact?.format === "warbook-commander-model-v1" ||
+    artifact?.format === "warbook-commander-model-v2"
+  );
+}
+
 declare global {
   var SystemJS: { import(name: string): Promise<any> };
   var WarbookSession: {
@@ -91,7 +100,7 @@ export async function install(): Promise<void> {
       }
       const artifact = __WARBOOK_LAUNCH_MODEL__;
       if (!artifact) return;
-      if (artifact.format === "warbook-commander-model-v1") {
+      if (isCommanderArtifact(artifact)) {
         await prepareCommander();
         commanderPolicy = new NeuralCommanderPolicy(artifact);
         return;
@@ -153,10 +162,9 @@ export async function install(): Promise<void> {
       throw new Error("Armor skill was not prepared before game creation");
     if (__WARBOOK_LAUNCH_MODEL__ && !launchPolicy && !commanderPolicy)
       throw new Error("Launch model was not prepared before game creation");
-    const artifact =
-      __WARBOOK_LAUNCH_MODEL__?.format === "warbook-commander-model-v1"
-        ? null
-        : __WARBOOK_LAUNCH_MODEL__;
+    const artifact = isCommanderArtifact(__WARBOOK_LAUNCH_MODEL__)
+      ? null
+      : __WARBOOK_LAUNCH_MODEL__;
     const operation =
       launchPolicy &&
       artifact &&

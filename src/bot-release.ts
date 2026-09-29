@@ -5,6 +5,10 @@ import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { Observation, Intent } from "./model.js";
 import type { Trace } from "./bridge.js";
+import {
+  resolveMemberScoring,
+  type MemberScoring,
+} from "./commander/action-mask.js";
 
 export interface DrivenBot extends Bot {
   mode: string;
@@ -33,6 +37,7 @@ export interface BotRelease {
   maneuverScope?: "base" | "local";
   /** Absent on older releases means the original single-item executor. */
   commanderExecutionMode?: "single-item-v1" | "native-finite-batches-v1";
+  commanderMemberScoring?: MemberScoring;
   apiSha256: string;
   resourceSha256: string;
   lockSha256: string;
@@ -88,6 +93,21 @@ export async function loadBotRelease(
     (release.commanderExecutionMode ?? "single-item-v1")
   )
     throw new Error("Frozen commander execution mode differs from its code");
+  if (
+    release.commanderMemberScoring !== undefined ||
+    module.commanderMemberScoring !== undefined
+  ) {
+    const declared = resolveMemberScoring(
+      "graph-plan-v4",
+      release.commanderMemberScoring,
+    );
+    const actual = resolveMemberScoring(
+      "graph-plan-v4",
+      module.commanderMemberScoring,
+    );
+    if (JSON.stringify(declared) !== JSON.stringify(actual))
+      throw new Error("Frozen commander member scoring differs from its code");
+  }
   const bot: DrivenBot = module.createBot(
     typeof name === "function" ? name(release) : name,
   );

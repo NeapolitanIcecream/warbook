@@ -28,6 +28,39 @@ def validate_production_temperatures(encoding,overrides=_UNSET):
     if not isinstance(overrides,dict) or set(overrides)-set(PRODUCTION_FAMILIES):raise ValueError('Invalid production temperatures')
     return {key:validate_temperature(value) for key,value in overrides.items()}
 
+def validate_member_scoring(encoding,member_scoring=_UNSET):
+    """Resolve legacy omission and validate the artifact's member-score ABI."""
+    if encoding not in ENCODINGS:raise ValueError('Unsupported encoding')
+    if member_scoring is _UNSET:return {'mode':'separate-v1'}
+    if not isinstance(member_scoring,dict):raise ValueError('Invalid member scoring')
+    mode=member_scoring.get('mode')
+    if mode not in ('separate-v1','current-task-keep-v1','keep-bias-v1'):
+        raise ValueError('Invalid member scoring mode')
+    if set(member_scoring)!=({'mode','bias'} if mode=='keep-bias-v1' else {'mode'}):
+        raise ValueError('Invalid member scoring fields')
+    if mode!='separate-v1' and encoding!='graph-plan-v4':
+        raise ValueError('Nondefault member scoring requires graph-plan-v4')
+    if mode!='keep-bias-v1':return {'mode':mode}
+    bias=member_scoring['bias']
+    if not isinstance(bias,(int,float)) or isinstance(bias,bool):raise ValueError('Invalid member KEEP bias')
+    try:bias=float(bias)
+    except (OverflowError,ValueError):raise ValueError('Invalid member KEEP bias') from None
+    if not math.isfinite(bias) or bias<0:raise ValueError('Invalid member KEEP bias')
+    return {'mode':mode,'bias':bias}
+
+def member_keep_eligible(d,actual_kind,member_mask):
+    """Return eligible [batch,unit] rows using the unmodified v4 member mask.
+
+    ``actual_kind`` has task KEEP resolved against ``previousKind``. The mask
+    already enforces retyping and removes the explicit current-role alias.
+    This helper also serves offline calibration on the same forced prefix.
+    """
+    previous=d['previousRole'];slot=previous.clamp(0,SLOTS-1)
+    before=d['previousKind'].gather(1,slot);after=actual_kind.gather(1,slot)
+    compatible=(~d['unitCap'][:,:,3])&(after>=2)&((after!=8)|d['unitCap'][:,:,0])&((after!=7)|d['unitCap'][:,:,1])
+    return (d['unitIndexMask']&(previous>=0)&(previous<SLOTS)&compatible&(before==after)
+            &member_mask[:,:,18]&~member_mask.gather(-1,slot.unsqueeze(-1)).squeeze(-1))
+
 def recorded_temperature_config(record):
     """v4 journals/manifests record resolved heads; artifacts may be sparse."""
     encoding=record.get('encoding')
@@ -37,6 +70,26 @@ def recorded_temperature_config(record):
     temperature=validate_temperature(record.get('temperature',1.))
     overrides=validate_production_temperatures(encoding,record.get('productionTemperatures',_UNSET))
     return encoding,temperature,{key:overrides.get(key,temperature) for key in PRODUCTION_FAMILIES}
+
+def recorded_member_scoring_config(record):
+    """Legacy records omit the field; explicit null or malformed modes reject."""
+    return validate_member_scoring(record.get('encoding'),record.get('memberScoring',_UNSET))
+
+def artifact_encoding(artifact):
+    """v2 separates action grammar from scoring; legacy loaders must fail closed."""
+    version=artifact.get('format')
+    if version=='warbook-commander-model-v1':
+        if 'actionEncoding' in artifact:raise ValueError('Legacy artifact cannot contain actionEncoding')
+        encoding=artifact.get('encoding')
+    elif version=='warbook-commander-model-v2':
+        if 'encoding' in artifact or 'memberScoring' not in artifact:
+            raise ValueError('v2 artifact requires actionEncoding and explicit member scoring')
+        encoding=artifact.get('actionEncoding')
+    else:raise ValueError('Unsupported commander artifact format')
+    scoring=validate_member_scoring(encoding,artifact.get('memberScoring',_UNSET))
+    if (scoring['mode']=='separate-v1')!=(version=='warbook-commander-model-v1'):
+        raise ValueError('Commander artifact format/member scoring mismatch')
+    return encoding
 
 def pack(worlds,vocabulary):
     ids={name:i+1 for i,name in enumerate(vocabulary)}
@@ -98,8 +151,9 @@ def summary(x,mask):
     return torch.cat([mean,maximum],-1)
 
 class CommanderModel(nn.Module):
-    def __init__(self,vocabulary,encoding='graph-plan-v2',temperature=1.,production_temperatures=_UNSET):
+    def __init__(self,vocabulary,encoding='graph-plan-v2',temperature=1.,production_temperatures=_UNSET,*,member_scoring=_UNSET):
         super().__init__();self.vocabulary=vocabulary;self.encoding=encoding
+        self.member_scoring={'mode':'separate-v1'}
         self.change_temperature(temperature)
         self.production_temperatures={}
         self.names=nn.Embedding(len(vocabulary)+1,16)
@@ -121,9 +175,11 @@ class CommanderModel(nn.Module):
         self.editGate=None
         self.change_encoding(encoding)
         self.change_production_temperatures(production_temperatures)
+        self.change_member_scoring(member_scoring)
     def change_encoding(self,encoding):
         if encoding not in ENCODINGS:raise ValueError('Unsupported encoding')
         if encoding!='graph-plan-v4' and self.production_temperatures:raise ValueError('Production temperatures require graph-plan-v4')
+        validate_member_scoring(encoding,self.member_scoring)
         self.encoding=encoding
         if encoding=='graph-plan-v3' and self.editGate is None:
             self.editGate=nn.Linear(HIDDEN,5)
@@ -133,6 +189,8 @@ class CommanderModel(nn.Module):
         self.temperature=validate_temperature(temperature)
     def change_production_temperatures(self,overrides=_UNSET):
         self.production_temperatures=validate_production_temperatures(self.encoding,overrides)
+    def change_member_scoring(self,member_scoring=_UNSET):
+        self.member_scoring=validate_member_scoring(self.encoding,member_scoring)
     def effective_production_temperatures(self):
         return {key:self.production_temperatures.get(key,self.temperature) for key in PRODUCTION_FAMILIES}
     def factor_temperature(self,name):
@@ -272,6 +330,18 @@ class CommanderModel(nn.Module):
             um=um&~(torch.nn.functional.one_hot(previous,20).bool()&duplicate[:,:,None])
         edit_units=edit(2,required=((~um[:,:,18])&d['unitIndexMask']).any(1),available=d['unitIndexMask'].any(1))
         um&=edit_units[:,None,None]|(torch.arange(20)[None,None,:]==18)
+        mode=self.member_scoring['mode']
+        if mode!='separate-v1' and not (mode=='keep-bias-v1' and self.member_scoring['bias']==0):
+            eligible=member_keep_eligible(d,actual_kind,um)
+            # The merge/bias is in effective-logit units. Keep float64 through
+            # choice's unchanged temperature division, including small T.
+            raw=ul.double();temperature=self.factor_temperature('unit')
+            keep=raw[:,:,18]/temperature
+            if mode=='current-task-keep-v1':
+                current=raw.gather(-1,previous.clamp(0,SLOTS-1).unsqueeze(-1)).squeeze(-1)/temperature
+                adjusted=torch.logaddexp(keep,current)*temperature
+            else:adjusted=(keep+self.member_scoring['bias'])*temperature
+            ul=raw.clone();ul[:,:,18]=torch.where(eligible,adjusted,raw[:,:,18])
         selected_units=choice('unit',ul,um,label('units'),valid=d['unitIndexMask'],keep=18)
         building_e=gather_rows(e,d['buildingIndex']);bq=torch.tanh(self.building0(torch.cat([building_e,h[:,None].expand(-1,building_e.shape[1],-1)],-1)))
         bm=torch.stack([torch.ones_like(d['buildingCap'][:,:,0]),d['buildingCap'][:,:,0],d['buildingCap'][:,:,0],d['buildingCap'][:,:,1]],-1)
@@ -309,8 +379,10 @@ class CommanderModel(nn.Module):
 
 def export(model,path,metadata):
     import json,hashlib
-    artifact={'format':'warbook-commander-model-v1','schema':'commander-v1','encoding':model.encoding,'temperature':model.temperature,'hidden':HIDDEN,
-      'vocabulary':model.vocabulary,'tensors':{name:{'shape':list(t.shape),'values':t.detach().cpu().reshape(-1).tolist()} for name,t in model.state_dict().items()},'training':metadata}
+    current_scoring=model.member_scoring['mode']!='separate-v1'
+    artifact={'format':'warbook-commander-model-v2' if current_scoring else 'warbook-commander-model-v1','schema':'commander-v1',
+      ('actionEncoding' if current_scoring else 'encoding'):model.encoding,'temperature':model.temperature,'hidden':HIDDEN,
+      'memberScoring':dict(model.member_scoring),'vocabulary':model.vocabulary,'tensors':{name:{'shape':list(t.shape),'values':t.detach().cpu().reshape(-1).tolist()} for name,t in model.state_dict().items()},'training':metadata}
     if model.encoding=='graph-plan-v4':artifact['productionTemperatures']=dict(model.production_temperatures)
     path.write_text(json.dumps(artifact,separators=(',',':'))+'\n')
     return hashlib.sha256(path.read_bytes()).hexdigest()

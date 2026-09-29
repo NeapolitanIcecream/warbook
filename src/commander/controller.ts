@@ -15,6 +15,8 @@ import {
 import { ProgramController } from "./program.js";
 import {
   resolveProductionTemperatures,
+  resolveMemberScoring,
+  type MemberScoring,
   type ProductionTemperatures,
   type CommanderEncoding,
   type EncodedCommanderAction as CommanderAction,
@@ -40,6 +42,7 @@ export interface CommanderPolicy {
   readonly encoding?: CommanderEncoding;
   readonly temperature?: number;
   readonly productionTemperatures?: ProductionTemperatures;
+  readonly memberScoring?: MemberScoring;
   predict(
     world: CommanderWorld,
     hidden: readonly number[],
@@ -53,6 +56,7 @@ export interface CommanderRecord {
   encoding: CommanderEncoding;
   temperature: number;
   productionTemperatures?: Required<ProductionTemperatures>;
+  memberScoring?: MemberScoring;
   tick: number;
   world: CommanderWorld;
   action: CommanderAction;
@@ -78,6 +82,7 @@ export class FullCommander implements StrategicController {
   private random: () => number;
   private hidden: number[];
   readonly productionTemperatures?: Required<ProductionTemperatures>;
+  readonly memberScoring: MemberScoring;
   record?: CommanderRecord;
   constructor(
     readonly route: "bastion" | "pressure",
@@ -88,6 +93,10 @@ export class FullCommander implements StrategicController {
     private daggerBeta?: number,
   ) {
     this.program = new ProgramController(policy?.encoding ?? "graph-plan-v2");
+    this.memberScoring = resolveMemberScoring(
+      this.encoding,
+      policy?.memberScoring,
+    );
     const productionTemperatures = resolveProductionTemperatures(
       this.encoding,
       policy?.temperature ?? 1,
@@ -184,6 +193,7 @@ export class FullCommander implements StrategicController {
         schema: COMMANDER_SCHEMA,
         encoding: this.encoding,
         temperature: this.policy?.temperature ?? 1,
+        memberScoring: { ...this.memberScoring },
         ...(this.productionTemperatures
           ? { productionTemperatures: { ...this.productionTemperatures } }
           : {}),

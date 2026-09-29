@@ -15,6 +15,10 @@ import { pathToFileURL } from "node:url";
 import { isBuiltin } from "node:module";
 import { parseArgs } from "node:util";
 import { engineHashes, fileHash, type BotRelease } from "../src/bot-release.js";
+import {
+  commanderArtifactEncoding,
+  resolveMemberScoring,
+} from "../src/commander/action-mask.js";
 
 export async function buildBot(
   ref: string,
@@ -26,7 +30,22 @@ export async function buildBot(
   const launchModel = modelPath
     ? JSON.parse(readFileSync(modelPath, "utf8"))
     : undefined;
-  const commanderModel = launchModel?.format === "warbook-commander-model-v1";
+  const commanderModel = [
+    "warbook-commander-model-v1",
+    "warbook-commander-model-v2",
+  ].includes(launchModel?.format);
+  const memberScoring = commanderModel
+    ? resolveMemberScoring(
+        commanderArtifactEncoding(launchModel),
+        launchModel.memberScoring,
+      )
+    : undefined;
+  const memberLabel =
+    memberScoring?.mode === "current-task-keep-v1"
+      ? "M"
+      : memberScoring?.mode === "keep-bias-v1"
+        ? "I"
+        : "R";
   if (nativeFiniteBatches && !commanderModel)
     throw new Error("Native finite batches require a commander model");
   const contactModel = [
@@ -124,6 +143,8 @@ export async function buildBot(
           const artifact = ${JSON.stringify(launchModel)};
           await prepareCommander();
           const commanderPolicy = new NeuralCommanderPolicy(artifact);
+          export const commanderMemberScoring = commanderPolicy.memberScoring ?? {mode:'separate-v1'};
+          if (JSON.stringify(commanderMemberScoring) !== ${JSON.stringify(JSON.stringify(memberScoring))}) throw new Error('Frozen source does not implement requested member scoring');
           export const commanderExecutionMode = ${JSON.stringify(nativeFiniteBatches ? "native-finite-batches-v1" : "single-item-v1")};
           ${nativeFiniteBatches ? "if (new ProgramProduction(true).id !== 'program-production-native-batches-v1') throw new Error('Frozen source lacks native finite batches');" : ""}
           `
@@ -151,7 +172,7 @@ export async function buildBot(
           `
               : ""
           }
-          export const policyVersion = POLICY_VERSION + ${JSON.stringify((commanderModel ? "-learned-commander" : launchModel ? (operationModel ? "-learned-" + launchModel.controlScope + (contactModel ? "-" + launchModel.contactInput : "") + (maneuverModel ? "-maneuver-" + launchModel.maneuverScope : "") : "-learned") : "") + (tacticalModel ? "-armor" : "") + (nativeFiniteBatches ? "-native-batches" : ""))};
+          export const policyVersion = POLICY_VERSION + ${JSON.stringify((commanderModel ? "-learned-commander-" + memberLabel : launchModel ? (operationModel ? "-learned-" + launchModel.controlScope + (contactModel ? "-" + launchModel.contactInput : "") + (maneuverModel ? "-maneuver-" + launchModel.maneuverScope : "") : "-learned") : "") + (tacticalModel ? "-armor" : "") + (nativeFiniteBatches ? "-native-batches" : ""))};
           export const observationProtocol = OBSERVATION_PROTOCOL;
           export const createBot = name => new WarbookBot(name, 'Americans', mode${components.length ? `,{${components.join(",")}}` : ""});
         `,
@@ -249,7 +270,10 @@ export async function buildBot(
       mode,
       policyVersion: module.policyVersion,
       ...(commanderModel
-        ? { commanderExecutionMode: module.commanderExecutionMode }
+        ? {
+            commanderExecutionMode: module.commanderExecutionMode,
+            commanderMemberScoring: module.commanderMemberScoring,
+          }
         : {}),
       ...(tacticalModelPath
         ? {

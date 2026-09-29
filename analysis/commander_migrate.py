@@ -2,7 +2,7 @@
 import argparse,json,hashlib,subprocess
 from pathlib import Path
 import torch
-from commander_model import pack,pack_actions,export,HIDDEN,ENCODINGS,PRODUCTION_FAMILIES
+from commander_model import pack,pack_actions,export,HIDDEN,ENCODINGS,PRODUCTION_FAMILIES,artifact_encoding
 from commander_train import load_model
 from commander_sequence import canonical_action
 
@@ -17,9 +17,10 @@ def main():
     if args.temperature is not None:model.change_temperature(args.temperature)
     if overrides:model.change_production_temperatures({**model.production_temperatures,**overrides})
     grammar=lambda encoding:'graph-plan-v2' if encoding=='graph-plan-v4' else encoding
-    policy_changed=grammar(artifact['encoding'])!=grammar(args.encoding) or artifact.get('temperature',1.)!=model.temperature or previous_production!=model.effective_production_temperatures()
+    parent_encoding=artifact_encoding(artifact)
+    policy_changed=grammar(parent_encoding)!=grammar(args.encoding) or artifact.get('temperature',1.)!=model.temperature or previous_production!=model.effective_production_temperatures()
     out=Path(args.out);out.parent.mkdir(parents=True,exist_ok=True)
-    sha=export(model,out,{'method':'policy-reparameterization','git':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'inputSha256':hashlib.sha256(source.read_bytes()).hexdigest(),'parentEncoding':artifact['encoding'],'parentTemperature':artifact.get('temperature',1.),'parentProductionTemperatures':artifact.get('productionTemperatures',{}),'productionTemperatures':dict(model.production_temperatures),'effectiveProductionTemperatures':model.effective_production_temperatures(),'sharedWeightsChanged':False,'parametersAdded':added,'policyChanged':policy_changed,'scope':'Grammar, edit gates or temperature can change the policy; collect fresh PPO data'})
+    sha=export(model,out,{'method':'policy-reparameterization','git':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'inputSha256':hashlib.sha256(source.read_bytes()).hexdigest(),'parentEncoding':parent_encoding,'parentTemperature':artifact.get('temperature',1.),'parentProductionTemperatures':artifact.get('productionTemperatures',{}),'productionTemperatures':dict(model.production_temperatures),'effectiveProductionTemperatures':model.effective_production_temperatures(),'memberScoring':dict(model.member_scoring),'sharedWeightsChanged':False,'parametersAdded':added,'policyChanged':policy_changed,'scope':'Grammar, edit gates or temperature can change the policy; collect fresh PPO data'})
     cases=json.loads(source.with_suffix('.golden.json').read_text());result=[]
     with torch.no_grad():
         for case in cases:

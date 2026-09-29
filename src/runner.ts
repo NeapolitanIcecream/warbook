@@ -288,7 +288,7 @@ async function main(): Promise<void> {
           policyPlayerName(
             POLICY_VERSION,
             fullStrategy
-              ? `${values.mode}-commander-${values["commander-policy"]}`
+              ? `${values.mode}-commander-${values["commander-policy"]}${commanderNetwork ? "-" + (fullStrategy.memberScoring.mode === "current-task-keep-v1" ? "M" : fullStrategy.memberScoring.mode === "keep-bias-v1" ? "I" : "R") : ""}`
               : launch || operation
                 ? `${values.mode}-${operation ? operationScope : "launch-v1"}-${values["launch-policy"]}${contactInput ? "-" + contactInput : ""}${maneuverScope ? "-maneuver-" + maneuverScope : ""}`
                 : values.mode!,
@@ -442,6 +442,7 @@ async function main(): Promise<void> {
             route: values.mode,
             encoding: fullStrategy.encoding,
             temperature: commanderNetwork?.temperature ?? 1,
+            memberScoring: fullStrategy.memberScoring,
             executionMode: commanderProduction!.executionMode,
             nativeFiniteBatches: commanderProduction!.nativeFiniteBatches,
             ...(fullStrategy.productionTemperatures

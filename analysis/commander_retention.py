@@ -13,7 +13,8 @@ from commander_model import HIDDEN,pack,pack_actions
 
 def _configuration(model):
     return (tuple(model.vocabulary),model.encoding,model.temperature,
-            tuple(sorted(model.effective_production_temperatures().items())))
+            tuple(sorted(model.effective_production_temperatures().items())),
+            tuple(sorted(model.member_scoring.items())))
 
 
 def _teacher_version(model):
