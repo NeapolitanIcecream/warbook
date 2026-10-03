@@ -28,7 +28,7 @@ def read_episode(path,compact=True):
     path=Path(path);manifest=json.loads((path/'manifest.json').read_text());result=json.loads((path/'result.json').read_text())
     outcome,reason,eligible=classify(result,manifest)
     if not eligible:return None
-    actor=next(p['name'] for p in manifest['participants'] if p['role']=='subject')
+    subject=next(p for p in manifest['participants'] if p['role']=='subject');actor=subject['name']
     rows=[]
     with open_text(path/'decisions.ndjson') as f:
         for line in f:
@@ -41,10 +41,19 @@ def read_episode(path,compact=True):
     if any(r.get('encoding') not in ENCODINGS or r['schema']!='commander-v1' for r in rows):raise ValueError('Unsupported commander encoding')
     if any(b['tick']-a['tick']!=75 for a,b in zip(rows,rows[1:])):raise ValueError('Missing strategy step')
     if not 0<=result['tick']-rows[-1]['tick']<=75:raise ValueError('Invalid terminal boundary')
+    behavior=manifest.get('commanderExperiment',{})
+    if 'commanderExperiment' not in manifest and subject.get('release'):
+        release=subject['release']
+        # Frozen actors bypass the live experiment CLI; their journal and release
+        # still identify the actual behavior distribution and production executor.
+        behavior={key:rows[0][key] for key in ['encoding','temperature','productionTemperatures','memberScoring'] if key in rows[0]}
+        behavior.update({'executionMode':release.get('commanderExecutionMode','single-item-v1'),
+          'deterministic':release.get('deterministicLaunch',False),'modelSha256':release.get('launchModelSha256')})
+    encoder_hashes=(subject.get('release') or {}).get('sourceHashes') or {}
     return {'path':str(path),'rows':rows,'reward':float(outcome=='W'),'outcome':outcome,
-      'modelSha':manifest.get('commanderExperiment',{}).get('modelSha256'),'deterministic':manifest.get('commanderExperiment',{}).get('deterministic',False),'source':manifest['git'],
-      'behavior':manifest.get('commanderExperiment',{}),
-      'encoderSha':manifest.get('sourceHashes',{}).get('src/commander/world.ts')}
+      'modelSha':behavior.get('modelSha256'),'deterministic':behavior.get('deterministic',False),'source':manifest['git'],
+      'behavior':behavior,
+      'encoderSha':encoder_hashes.get('src/commander/world.ts',manifest.get('sourceHashes',{}).get('src/commander/world.ts'))}
 
 def load_model(artifact):
     model=CommanderModel(artifact['vocabulary'],artifact_encoding(artifact),artifact.get('temperature',1.),
@@ -132,9 +141,14 @@ def batch_steps(batch,model,args,train,actor_only=False):
         if t<burn:
             with torch.no_grad():p=model(dt,h,at,encoded=et)
             h=torch.where(present[t,:,None],p['hidden'],h).detach();continue
-        p=model(dt,h,at,encoded=et,bc_factor_boost=getattr(args,'bc_event_weight',32.) if args.method=='bc' and getattr(args,'bc_loss','legacy')=='factor' else 0.);h=torch.where(present[t,:,None],p['hidden'],h);active=valid[t]
+        queue_set_weight=getattr(args,'bc_queue_set_weight',None) if args.method=='bc' else None
+        p=model(dt,h,at,encoded=et,bc_factor_boost=getattr(args,'bc_event_weight',32.) if args.method=='bc' and getattr(args,'bc_loss','legacy')=='factor' else 0.,return_conditionals=queue_set_weight is not None);h=torch.where(present[t,:,None],p['hidden'],h);active=valid[t]
         if not active.any():continue
-        if args.method=='bc':policy=(p['bcLoss']*weights[t])[active].mean();kl=policy.detach()*0
+        if args.method=='bc':
+            if queue_set_weight is not None:
+                from sprint_bc_events import queue_set_factor_loss
+                p['bcLoss']=queue_set_factor_loss(p['conditionals'],at,args.bc_event_weight,queue_set_weight)
+            policy=(p['bcLoss']*weights[t])[active].mean();kl=policy.detach()*0
         else:
             delta=p['logp']-old[t];ratio=delta.exp();aa=advantages[t]
             policy=torch.maximum(-aa*ratio,-aa*ratio.clamp(.9,1.1))[active].mean()-args.entropy*p['entropy'][active].mean()
@@ -412,6 +426,7 @@ def main():
     ap=argparse.ArgumentParser();ap.add_argument('method',choices=['bc','ppo']);ap.add_argument('--episodes',required=True);ap.add_argument('--input');ap.add_argument('--out',required=True);ap.add_argument('--seed',type=int,default=47)
     ap.add_argument('--epochs',type=int);ap.add_argument('--batch',type=int,default=4);ap.add_argument('--sequence',type=int,default=16);ap.add_argument('--burn',type=int,default=8);ap.add_argument('--threads',type=int,default=1)
     ap.add_argument('--bc-event-weight',type=float,default=32.);ap.add_argument('--bc-loss',choices=['legacy','factor'],default='factor');ap.add_argument('--max-updates',type=int);ap.add_argument('--entropy',type=float,default=.001);ap.add_argument('--checkpoints',type=int,nargs='*',default=[])
+    ap.add_argument('--bc-queue-set-weight',type=positive_float,help='Explicit queue SET factor importance; overrides the legacy min(bcEventWeight,4) cap, retaining all other factor weights and denominators')
     ap.add_argument('--update-checkpoints',type=int,nargs='*',default=[])
     ap.add_argument('--max-coverage',type=positive_float,help='Stop after cumulative actor frames / unique available actor frames reaches this fraction, after a complete update')
     ap.add_argument('--coverage-checkpoints',type=positive_float,nargs='*',default=[],help='Save at actor-frame coverage fractions; endpoints crossed together alias one checkpoint')
@@ -426,6 +441,7 @@ def main():
     if not 0<=args.validation_fraction<1:raise ValueError('Invalid validation fraction')
     if args.learning_rate is not None and (not math.isfinite(args.learning_rate) or args.learning_rate<=0):raise ValueError('Invalid learning rate')
     if args.bc_temperature is not None and args.method!='bc':raise ValueError('PPO must retain the recorded behavior temperature')
+    if args.bc_queue_set_weight is not None and (args.method!='bc' or args.bc_loss!='factor'):raise ValueError('Queue SET importance requires factor BC')
     if args.gradient_accumulation>1 and args.method!='ppo':raise ValueError('Gradient accumulation is PPO-only')
     if args.ppo_history!='recorded' and args.method!='ppo':raise ValueError('Full PPO history is PPO-only')
     coverage_requested=args.max_coverage is not None or bool(args.coverage_checkpoints)
@@ -557,7 +573,7 @@ def main():
             info={'method':args.method,'seed':args.seed,'epochs':epoch+1,'updates':updates,'encoderSha256':next(iter(hashes)),
                 'inputSha256':hashlib.sha256(Path(args.input).read_bytes()).hexdigest() if args.input else None,
                 'git':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),
-                'worldSize':world_size,'sequence':args.sequence,'burnIn':args.burn,'bcEventWeight':args.bc_event_weight,'bcLoss':args.bc_loss,
+                'worldSize':world_size,'sequence':args.sequence,'burnIn':args.burn,'bcEventWeight':args.bc_event_weight,'bcLoss':args.bc_loss,'bcQueueSetWeight':args.bc_queue_set_weight,
                 **accumulation_info,'trainingUsage':usage,'executionModes':sorted(execution_modes),
                 'encoding':model.encoding,'temperature':model.temperature,'memberScoring':dict(model.member_scoring),'learningRate':learning_rate,'bcMemory':'continuous episode carry','objective':'terminal MC; checkpoint before final validation'}
             if coverage is not None or retention_info is not None:
@@ -665,7 +681,7 @@ def main():
       'encoderSha256':next(iter(hashes)),'worldSize':world_size,'localBatch':args.batch,'globalBatch':args.batch*world_size,'windowCounts':window_counts,
       **accumulation_info,'trainingUsage':usage,'executionModes':sorted(execution_modes),'productionEventsSha256':hashlib.sha256(event_path.read_bytes()).hexdigest(),
       'padding':'Zero-loss empty ranks, no repeated training windows','bcEventWeight':args.bc_event_weight,'bcMemory':'Chronological whole episodes with detached carried hidden state',
-      'bcLoss':args.bc_loss,'bcFactorNormalization':'Per frame: mean across active domains; changed factors weighted directly; one mean KEEP negative per domain; global valid-frame DDP mean',
+      'bcLoss':args.bc_loss,'bcQueueSetWeight':args.bc_queue_set_weight,'bcFactorNormalization':'Per frame: mean across active domains; changed factors weighted directly; one mean KEEP negative per domain; global valid-frame DDP mean',
       'encoding':model.encoding,'temperature':model.temperature,'memberScoring':dict(model.member_scoring),'learningRate':learning_rate,'optimizerStart':'restored' if optimizer_sha else 'cold','inputOptimizerSha256':optimizer_sha,'episodeMemory':'float32 feature blocks and int32 edges; identical pack tensors','validationFraction':args.validation_fraction,'labelAdapter':'v2 confirms retyped members; v3 BC labels edit decisions from demonstrated plan changes; PPO retains recorded choices',
       'trainingEpisodes':[p for d in details for p in d['paths']],'validationEpisodes':validation,'excluded':[p for d in details for p in d['excluded']],
       'inputSha256':hashlib.sha256(Path(args.input).read_bytes()).hexdigest() if args.input else None,

@@ -4,7 +4,6 @@ import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { POLICY_VERSION, POLICY_MODES } from "../src/policy.js";
 import { PINNED_CLIENT, SDK_RESOURCE_SHA } from "../src/player/client.js";
-mkdirSync("dist/player", { recursive: true });
 const mode = process.env.PLAYER_POLICY ?? "bastion";
 const modelPath =
   process.env.PLAYER_COMMANDER_MODEL ?? process.env.PLAYER_LAUNCH_MODEL;
@@ -14,6 +13,18 @@ const launchModel = modelPath
 const modelSha256 = modelPath
   ? createHash("sha256").update(readFileSync(modelPath)).digest("hex")
   : undefined;
+const commanderModel = [
+  "warbook-commander-model-v1",
+  "warbook-commander-model-v2",
+].includes(launchModel?.format);
+const nativeBatchFlag = process.env.PLAYER_COMMANDER_NATIVE_BATCHES;
+if (nativeBatchFlag !== undefined && !["0", "1"].includes(nativeBatchFlag))
+  throw new Error("PLAYER_COMMANDER_NATIVE_BATCHES must be 0 or 1");
+const nativeFiniteBatches = nativeBatchFlag === "1";
+if (nativeFiniteBatches && !commanderModel)
+  throw new Error("Native finite batches require a commander model");
+if (nativeFiniteBatches && !["bastion", "pressure"].includes(mode))
+  throw new Error("Native finite batches require a supported layered policy");
 const tacticalPath = process.env.PLAYER_TACTICAL_MODEL;
 const tacticalModel = tacticalPath
   ? JSON.parse(readFileSync(tacticalPath, "utf8"))
@@ -23,6 +34,7 @@ const tacticalSha256 = tacticalPath
   : undefined;
 if (!POLICY_MODES.some((value) => value === mode))
   throw new Error("Unknown player policy");
+mkdirSync("dist/player", { recursive: true });
 const output = await build({
   entryPoints: ["src/player/integration.ts"],
   outfile: "dist/player/bot.js",
@@ -37,6 +49,7 @@ const output = await build({
     __WARBOOK_POLICY__: JSON.stringify(mode),
     __WARBOOK_LAUNCH_MODEL__: JSON.stringify(launchModel),
     __WARBOOK_TACTICAL_MODEL__: JSON.stringify(tacticalModel),
+    __WARBOOK_COMMANDER_NATIVE_BATCHES__: JSON.stringify(nativeFiniteBatches),
   },
   plugins: [
     {
@@ -88,6 +101,13 @@ let release = {
       ? "learned-armor"
       : mode,
   ...(launchModel ? { launchModelSha256: modelSha256, baseMode: mode } : {}),
+  ...(commanderModel
+    ? {
+        commanderExecutionMode: nativeFiniteBatches
+          ? ("native-finite-batches-v1" as const)
+          : ("single-item-v1" as const),
+      }
+    : {}),
   ...(tacticalModel
     ? {
         tacticalModelSha256: tacticalSha256,
@@ -106,6 +126,7 @@ if (existsSync(manifestPath)) {
     "sha256",
     "version",
     "mode",
+    "commanderExecutionMode",
   ] as const)
     if (original[key] !== release[key])
       throw new Error("Player metadata differs from its immutable bundle");

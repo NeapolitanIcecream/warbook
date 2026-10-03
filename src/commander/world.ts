@@ -12,6 +12,7 @@ import type {
   StrategicPlan,
 } from "../control/contracts.js";
 
+export const COMMANDER_WORLD_VERSION = "commander-navigation-goals-v1";
 export const TASK_SLOTS = 16;
 export const RESERVE = TASK_SLOTS,
   DEPLOY = TASK_SLOTS + 1,
@@ -287,6 +288,21 @@ export function buildWorld(
   add({ ...o.home, kind: "start" });
   for (const r of o.regions ?? [])
     add({ x: r.x, y: r.y, onBridge: r.onBridge, kind: "region" });
+  // Explicit legal navigation coordinates join the model-selectable goal table.
+  // These are existing observation fields; no teacher-selected targets are added.
+  // Keep the original region ordering and feature semantics. Unknown terrain,
+  // connectivity and exploration remain unknown in the existing region encoder.
+  for (const p of [
+    ...(o.scoutPoints ?? []),
+    ...(o.armySearchPoints ?? []),
+    ...(o.defenseRoute ? [o.defenseRoute.point] : []),
+    ...(o.defensePosts ?? []).map((p) => p.point),
+    ...(o.baseRally ? [o.baseRally] : []),
+    ...(o.stagingRoute ? [o.stagingRoute.point] : []),
+    ...(o.flankApproach ? [o.flankApproach.point] : []),
+    ...(o.routes ?? []).flatMap((p) => [p.waypoint, ...(p.post ? [p.post] : [])]),
+  ])
+    add({ x: p.x, y: p.y, onBridge: p.onBridge, kind: "region" });
   for (const u of o.own)
     add({ x: u.x, y: u.y, onBridge: u.onBridge, ref: u.ref, kind: "own" });
   for (const u of enemies)

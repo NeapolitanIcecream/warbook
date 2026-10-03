@@ -41,6 +41,7 @@ declare const __WARBOOK_POLICY__: PolicyMode;
 declare const __WARBOOK_LAUNCH_MODEL__:
   LaunchModel | LinearLaunchModel | CommanderModel | null;
 declare const __WARBOOK_TACTICAL_MODEL__: TacticalModel | null;
+declare const __WARBOOK_COMMANDER_NATIVE_BATCHES__: boolean;
 
 function isCommanderArtifact(
   artifact: typeof __WARBOOK_LAUNCH_MODEL__,
@@ -65,6 +66,11 @@ declare global {
 }
 
 export async function install(): Promise<void> {
+  if (
+    __WARBOOK_COMMANDER_NATIVE_BATCHES__ &&
+    !isCommanderArtifact(__WARBOOK_LAUNCH_MODEL__)
+  )
+    throw new Error("Native finite batches require a commander model");
   if (location.hash.startsWith("#/replay/")) await installReplayControls();
   const [
     { BotFactory },
@@ -201,7 +207,9 @@ export async function install(): Promise<void> {
               true,
             ),
             tactics: armor ?? new CommanderTactics(),
-            production: new ProgramProduction(),
+            production: new ProgramProduction(
+              __WARBOOK_COMMANDER_NATIVE_BATCHES__,
+            ),
           }
         : launch || operation
           ? {
