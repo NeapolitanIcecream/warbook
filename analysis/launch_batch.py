@@ -74,6 +74,9 @@ def main():
     if gate is not None:
         if not isinstance(gate,str) or not gate.strip():raise ValueError('initializationGate must be a nonempty directory path')
         plan['initializationGate']=gate=str(Path(gate).resolve())
+    shards=plan.get('initializationGateShards',1)
+    if isinstance(shards,bool) or not isinstance(shards,int) or not 1<=shards<=4:raise ValueError('initializationGateShards must be 1..4')
+    if shards>1 and not gate:raise ValueError('Shards require an initialization gate root')
     node=os.environ.get('WARBOOK_NODE','node');commit=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
     for s in [*plan['subjects'].values(),*plan['opponents'].values()]:
         if s.get('release'):
@@ -128,7 +131,10 @@ def main():
         elif 'release' in p:cmd+=['--opponent-release',p['release']]
         else:cmd+=['--opponent-release',releases[(p['ref'],p.get('mode','bastion'))]]
         if global_index%2:cmd+=['--swap']
-        if gate:cmd+=['--initialization-gate',gate]
+        # Development screens can trade distinct PRNG sources for more games.
+        # Native sources remain recorded; confirmations keep the default gate.
+        task_gate=str(Path(gate)/f'shard-{positions[task]%shards}') if gate and shards>1 else gate
+        if task_gate:cmd+=['--initialization-gate',task_gate]
         attempt=time.monotonic();error=None;reason='execution_error';training_eligible=False
         try:
             with (directory/'console.log').open('w') as log:subprocess.run(cmd,stdout=log,stderr=subprocess.STDOUT,check=True,timeout=seconds+45+(300 if gate else 0))
@@ -136,7 +142,8 @@ def main():
             status,reason,training_eligible=classify(result,m)
         except Exception as exc:error=f'{type(exc).__name__}: {exc}';result={};status='E'
         row={'map':map_name,'opponent':opponent,'repeat':repeat,'subject':subject,'outcome':status,'termination':reason,'trainingEligible':training_eligible,'tick':result.get('tick'),'seconds':time.monotonic()-attempt,'dir':str(directory),'error':error,
-            **scheduling,'initialization':result.get('initialization'),'initializationTiming':result.get('initializationTiming')}
+            **scheduling,'initialization':result.get('initialization'),'initializationTiming':result.get('initializationTiming'),
+            'initializationGateShards':shards}
         if completed.parent!=directory:atomic(directory/'batch-row.json',row)
         atomic(completed,row)
         # The child has exited and its completion marker is durable. Archive while
