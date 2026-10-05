@@ -8,7 +8,7 @@
 
 最新未晋升的Sparse S0（1bf02544...1910c248 / b153b350...82daaac）普通128局为19/32 Sup、24/32实际0.1.16，同期A4为15/32、24/32；参数未更新。80场反事实训练的32抽取点实际动作与程序全为无效改写，零终局差，不能称学习收益。368单队列复核只有计划，未开局。新 `first-difference-transaction-20261005` 源码与编译身份已保存，但真实动作支持、联合似然及运行时记忆更新尚未验证，364/366实际对局为0。
 
-恢复时首先读 `work/sprint-20261002/CHECKPOINT.md`、`RESEARCH.md` 与 `state.json`，再读必要证据。服务器保留 `loreley-115:/data/cmh/warbook-learn/jobs/sprint-20261003` 及固定官方依赖；不要热改历史树或重复已结束批次。完成日志的无损压缩、迁移路径和原始/压缩SHA收据均保存，原始数据、模型、资产和大回放不在Git。当前源码在 `codex/sprint-20261002`，本checkpoint仅本地提交，不发布新模型或推送远端。
+恢复时首先读 `work/sprint-20261002/CHECKPOINT.md`、`RESEARCH.md` 与 `state.json`，再读必要证据。服务器保留 `loreley-115:/data/cmh/warbook-learn/jobs/sprint-20261003` 及固定官方依赖；不要热改历史树或重复已结束批次。完成日志的无损压缩、迁移路径和原始/压缩SHA收据均保存，原始数据、模型、资产和大回放不在Git。本地checkpoint为 `fa83fe1`，标签 `checkpoint-2026-10-05-early-stop`；用户随后授权将源码与记录同步至远端主干 `main`。同步不恢复研究、不改变玩家默认，也不发布原始模型和数据；最终远端提交以Git核验为准。
 
 历史详细进展见 [docs/progress.md](docs/progress.md)。以下9月29日资料保留为历史。
 
